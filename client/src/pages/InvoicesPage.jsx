@@ -50,10 +50,10 @@ const InvoicesPage = () => {
   });
   const [showBankSettings, setShowBankSettings] = useState(false);
   const [bankConfig, setBankConfig] = useState({
-    accountHolderName: 'MARWAN MOHAMMED OKLAH',
-    bankName: 'Mashreq Bank',
-    accountNumber: '019100210149',
-    iban: 'AE680330000019100210149'
+    accountHolderName: 'GLOGO PARKING CAR WASHING LLC',
+    bankName: 'ENBD',
+    accountNumber: '1015942086801',
+    iban: 'AE390260001015942086801'
   });
 
   useEffect(() => {
