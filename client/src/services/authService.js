@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/api/auth';
+const API_BASE_URL = `${import.meta.env.VITE_API_URL}/api/auth`;
 
 const login = async (username, password) => {
   const response = await fetch(`${API_BASE_URL}/login`, {
@@ -42,7 +42,7 @@ const register = async (username, password, role) => {
 };
 
 const changeMyPassword = async (username, currentPassword, newPassword) => {
-  const response = await fetch('http://localhost:5000/api/users/change-my-password', {
+  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/change-my-password`, {
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',

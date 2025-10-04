@@ -4,7 +4,7 @@ class OperationsService {
   // Get daily operations data
   async getDailyOperations(date = new Date()) {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
@@ -95,10 +95,10 @@ class OperationsService {
   // Get worker performance data
   async getWorkerPerformance() {
     try {
-      const response = await fetch('http://localhost:5000/api/workers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
       const workersData = await response.json();
       
-      const clientsResponse = await fetch('http://localhost:5000/api/customers');
+      const clientsResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await clientsResponse.json();
       
       const workers = workersData.map((worker, index) => {
@@ -129,7 +129,7 @@ class OperationsService {
   // Get service efficiency metrics
   async getServiceEfficiency() {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const activeClients = clients.filter(c => 
@@ -178,7 +178,7 @@ class OperationsService {
   // Get route optimization data
   async getRouteOptimization() {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const activeClients = clients.filter(c => 
@@ -236,7 +236,7 @@ class OperationsService {
   // Get schedule management data
   async getScheduleManagement() {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const activeClients = clients.filter(c => 
@@ -283,7 +283,7 @@ class OperationsService {
   // Get equipment and supplies data
   async getEquipmentSupplies() {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const activeClients = clients.filter(c => 
@@ -325,7 +325,7 @@ class OperationsService {
   // Get productivity reports
   async getProductivityReports() {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const clients = await response.json();
       
       const activeClients = clients.filter(c => 
@@ -387,7 +387,7 @@ class OperationsService {
   // Workers management
   async getWorkers() {
     try {
-      const response = await fetch('http://localhost:5000/api/workers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
       return await response.json();
     } catch (error) {
       console.error('Error loading workers:', error);
@@ -397,7 +397,7 @@ class OperationsService {
   
   async addWorker(workerName, job, status) {
     try {
-      const response = await fetch('http://localhost:5000/api/workers', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: workerName, job, status })
@@ -411,7 +411,7 @@ class OperationsService {
   
   async deleteWorker(workerName) {
     try {
-      const response = await fetch(`http://localhost:5000/api/workers/${encodeURIComponent(workerName)}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers/${encodeURIComponent(workerName)}`, {
         method: 'DELETE'
       });
       return await response.json();
@@ -424,7 +424,7 @@ class OperationsService {
   // Additional services management
   async getAdditionalServices() {
     try {
-      const response = await fetch('http://localhost:5000/api/services');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`);
       const services = await response.json();
       return services.map(s => {
         if (typeof s === 'string') return s;
@@ -438,7 +438,7 @@ class OperationsService {
   
   async addAdditionalService(serviceName) {
     try {
-      const response = await fetch('http://localhost:5000/api/services', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: serviceName })
@@ -452,7 +452,7 @@ class OperationsService {
   
   async deleteAdditionalService(serviceName) {
     try {
-      const response = await fetch(`http://localhost:5000/api/services/${encodeURIComponent(serviceName)}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services/${encodeURIComponent(serviceName)}`, {
         method: 'DELETE'
       });
       return await response.json();
