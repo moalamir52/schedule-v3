@@ -1,0 +1,567 @@
+/* Import V2 Theme */
+@import './styles/v2-theme.css';
+@import './styles/v2-components.css';
+@import './styles/v2-home.css';
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  direction: ltr;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  direction: ltr;
+  min-height: 100vh;
+  transition: all 0.3s ease;
+}
+
+/* Dark Theme */
+body.dark-theme {
+  --bg-primary: #2c3e50;
+  --bg-secondary: #34495e;
+  --text-primary: #ecf0f1;
+  --text-secondary: #bdc3c7;
+  --card-bg: #34495e;
+  --border-color: #4a6741;
+}
+
+body.dark-theme .card {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+body.dark-theme input,
+body.dark-theme select,
+body.dark-theme textarea {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.App {
+  min-height: 100vh;
+  direction: ltr;
+}
+
+.app-container {
+  min-height: 100vh;
+  direction: ltr;
+}
+
+/* Module Placeholder */
+.module-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-size: 1.5rem;
+  color: #6b7280;
+  background: white;
+  margin: 20px;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Button Styles */
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  text-decoration: none;
+  display: inline-block;
+  text-align: center;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+  color: white;
+  box-shadow: 0 2px 4px rgba(59, 130, 246, 0.3);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(59, 130, 246, 0.4);
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.btn-secondary:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.btn-success {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+}
+
+.btn-success:hover {
+  background: linear-gradient(135deg, #059669, #047857);
+}
+
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
+/* Form Elements */
+input, select, textarea {
+  font-family: inherit;
+  direction: ltr;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="tel"],
+input[type="number"],
+input[type="date"],
+input[type="time"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+  background: white;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* Card Styles */
+.card {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.3s ease, color 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+}
+
+/* Grid Layouts */
+.grid {
+  display: grid;
+  gap: 20px;
+}
+
+.grid-2 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+}
+
+.grid-4 {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.grid-7 {
+  grid-template-columns: repeat(7, 1fr);
+  gap: 15px;
+}
+
+/* Schedule Day Column */
+.day-column {
+  background: white;
+  border-radius: 12px;
+  padding: 15px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-height: 400px;
+}
+
+.day-header {
+  background: #548235;
+  color: white;
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: bold;
+  margin-bottom: 15px;
+}
+
+/* Appointment Cards */
+.appointment-card {
+  background: #f8f9fa;
+  border: 2px solid #28a745;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+
+.appointment-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(40, 167, 69, 0.2);
+}
+
+.appointment-card.int-wash {
+  background: #fff3cd;
+  border-color: #ffc107;
+  color: #856404;
+}
+
+.appointment-card.int-wash:hover {
+  box-shadow: 0 4px 8px rgba(255, 193, 7, 0.3);
+}
+
+.wash-type {
+  font-weight: bold;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-top: 5px;
+}
+
+.wash-type.ext {
+  background: #28a745;
+  color: white;
+}
+
+.wash-type.int {
+  background: #ffc107;
+  color: #856404;
+}
+
+/* Timetable Styles */
+.timetable {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+  font-size: 12px;
+}
+
+.timetable th {
+  background: #548235;
+  color: white;
+  padding: 12px 8px;
+  text-align: center;
+  font-weight: bold;
+  border: 2px solid #3d5a26;
+  font-size: 13px;
+}
+
+.timetable td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  vertical-align: top;
+  height: 60px;
+  width: 120px;
+  position: relative;
+}
+
+.timetable .time-slot {
+  background: #f8f9fa;
+  font-weight: bold;
+  text-align: center;
+  color: #548235;
+  width: 80px;
+}
+
+.appointment-item {
+  background: #e8f5e8;
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  padding: 4px 6px;
+  margin: 2px 0;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.appointment-item.int-type {
+  background: #fff3cd;
+  border-color: #ffc107;
+  color: #856404;
+}
+
+.appointment-item .villa {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.appointment-item .car-plate {
+  font-size: 9px;
+  color: #666;
+}
+
+/* Flex Utilities */
+.flex {
+  display: flex;
+}
+
+.flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flex-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.flex-column {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Text Utilities */
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-sm {
+  font-size: 0.875rem;
+}
+
+.text-lg {
+  font-size: 1.125rem;
+}
+
+.text-xl {
+  font-size: 1.25rem;
+}
+
+.text-2xl {
+  font-size: 1.5rem;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.font-semibold {
+  font-weight: 600;
+}
+
+/* Spacing Utilities */
+.m-0 { margin: 0; }
+.m-1 { margin: 0.25rem; }
+.m-2 { margin: 0.5rem; }
+.m-3 { margin: 0.75rem; }
+.m-4 { margin: 1rem; }
+
+.p-0 { padding: 0; }
+.p-1 { padding: 0.25rem; }
+.p-2 { padding: 0.5rem; }
+.p-3 { padding: 0.75rem; }
+.p-4 { padding: 1rem; }
+
+/* Table Styles */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  margin: 20px 0;
+  font-size: 14px;
+  border: 2px solid #28a745;
+}
+
+.table th {
+  background: #1e7e34;
+  padding: 15px 12px;
+  text-align: center;
+  font-weight: 700;
+  color: white;
+  border-bottom: 3px solid #155724;
+  border-right: 1px solid #155724;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.table th:last-child {
+  border-right: none;
+}
+
+.table td {
+  padding: 12px;
+  text-align: center;
+  border-bottom: 1px solid #d4edda;
+  border-right: 1px solid #d4edda;
+  color: #155724;
+  font-weight: 500;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.table td:last-child {
+  border-right: none;
+}
+
+.table tbody tr:nth-child(odd) {
+  background-color: #f8fff9;
+}
+
+.table tbody tr:nth-child(even) {
+  background-color: #e8f5e9;
+}
+
+.table tbody tr:hover {
+  background-color: #d4edda !important;
+  transform: scale(1.02);
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+/* Loading Spinner */
+.spinner {
+  border: 4px solid #f3f4f6;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 20px auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes slideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Print Styles - Hide UI elements when printing */
+@media print {
+  .user-info-bar,
+  .admin-menu,
+  .admin-menu-container,
+  .navigation-buttons,
+  .action-buttons,
+  .no-print {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .invoice-container,
+  .print-content {
+    background: white !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 20px !important;
+  }
+}
+
+/* Booking Overview Slot Styles */
+.slot-full {
+  background-color: #dc3545 !important;
+  color: white;
+  font-weight: bold;
+  text-align: center;
+}
+
+.slot-available {
+  background-color: #28a745 !important;
+  color: white;
+  font-weight: bold;
+  text-align: center;
+}
+
+.slot-partial {
+  background-color: #fd7e14 !important;
+  color: white;
+  font-weight: bold;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .grid-2,
+  .grid-3,
+  .grid-4,
+  .grid-7 {
+    grid-template-columns: 1fr;
+  }
+  
+  .flex-between {
+    flex-direction: column;
+    gap: 10px;
+    align-items: stretch;
+  }
+  
+  .timetable {
+    font-size: 10px;
+  }
+  
+  .timetable td {
+    width: 80px;
+    height: 50px;
+    padding: 4px;
+  }
+}
