@@ -3,7 +3,7 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const { google } = require('googleapis');
-const creds = require('../credentials.json');
+const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
 
 // --- CONFIGURATION ---
 const SPREADSHEET_ID = '1sG0itNKcxg10mOzbuiY_i-IsPBQ3fmXwXDvqCbT3kFU';
