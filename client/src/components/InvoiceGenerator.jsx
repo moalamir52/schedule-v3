@@ -13,10 +13,10 @@ const Letterhead = ({ children }) => {
 
 const BankDetails = ({ bankConfig }) => {
   const defaultConfig = {
-    accountHolderName: 'MARWAN MOHAMMED OKLAH',
-    bankName: 'Mashreq Bank',
-    accountNumber: '019100210149',
-    iban: 'AE680330000019100210149'
+    accountHolderName: 'GLOGO PARKING CAR WASHING LLC,
+    bankName: 'ENBD,
+    accountNumber: '1015942086801',
+    iban: 'AE390260001015942086801
   };
   
   const config = bankConfig || defaultConfig;
@@ -154,10 +154,10 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   const [nextRefNumber, setNextRefNumber] = useState('');
   const [showBankSettings, setShowBankSettings] = useState(false);
   const [bankConfig, setBankConfig] = useState({
-    accountHolderName: 'MARWAN MOHAMMED OKLAH',
-    bankName: 'Mashreq Bank',
-    accountNumber: '019100210149',
-    iban: 'AE680330000019100210149'
+    accountHolderName: 'اسم صاحب الحساب',
+    bankName: 'اسم البنك',
+    accountNumber: 'رقم الحساب',
+    iban: 'رقم الآيبان'
   });
 
   const previewRefNumber = () => {
@@ -405,6 +405,71 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   }
 
   const invoiceData = generateInvoiceData();
+
+  const handleSaveBankConfig = () => {
+    localStorage.setItem('bankConfig', JSON.stringify(bankConfig));
+    setShowBankSettings(false);
+    alert('تم حفظ بيانات البنك بنجاح');
+  };
+
+  if (showBankSettings) {
+    return (
+      <div style={styles.bankModalBackdrop}>
+        <div style={styles.bankModalContent}>
+          <h3 style={{ color: '#00695C', marginBottom: '20px' }}>إعدادات بيانات البنك</h3>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>اسم صاحب الحساب:</label>
+            <input 
+              type="text" 
+              value={bankConfig.accountHolderName}
+              onChange={(e) => setBankConfig({...bankConfig, accountHolderName: e.target.value})}
+              style={styles.bankInput}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>اسم البنك:</label>
+            <input 
+              type="text" 
+              value={bankConfig.bankName}
+              onChange={(e) => setBankConfig({...bankConfig, bankName: e.target.value})}
+              style={styles.bankInput}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '15px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>رقم الحساب:</label>
+            <input 
+              type="text" 
+              value={bankConfig.accountNumber}
+              onChange={(e) => setBankConfig({...bankConfig, accountNumber: e.target.value})}
+              style={styles.bankInput}
+            />
+          </div>
+          
+          <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>رقم الآيبان:</label>
+            <input 
+              type="text" 
+              value={bankConfig.iban}
+              onChange={(e) => setBankConfig({...bankConfig, iban: e.target.value})}
+              style={styles.bankInput}
+            />
+          </div>
+          
+          <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <button onClick={handleSaveBankConfig} style={styles.saveButton}>
+              حفظ
+            </button>
+            <button onClick={() => setShowBankSettings(false)} style={styles.cancelButton}>
+              إلغاء
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.modalBackdrop}>
