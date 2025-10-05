@@ -19,7 +19,7 @@ function Sidebar({ user, onLogout }) {
 
   const fetchDebugData = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
       if (!response.ok) throw new Error('Failed to fetch clients');
       const clients = await response.json();
       const packages = [...new Set(clients.map(c => c.Washman_Package).filter(p => p))];

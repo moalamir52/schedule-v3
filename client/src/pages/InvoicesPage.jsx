@@ -71,7 +71,7 @@ const InvoicesPage = () => {
 
   const loadInvoices = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/invoices/all');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/all`);
       const data = await response.json();
       if (data.success) {
         setInvoices(data.invoices);
@@ -97,7 +97,7 @@ const InvoicesPage = () => {
 
   const loadMonthlyStats = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/invoices/stats');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/stats`);
       const data = await response.json();
       setMonthlyStats(data);
     } catch (err) {
@@ -159,7 +159,7 @@ const InvoicesPage = () => {
 
   const loadCustomers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/customers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
       const data = await response.json();
       setCustomers(data);
     } catch (err) {
@@ -169,7 +169,7 @@ const InvoicesPage = () => {
 
   const loadAvailableClients = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients/available');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/available`);
       const data = await response.json();
       if (data.success) {
         setAvailableClients(data.availableClients);
@@ -235,7 +235,7 @@ const InvoicesPage = () => {
   const updateInvoiceStatus = async (invoiceId, status, paymentMethod = '') => {
     console.log('[FRONTEND] Updating invoice:', { invoiceId, status, paymentMethod });
     try {
-      const response = await fetch(`http://localhost:5000/api/invoices/update/${invoiceId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/update/${invoiceId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status, paymentMethod })
@@ -262,7 +262,7 @@ const InvoicesPage = () => {
     if (!confirm('Are you sure you want to delete this invoice?')) return;
     
     try {
-      const response = await fetch(`http://localhost:5000/api/invoices/delete/${invoiceId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/delete/${invoiceId}`, {
         method: 'DELETE'
       });
       
@@ -278,7 +278,7 @@ const InvoicesPage = () => {
 
   const exportInvoices = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/invoices/export');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/export`);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1210,7 +1210,7 @@ const InvoicesPage = () => {
                 <button
                   onClick={async () => {
                     try {
-                      const response = await fetch(`http://localhost:5000/api/invoices/update/${editingInvoice.InvoiceID}`, {
+                      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/update/${editingInvoice.InvoiceID}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

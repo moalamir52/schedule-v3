@@ -15,7 +15,7 @@ function BookingOverviewPage() {
     const fetchOverviewData = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:5000/api/schedule/overview');
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`);
         if (!response.ok) throw new Error('Failed to fetch overview data');
         const data = await response.json();
         setOverviewData(data);

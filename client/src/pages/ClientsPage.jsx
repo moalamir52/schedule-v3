@@ -56,7 +56,7 @@ function ClientsPage() {
 
   const fetchClients = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
       if (!response.ok) throw new Error('Failed to fetch clients');
       const data = await response.json();
       setClients(data);
@@ -69,7 +69,7 @@ function ClientsPage() {
 
   const handleAddClient = async (clientData) => {
     try {
-      const response = await fetch('http://localhost:5000/api/clients', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(clientData)
@@ -86,7 +86,7 @@ function ClientsPage() {
 
   const handleUpdateClient = async (clientId, updatedData) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${clientId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${clientId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedData)
@@ -106,7 +106,7 @@ function ClientsPage() {
     if (!confirm(`Are you sure you want to delete ${client.Name}?`)) return;
     
     try {
-      const response = await fetch(`http://localhost:5000/api/clients/${client.CustomerID}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${client.CustomerID}`, {
         method: 'DELETE'
       });
       
@@ -126,7 +126,7 @@ function ClientsPage() {
     try {
       if (undoData.action === 'delete') {
         // Restore deleted client
-        const response = await fetch('http://localhost:5000/api/clients/restore', {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/restore`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(undoData.data)
@@ -136,7 +136,7 @@ function ClientsPage() {
       } else if (undoData.action === 'update') {
         // Restore original data
         const encodedId = encodeURIComponent(undoData.clientId);
-        const response = await fetch(`http://localhost:5000/api/clients/${encodedId}`, {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${encodedId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(undoData.data)

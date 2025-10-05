@@ -22,12 +22,12 @@ const SchedulePage = () => {
     const fetchInitialData = async () => {
       try {
         // Fetch overview data
-        const overviewResponse = await fetch('http://localhost:5000/api/schedule/overview');
+        const overviewResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`);
         const overviewData = await overviewResponse.json();
         setOverviewData(overviewData);
 
         // Fetch workers
-        const workersResponse = await fetch('http://localhost:5000/api/workers');
+        const workersResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
         const workersData = await workersResponse.json();
         const activeWorkers = workersData.filter(worker => worker.Status === 'Active');
         setWorkers(activeWorkers);
@@ -52,7 +52,7 @@ const SchedulePage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:5000/api/schedule/assign', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -85,7 +85,7 @@ const SchedulePage = () => {
 
   const loadCurrentSchedule = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/schedule/assign/current');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
       const data = await response.json();
       
       if (data.success && data.assignments) {
@@ -98,7 +98,7 @@ const SchedulePage = () => {
 
   const handleAddAppointment = async (appointmentData) => {
     try {
-      const response = await fetch('http://localhost:5000/api/schedule/assign/manual', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -128,7 +128,7 @@ const SchedulePage = () => {
     }
     
     try {
-      const response = await fetch(`http://localhost:5000/api/schedule/assign/manual/${customerId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual/${customerId}`, {
         method: 'DELETE'
       });
       
@@ -179,7 +179,7 @@ const SchedulePage = () => {
 
   const handleWashTypeUpdate = async (taskId, newWashType) => {
     try {
-      const response = await fetch('http://localhost:5000/api/schedule/assign/update-wash-type', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-wash-type`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -217,7 +217,7 @@ const SchedulePage = () => {
     
     try {
       setIsLoading(true);
-      const response = await fetch(`http://localhost:5000/api/schedule/assign/week/${weekOffset}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/week/${weekOffset}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

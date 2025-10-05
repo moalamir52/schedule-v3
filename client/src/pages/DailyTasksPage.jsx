@@ -37,7 +37,7 @@ const DailyTasksPage = () => {
 
   const loadWorkers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/workers');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
       const data = await response.json();
       setWorkers(data.filter(worker => worker.Status === 'Active'));
     } catch (err) {
@@ -50,7 +50,7 @@ const DailyTasksPage = () => {
     const weekOff = offset !== undefined ? offset : weekOffset;
     try {
       setIsLoading(true);
-      const response = await fetch(`http://localhost:5000/api/tasks/today?day=${day}&weekOffset=${weekOff}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/today?day=${day}&weekOffset=${weekOff}`);
       const data = await response.json();
       
       console.log(`Loading tasks for: ${day} (Week offset: ${weekOff})`);
@@ -70,7 +70,7 @@ const DailyTasksPage = () => {
 
   const updateTask = async (taskId, newWashType, newWorkerName) => {
     try {
-      const response = await fetch('http://localhost:5000/api/schedule/assign/update-wash-type', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-wash-type`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
@@ -105,7 +105,7 @@ const DailyTasksPage = () => {
     try {
       setCompletingTasks(prev => new Set([...prev, task.id]));
       
-      const response = await fetch('http://localhost:5000/api/tasks/complete', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

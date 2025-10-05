@@ -54,7 +54,7 @@ const OperationsPage = () => {
 
   const loadUsers = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/users');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
       if (response.ok) {
         const usersData = await response.json();
         setUsers(usersData);
@@ -71,7 +71,7 @@ const OperationsPage = () => {
     }
 
     try {
-      const response = await fetch('http://localhost:5000/api/auth/register', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser)
@@ -92,7 +92,7 @@ const OperationsPage = () => {
 
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole })
@@ -116,7 +116,7 @@ const OperationsPage = () => {
       message: `Are you sure you want to delete user "${username}"?`,
       onConfirm: async () => {
         try {
-          const response = await fetch(`http://localhost:5000/api/users/${userId}`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}`, {
             method: 'DELETE'
           });
 
@@ -133,7 +133,7 @@ const OperationsPage = () => {
 
   const handleViewPassword = async (userId, username) => {
     try {
-      const response = await fetch('http://localhost:5000/api/users');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
       if (response.ok) {
         const users = await response.json();
         const user = users.find(u => u.UserID === userId);
@@ -168,7 +168,7 @@ const OperationsPage = () => {
           return;
         }
         try {
-          const response = await fetch(`http://localhost:5000/api/users/${userId}/password`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}/password`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ newPassword })
@@ -191,7 +191,7 @@ const OperationsPage = () => {
       message: 'This will reset the password to default (123456). Continue?',
       onConfirm: async () => {
         try {
-          const response = await fetch(`http://localhost:5000/api/users/${userId}/reset-password`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}/reset-password`, {
             method: 'PUT'
           });
           if (response.ok) {

@@ -28,7 +28,7 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
 
   const fetchAvailableWorkers = async (day, time) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/schedule/assign/available-workers?day=${day}&time=${time}`);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/available-workers?day=${day}&time=${time}`);
       const data = await response.json();
       
       if (data.success) {

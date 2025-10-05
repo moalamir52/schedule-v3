@@ -175,7 +175,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     if (existingRef || clientData.existingRef) return existingRef || clientData.existingRef;
     
     try {
-      const response = await fetch('http://localhost:5000/api/invoices/get-number', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/get-number`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -308,7 +308,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         startDate: clientData.startDate || new Date().toLocaleDateString('en-GB')
       };
       
-      const response = await fetch('http://localhost:5000/api/invoices/create', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(invoiceData)
