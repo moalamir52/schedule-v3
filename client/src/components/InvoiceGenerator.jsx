@@ -13,10 +13,10 @@ const Letterhead = ({ children }) => {
 
 const BankDetails = ({ bankConfig }) => {
   const defaultConfig = {
-    accountHolderName: 'GLOGO PARKING CAR WASHING LLC,
-    bankName: 'ENBD,
+    accountHolderName: 'GLOGO PARKING CAR WASHING LLC',
+    bankName: 'ENBD',
     accountNumber: '1015942086801',
-    iban: 'AE390260001015942086801
+    iban: 'AE390260001015942086801'
   };
   
   const config = bankConfig || defaultConfig;
