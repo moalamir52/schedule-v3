@@ -3,7 +3,16 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const { google } = require('googleapis');
-const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+
+// Conditionally load credentials
+let creds;
+if (process.env.GOOGLE_CREDENTIALS_JSON) {
+  // Production environment - parse from environment variable
+  creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
+} else {
+  // Local environment - require from file
+  creds = require('../credentials.json');
+}
 
 // --- CONFIGURATION ---
 const SPREADSHEET_ID = '1sG0itNKcxg10mOzbuiY_i-IsPBQ3fmXwXDvqCbT3kFU';

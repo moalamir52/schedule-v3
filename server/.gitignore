@@ -1,1 +1,3 @@
+# Secret files
 credentials.json
+.env
