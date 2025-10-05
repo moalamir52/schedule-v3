@@ -45,7 +45,8 @@ const InvoicesPage = () => {
   const [newInvoice, setNewInvoice] = useState({
     customerID: '',
     totalAmount: '',
-    dueDate: '',
+    paymentStatus: 'pending',
+    paymentMethod: 'Cash',
     notes: ''
   });
   const [showBankSettings, setShowBankSettings] = useState(false);
@@ -55,6 +56,17 @@ const InvoicesPage = () => {
     accountNumber: '1015942086801',
     iban: 'AE390260001015942086801'
   });
+  const [showAlert, setShowAlert] = useState(false);
+  const [alertMessage, setAlertMessage] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  const [confirmCallback, setConfirmCallback] = useState(null);
+  const [showPaymentConfirm, setShowPaymentConfirm] = useState(false);
+  const [paymentClient, setPaymentClient] = useState(null);
+  const [showBulkInvoiceModal, setShowBulkInvoiceModal] = useState(false);
+  const [bulkInvoiceProgress, setBulkInvoiceProgress] = useState({ current: 0, total: 0, isProcessing: false });
+  const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
+  const [pendingInvoiceId, setPendingInvoiceId] = useState(null);
 
   useEffect(() => {
     loadInvoices();
@@ -85,14 +97,39 @@ const InvoicesPage = () => {
   };
 
   const calculateStats = (invoiceData) => {
-    const total = invoiceData.length;
-    const paid = invoiceData.filter(inv => inv.Status === 'Paid').length;
-    const pending = invoiceData.filter(inv => inv.Status === 'Pending').length;
-    const totalAmount = invoiceData.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
-    const paidAmount = invoiceData.filter(inv => inv.Status === 'Paid').reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
-    const pendingAmount = invoiceData.filter(inv => inv.Status === 'Pending').reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
     
-    setStats({ total, paid, pending, totalAmount, paidAmount, pendingAmount });
+    // Filter invoices for current month
+    const thisMonthInvoices = invoiceData.filter(invoice => {
+      const dateField = invoice.InvoiceDate || invoice.CreatedAt;
+      if (!dateField) return false;
+      
+      const invoiceDate = new Date(dateField);
+      const invoiceMonth = invoiceDate.getMonth() + 1;
+      const invoiceYear = invoiceDate.getFullYear();
+      
+      return invoiceMonth === currentMonth && invoiceYear === currentYear;
+    });
+    
+    // Calculate monthly stats
+    const thisMonthTotal = thisMonthInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const thisMonthCount = thisMonthInvoices.length;
+    
+    const paidInvoices = invoiceData.filter(inv => inv.Status === 'Paid');
+    const pendingInvoices = invoiceData.filter(inv => inv.Status === 'Pending');
+    
+    const paidTotal = paidInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const pendingTotal = pendingInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const allTimeTotal = invoiceData.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    
+    setMonthlyStats({
+      thisMonth: { total: thisMonthTotal, count: thisMonthCount },
+      paid: { total: paidTotal, count: paidInvoices.length },
+      pending: { total: pendingTotal, count: pendingInvoices.length },
+      allTime: { total: allTimeTotal, count: invoiceData.length }
+    });
   };
 
   const loadMonthlyStats = async () => {
@@ -138,19 +175,35 @@ const InvoicesPage = () => {
   };
 
   const handleReprintInvoice = (invoice) => {
+    // Build serviceDate from Start and End columns
+    let serviceDate = null;
+    if (invoice.Start && invoice.End) {
+      serviceDate = `${invoice.Start} - ${invoice.End}`;
+    } else if (invoice.Start) {
+      serviceDate = invoice.Start;
+    }
+    
+    // Extract phone from Notes for one-time invoices
+    let phone = 'N/A';
+    if (invoice.Notes && invoice.Notes.includes('Phone:')) {
+      const phoneMatch = invoice.Notes.match(/Phone: ([^,]+)/);
+      if (phoneMatch) phone = phoneMatch[1];
+    }
+    
     const clientDataForPrint = {
       name: invoice.CustomerName,
       villa: invoice.Villa,
-      phone: invoice.Phone || 'N/A',
+      phone: phone,
       fee: invoice.TotalAmount,
       washmanPackage: invoice.PackageID || 'Standard Service',
-      typeOfCar: invoice.VehicleType || 'N/A',
+      typeOfCar: invoice.Vehicle || 'N/A',
       serves: invoice.Services || '',
       payment: invoice.Status === 'Paid' ? 'yes/cash' : 'pending',
       invoiceDate: invoice.InvoiceDate,
-      startDate: invoice.ServiceDate || invoice.InvoiceDate,
+      serviceDate: serviceDate,
       customerID: invoice.CustomerID,
-      existingRef: invoice.Ref || invoice.InvoiceID // استخدام عمود Ref أولاً
+      existingRef: invoice.Ref || invoice.InvoiceID,
+      isReprint: true
     };
     
     setSelectedClientForInvoice(clientDataForPrint);
@@ -180,10 +233,81 @@ const InvoicesPage = () => {
     }
   };
 
+  const createBulkInvoices = async () => {
+    if (availableClients.length === 0) {
+      setAlertMessage('No clients available for invoicing this month');
+      setShowAlert(true);
+      return;
+    }
+
+    setBulkInvoiceProgress({ current: 0, total: availableClients.length, isProcessing: true });
+    
+    let successCount = 0;
+    let skipCount = 0;
+    
+    try {
+      for (let i = 0; i < availableClients.length; i++) {
+        const client = availableClients[i];
+        setBulkInvoiceProgress({ current: i + 1, total: availableClients.length, isProcessing: true });
+        
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              customerID: client.CustomerID,
+              totalAmount: client.Fee,
+              paymentStatus: 'pending',
+              paymentMethod: '',
+              notes: `Bulk invoice created for ${new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`
+            })
+          });
+          
+          if (response.ok) {
+            successCount++;
+          } else {
+            const errorData = await response.json();
+            if (errorData.error && errorData.error.includes('already has an invoice')) {
+              skipCount++;
+              console.log(`Skipped ${client.Name} - already has invoice`);
+            } else {
+              console.error(`Failed to create invoice for ${client.Name}:`, errorData.error);
+            }
+          }
+        } catch (clientError) {
+          console.error(`Error creating invoice for ${client.Name}:`, clientError);
+        }
+        
+        // Small delay to prevent overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      setBulkInvoiceProgress({ current: 0, total: 0, isProcessing: false });
+      setShowBulkInvoiceModal(false);
+      loadInvoices();
+      loadAvailableClients();
+      loadMonthlyStats();
+      
+      let message = `Bulk invoice process completed!\n`;
+      message += `✅ Created: ${successCount} invoices\n`;
+      if (skipCount > 0) {
+        message += `⏭️ Skipped: ${skipCount} (already have invoices)`;
+      }
+      
+      setAlertMessage(message);
+      setShowAlert(true);
+    } catch (error) {
+      setBulkInvoiceProgress({ current: 0, total: 0, isProcessing: false });
+      setAlertMessage('Error creating bulk invoices: ' + error.message);
+      setShowAlert(true);
+    }
+  };
+
   const createInvoice = () => {
     const selectedCustomer = customers.find(c => c.CustomerID === newInvoice.customerID);
     if (!selectedCustomer) {
-      alert('Please select a customer');
+      setAlertMessage('Please select a customer');
+      setShowAlert(true);
       return;
     }
     
@@ -204,13 +328,13 @@ const InvoicesPage = () => {
     });
     
     if (existingInvoice) {
-      if (confirm(`Customer ${selectedCustomer.Name} already has an invoice for this month (${existingInvoice.Ref || existingInvoice.InvoiceID}). Would you like to reprint the existing invoice instead?`)) {
+      setConfirmMessage(`Customer ${selectedCustomer.Name} already has an invoice for this month (${existingInvoice.Ref || existingInvoice.InvoiceID}). Would you like to reprint the existing invoice instead?`);
+      setConfirmCallback(() => () => {
         handleReprintInvoice(existingInvoice);
         setShowCreateModal(false);
-        return;
-      } else {
-        return;
-      }
+      });
+      setShowConfirm(true);
+      return;
     }
     
     const clientData = {
@@ -221,15 +345,17 @@ const InvoicesPage = () => {
       washmanPackage: selectedCustomer.Washman_Package || selectedCustomer.Package || 'Standard Package',
       typeOfCar: selectedCustomer.CarPlates || selectedCustomer.TypeOfCar || 'N/A',
       serves: selectedCustomer.Serves || '',
-      payment: selectedCustomer.Payment || 'pending',
+      payment: newInvoice.paymentStatus,
+      paymentMethod: newInvoice.paymentMethod,
       startDate: selectedCustomer.Start_Date || new Date().toLocaleDateString('en-GB'),
-      customerID: selectedCustomer.CustomerID
+      customerID: selectedCustomer.CustomerID,
+      serviceDate: null // Will be calculated by backend
     };
     
     setSelectedClientForInvoice(clientData);
     setShowInvoiceGenerator(true);
     setShowCreateModal(false);
-    setNewInvoice({ customerID: '', totalAmount: '', dueDate: '', notes: '' });
+    setNewInvoice({ customerID: '', totalAmount: '', paymentStatus: 'pending', paymentMethod: 'Cash', notes: '' });
   };
 
   const updateInvoiceStatus = async (invoiceId, status, paymentMethod = '') => {
@@ -259,21 +385,23 @@ const InvoicesPage = () => {
 
   const deleteInvoice = async (invoiceId) => {
     console.log('Attempting to delete invoice:', invoiceId);
-    if (!confirm('Are you sure you want to delete this invoice?')) return;
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/delete/${invoiceId}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        loadInvoices();
-        loadAvailableClients();
-        loadMonthlyStats();
+    setConfirmMessage('Are you sure you want to delete this invoice?');
+    setConfirmCallback(() => async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/delete/${invoiceId}`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          loadInvoices();
+          loadAvailableClients();
+          loadMonthlyStats();
+        }
+      } catch (err) {
+        console.error('Failed to delete invoice:', err);
       }
-    } catch (err) {
-      console.error('Failed to delete invoice:', err);
-    }
+    });
+    setShowConfirm(true);
   };
 
   const exportInvoices = async () => {
@@ -313,16 +441,21 @@ const InvoicesPage = () => {
   };
 
   const tableHeaderStyle = {
-    padding: '12px 8px',
-    textAlign: 'left',
+    padding: '16px 12px',
+    textAlign: 'center',
     fontWeight: '600',
-    color: '#495057',
-    borderBottom: '2px solid #dee2e6'
+    color: 'white',
+    borderBottom: '2px solid #dee2e6',
+    fontSize: '16px',
+    whiteSpace: 'nowrap'
   };
 
   const tableCellStyle = {
-    padding: '12px 8px',
-    verticalAlign: 'middle'
+    padding: '16px 12px',
+    verticalAlign: 'middle',
+    textAlign: 'center',
+    fontSize: '14px',
+    whiteSpace: 'nowrap'
   };
 
   const actionButtonStyle = (bgColor, textColor = 'white') => ({
@@ -342,55 +475,138 @@ const InvoicesPage = () => {
   });
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
       {/* Header */}
-      <div className="page-header">
-        <div className="header-left">
-          <button
-            onClick={() => window.location.href = '/'}
-            className="btn-back"
-          >
-            ← Back
-          </button>
-          
-        </div>
-        
-        <div className="header-center">
-          <h1>Invoice Management System</h1>
-        </div>
-        
-        <div className="header-actions">
+      <div style={{
+        background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+        padding: '20px 0',
+        marginBottom: '30px',
+        boxShadow: '0 4px 20px rgba(40, 167, 69, 0.3)'
+      }}>
+        <div style={{ maxWidth: '100%', margin: '0 auto', padding: '0 20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <button
-              onClick={() => setShowClientsPanel(true)}
-              className="btn btn-secondary"
+              onClick={() => window.location.href = '/'}
+              style={{
+                backgroundColor: 'rgba(255,255,255,0.2)',
+                color: 'white',
+                border: '2px solid rgba(255,255,255,0.3)',
+                borderRadius: '8px',
+                padding: '10px 15px',
+                cursor: 'pointer',
+                fontSize: '16px',
+                fontWeight: 'bold',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
             >
-              👥 Available Clients ({availableClients.length})
+              ← Back
             </button>
-            <button
-              onClick={() => setShowOneTimeInvoiceForm(true)}
-              className="btn btn-secondary"
-            >
-              ⚡ One-Time Invoice
-            </button>
-            <button
-              onClick={exportInvoices}
-              className="btn btn-secondary"
-            >
-              📊 Export All
-            </button>
-            <button
-              onClick={() => setShowBankSettings(true)}
-              className="btn btn-primary"
-            >
-              🏦 Bank Settings
-            </button>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="btn btn-primary"
-            >
-              + New Invoice
-            </button>
+            
+            <div style={{ textAlign: 'center' }}>
+              <h1 style={{
+                color: 'white',
+                fontSize: '2.5rem',
+                fontWeight: 'bold',
+                margin: 0,
+                textShadow: '2px 2px 4px rgba(0,0,0,0.3)'
+              }}>
+                📋 Invoice Management System
+              </h1>
+              <p style={{
+                color: 'rgba(255,255,255,0.9)',
+                fontSize: '1.1rem',
+                margin: '5px 0 0 0',
+                textShadow: '1px 1px 2px rgba(0,0,0,0.2)'
+              }}>
+                Manage your invoices and billing efficiently
+              </p>
+            </div>
+            
+            <div></div>
           </div>
+        </div>
+      </div>
+      
+      <div style={{ maxWidth: '100%', margin: '0 auto', padding: '0 20px' }}>
+        {/* Action Buttons */}
+        <div style={{
+          display: 'flex',
+          gap: '15px',
+          marginBottom: '30px',
+          justifyContent: 'center',
+          flexWrap: 'wrap'
+        }}>
+          <button
+            onClick={() => setShowClientsPanel(true)}
+            style={{
+              backgroundColor: '#28a745',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(40, 167, 69, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            👥 Clients ({availableClients.length})
+          </button>
+          <button
+            onClick={() => setShowOneTimeInvoiceForm(true)}
+            style={{
+              backgroundColor: '#fd7e14',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(253, 126, 20, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            ⚡ One-Time
+          </button>
+          <button
+            onClick={() => setShowBulkInvoiceModal(true)}
+            style={{
+              backgroundColor: '#6f42c1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(111, 66, 193, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            📋 Bulk Invoices
+          </button>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            style={{
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(0, 123, 255, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            + New Invoice
+          </button>
         </div>
         
       {/* Search and Filter Bar */}
@@ -437,45 +653,102 @@ const InvoicesPage = () => {
       </div>
 
       {/* Monthly Stats Cards */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon">📅</div>
-          <div className="stat-content">
-            <h3>{monthlyStats.thisMonth.total} AED</h3>
-            <p>This Month</p>
-            <small>{monthlyStats.thisMonth.count} invoices</small>
-            <small style={{ display: 'block', color: '#007bff', cursor: 'pointer' }}>Click to view all</small>
-          </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '20px',
+        marginBottom: '30px'
+      }}>
+        <div 
+          onClick={() => {
+            setSearchTerm('');
+            setStatusFilter('All');
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease',
+            border: '2px solid #e8f5e8'
+          }}
+          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+        >
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📅</div>
+          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats.thisMonth.total} AED</h3>
+          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>This Month</p>
+          <small style={{ color: '#666' }}>{monthlyStats.thisMonth.count} invoices</small>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon">✅</div>
-          <div className="stat-content">
-            <h3 style={{ color: '#28a745' }}>{monthlyStats.paid.total} AED</h3>
-            <p>Paid</p>
-            <small>{monthlyStats.paid.count} invoices</small>
-            <small style={{ display: 'block', color: '#007bff', cursor: 'pointer' }}>Click to view paid</small>
-          </div>
+        <div 
+          onClick={() => {
+            setSearchTerm('');
+            setStatusFilter('Paid');
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease',
+            border: '2px solid #d4edda'
+          }}
+          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+        >
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>✅</div>
+          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats.paid.total} AED</h3>
+          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Paid</p>
+          <small style={{ color: '#666' }}>{monthlyStats.paid.count} invoices</small>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon">⏳</div>
-          <div className="stat-content">
-            <h3 style={{ color: '#ffc107' }}>{monthlyStats.pending.total} AED</h3>
-            <p>Pending</p>
-            <small>{monthlyStats.pending.count} invoices</small>
-            <small style={{ display: 'block', color: '#007bff', cursor: 'pointer' }}>Click to view pending</small>
-          </div>
+        <div 
+          onClick={() => {
+            setSearchTerm('');
+            setStatusFilter('Pending');
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease',
+            border: '2px solid #fff3cd'
+          }}
+          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+        >
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⏳</div>
+          <h3 style={{ color: '#ffc107', margin: '0 0 5px 0' }}>{monthlyStats.pending.total} AED</h3>
+          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Pending</p>
+          <small style={{ color: '#666' }}>{monthlyStats.pending.count} invoices</small>
         </div>
 
-        <div className="stat-card">
-          <div className="stat-icon">📊</div>
-          <div className="stat-content">
-            <h3 style={{ color: '#6f42c1' }}>{monthlyStats.allTime.total} AED</h3>
-            <p>Total</p>
-            <small>{monthlyStats.allTime.count} invoices</small>
-            <small style={{ display: 'block', color: '#007bff', cursor: 'pointer' }}>Click to view all time</small>
-          </div>
+        <div 
+          onClick={() => {
+            setSearchTerm('');
+            setStatusFilter('All');
+          }}
+          style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '20px',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+            cursor: 'pointer',
+            transition: 'transform 0.2s ease',
+            border: '2px solid #e2e3f1'
+          }}
+          onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+          onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+        >
+          <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📊</div>
+          <h3 style={{ color: '#6f42c1', margin: '0 0 5px 0' }}>{monthlyStats.allTime.total} AED</h3>
+          <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Total</p>
+          <small style={{ color: '#666' }}>{monthlyStats.allTime.count} invoices</small>
         </div>
       </div>
 
@@ -484,15 +757,17 @@ const InvoicesPage = () => {
         {isLoading ? (
           <div style={{ textAlign: 'center', padding: '40px' }}>Loading invoices...</div>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
-            <table className="data-table">
+          <div style={{ overflowX: 'auto', width: '100%' }}>
+            <table style={{ width: '100%', minWidth: '1400px', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
               <thead>
-                <tr style={{ backgroundColor: '#f8f9fa' }}>
+                <tr style={{ backgroundColor: '#28a745' }}>
+                  <th style={tableHeaderStyle}>REF</th>
                   <th style={tableHeaderStyle}>Invoice ID</th>
                   <th style={tableHeaderStyle}>Customer</th>
                   <th style={tableHeaderStyle}>Villa</th>
                   <th style={tableHeaderStyle}>Amount</th>
-                  <th style={tableHeaderStyle}>Date</th>
+                  <th style={tableHeaderStyle}>Created</th>
+                  <th style={tableHeaderStyle}>Service Start</th>
                   <th style={tableHeaderStyle}>Due Date</th>
                   <th style={tableHeaderStyle}>Status</th>
                   <th style={tableHeaderStyle}>Payment</th>
@@ -506,6 +781,9 @@ const InvoicesPage = () => {
                     borderBottom: '1px solid #dee2e6'
                   }}>
                     <td style={tableCellStyle}>
+                      <strong style={{ color: '#28a745' }}>{invoice.Ref || '-'}</strong>
+                    </td>
+                    <td style={tableCellStyle}>
                       <strong style={{ color: '#007bff' }}>{invoice.InvoiceID}</strong>
                     </td>
                     <td style={tableCellStyle}>{invoice.CustomerName}</td>
@@ -513,7 +791,12 @@ const InvoicesPage = () => {
                     <td style={tableCellStyle}>
                       <strong style={{ color: '#28a745' }}>AED {invoice.TotalAmount}</strong>
                     </td>
-                    <td style={tableCellStyle}>{invoice.InvoiceDate}</td>
+                    <td style={tableCellStyle}>
+                      {invoice.CreatedAt ? new Date(invoice.CreatedAt).toLocaleDateString('en-GB') : '-'}
+                    </td>
+                    <td style={tableCellStyle}>
+                      {invoice.Start || (invoice.InvoiceDate ? new Date(invoice.InvoiceDate).toLocaleDateString('en-GB') : '-')}
+                    </td>
                     <td style={tableCellStyle}>{invoice.DueDate}</td>
                     <td style={tableCellStyle}>
                       <span style={{
@@ -535,7 +818,8 @@ const InvoicesPage = () => {
                             <button
                               onClick={() => {
                                 console.log('[BUTTON CLICK] Mark as Paid clicked for:', invoice.InvoiceID);
-                                updateInvoiceStatus(invoice.InvoiceID, 'Paid', 'Cash');
+                                setPendingInvoiceId(invoice.InvoiceID);
+                                setShowPaymentMethodModal(true);
                               }}
                               style={actionButtonStyle('#28a745')}
                               title="Mark as Paid"
@@ -610,6 +894,125 @@ const InvoicesPage = () => {
         )}
       </div>
 
+      {/* Bulk Invoice Modal */}
+      {showBulkInvoiceModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            width: '500px',
+            maxWidth: '90vw',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ marginBottom: '20px', color: '#28a745' }}>📋 Create Bulk Invoices</h3>
+            
+            {!bulkInvoiceProgress.isProcessing ? (
+              <>
+                <div style={{ marginBottom: '20px', fontSize: '16px', color: '#666' }}>
+                  This will create invoices for all available clients ({availableClients.length} clients) for the current month.
+                </div>
+                
+                <div style={{
+                  backgroundColor: '#f8f9fa',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  marginBottom: '20px',
+                  border: '1px solid #dee2e6'
+                }}>
+                  <strong>Month:</strong> {new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}<br/>
+                  <strong>Clients:</strong> {availableClients.length}<br/>
+                  <strong>Status:</strong> All invoices will be created as "Pending"
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                  <button
+                    onClick={createBulkInvoices}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      padding: '12px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    🚀 Create All Invoices
+                  </button>
+                  <button
+                    onClick={() => setShowBulkInvoiceModal(false)}
+                    style={{
+                      backgroundColor: '#6c757d',
+                      color: 'white',
+                      padding: '12px 20px',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '16px'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom: '20px', fontSize: '18px', fontWeight: 'bold' }}>
+                  Creating Invoices...
+                </div>
+                
+                <div style={{
+                  backgroundColor: '#f8f9fa',
+                  borderRadius: '8px',
+                  padding: '20px',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{
+                    backgroundColor: '#e9ecef',
+                    borderRadius: '10px',
+                    height: '20px',
+                    marginBottom: '10px',
+                    overflow: 'hidden'
+                  }}>
+                    <div style={{
+                      backgroundColor: '#28a745',
+                      height: '100%',
+                      width: `${(bulkInvoiceProgress.current / bulkInvoiceProgress.total) * 100}%`,
+                      transition: 'width 0.3s ease'
+                    }}></div>
+                  </div>
+                  
+                  <div style={{ fontSize: '16px', fontWeight: 'bold' }}>
+                    {bulkInvoiceProgress.current} / {bulkInvoiceProgress.total} invoices created
+                  </div>
+                  
+                  <div style={{ fontSize: '14px', color: '#666', marginTop: '5px' }}>
+                    {Math.round((bulkInvoiceProgress.current / bulkInvoiceProgress.total) * 100)}% complete
+                  </div>
+                </div>
+                
+                <div style={{ fontSize: '14px', color: '#666' }}>
+                  Please wait while we create all invoices...
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Create Invoice Modal */}
       {showCreateModal && (
         <div style={{
@@ -672,11 +1075,10 @@ const InvoicesPage = () => {
             </div>
             
             <div style={{ marginBottom: '15px' }}>
-              <label>Due Date:</label>
-              <input
-                type="date"
-                value={newInvoice.dueDate}
-                onChange={(e) => setNewInvoice({...newInvoice, dueDate: e.target.value})}
+              <label>Payment Status:</label>
+              <select
+                value={newInvoice.paymentStatus || 'pending'}
+                onChange={(e) => setNewInvoice({...newInvoice, paymentStatus: e.target.value})}
                 style={{
                   width: '100%',
                   padding: '8px',
@@ -684,8 +1086,31 @@ const InvoicesPage = () => {
                   borderRadius: '4px',
                   border: '1px solid #ddd'
                 }}
-              />
+              >
+                <option value="pending">⏳ Pending</option>
+                <option value="paid">✅ Paid</option>
+              </select>
             </div>
+            
+            {newInvoice.paymentStatus === 'paid' && (
+              <div style={{ marginBottom: '15px' }}>
+                <label>Payment Method:</label>
+                <select
+                  value={newInvoice.paymentMethod || 'Cash'}
+                  onChange={(e) => setNewInvoice({...newInvoice, paymentMethod: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '8px',
+                    marginTop: '5px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd'
+                  }}
+                >
+                  <option value="Cash">💵 Cash</option>
+                  <option value="Bank">🏦 Bank Transfer</option>
+                </select>
+              </div>
+            )}
             
             <div style={{ marginBottom: '20px' }}>
               <label>Notes:</label>
@@ -1130,7 +1555,31 @@ const InvoicesPage = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Status</label>
+                  <select
+                    value={editingInvoice.Status || ''}
+                    onChange={(e) => {
+                      const newStatus = e.target.value;
+                      setEditingInvoice({
+                        ...editingInvoice, 
+                        Status: newStatus,
+                        PaymentMethod: newStatus === 'Pending' ? '' : editingInvoice.PaymentMethod
+                      });
+                    }}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}
+                  >
+                    <option value="Pending">⏳ Pending</option>
+                    <option value="Paid">✅ Paid</option>
+                    <option value="Overdue">❌ Overdue</option>
+                  </select>
+                </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Payment Method</label>
                   <select
@@ -1217,7 +1666,8 @@ const InvoicesPage = () => {
                           customerName: editingInvoice.CustomerName,
                           villa: editingInvoice.Villa,
                           totalAmount: editingInvoice.TotalAmount,
-                          paymentMethod: editingInvoice.PaymentMethod,
+                          status: editingInvoice.Status,
+                          paymentMethod: editingInvoice.Status === 'Pending' ? '' : editingInvoice.PaymentMethod,
                           notes: editingInvoice.Notes
                         })
                       });
@@ -1351,21 +1801,8 @@ const InvoicesPage = () => {
                       </div>
                       <button
                         onClick={() => {
-                          const clientData = {
-                            name: client.Name,
-                            villa: client.Villa,
-                            phone: client.Phone || 'N/A',
-                            fee: client.Fee || 0,
-                            washmanPackage: client.Washman_Package || client.Package || 'Standard Package',
-                            typeOfCar: client.CarPlates || client.TypeOfCar || 'N/A',
-                            serves: client.Serves || '',
-                            payment: client.Payment || 'pending',
-                            startDate: client.Start_Date || new Date().toLocaleDateString('en-GB'),
-                            customerID: client.CustomerID
-                          };
-                          setSelectedClientForInvoice(clientData);
-                          setShowInvoiceGenerator(true);
-                          setShowClientsPanel(false);
+                          setShowPaymentConfirm(true);
+                          setPaymentClient(client);
                         }}
                         style={{
                           backgroundColor: '#28a745',
@@ -1644,6 +2081,431 @@ const InvoicesPage = () => {
           }}
         />
       )}
+
+      {/* Custom Alert Modal */}
+      {showAlert && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            minWidth: '300px',
+            textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ marginBottom: '20px', fontSize: '16px' }}>
+              {alertMessage}
+            </div>
+            <button
+              onClick={() => setShowAlert(false)}
+              style={{
+                backgroundColor: '#007bff',
+                color: 'white',
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Confirm Modal */}
+      {showConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            minWidth: '350px',
+            textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ marginBottom: '25px', fontSize: '16px', lineHeight: '1.5' }}>
+              {confirmMessage}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  if (confirmCallback) confirmCallback();
+                  setShowConfirm(false);
+                  setConfirmCallback(null);
+                }}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirm(false);
+                  setConfirmCallback(null);
+                }}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Method Modal */}
+      {showPaymentMethodModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            minWidth: '350px',
+            textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ marginBottom: '25px', fontSize: '18px', fontWeight: 'bold' }}>
+              💰 Payment Method
+            </div>
+            <div style={{ marginBottom: '20px', fontSize: '16px', color: '#666' }}>
+              How was this invoice paid?
+            </div>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  updateInvoiceStatus(pendingInvoiceId, 'Paid', 'Cash');
+                  setShowPaymentMethodModal(false);
+                  setPendingInvoiceId(null);
+                }}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
+              >
+                💵 Cash
+              </button>
+              <button
+                onClick={() => {
+                  updateInvoiceStatus(pendingInvoiceId, 'Paid', 'Bank');
+                  setShowPaymentMethodModal(false);
+                  setPendingInvoiceId(null);
+                }}
+                style={{
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
+              >
+                🏦 Bank
+              </button>
+              <button
+                onClick={() => {
+                  setShowPaymentMethodModal(false);
+                  setPendingInvoiceId(null);
+                }}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Status Confirm Modal */}
+      {showPaymentConfirm && paymentClient && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            minWidth: '400px',
+            textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ marginBottom: '25px', fontSize: '18px', fontWeight: 'bold' }}>
+              💰 Payment Status
+            </div>
+            <div style={{ marginBottom: '20px', fontSize: '16px', color: '#666' }}>
+              {paymentClient.Name} - {paymentClient.Villa}<br/>
+              Amount: AED {paymentClient.Fee}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                onClick={() => {
+                  // Check if customer already has invoice this month
+                  const currentMonth = new Date().getMonth() + 1;
+                  const currentYear = new Date().getFullYear();
+                  const existingInvoice = invoices.find(invoice => {
+                    const dateField = invoice.InvoiceDate || invoice.CreatedAt;
+                    if (!dateField) return false;
+                    
+                    const invoiceDate = new Date(dateField);
+                    const invoiceMonth = invoiceDate.getMonth() + 1;
+                    const invoiceYear = invoiceDate.getFullYear();
+                    
+                    return invoice.CustomerID === paymentClient.CustomerID && 
+                           invoiceMonth === currentMonth && 
+                           invoiceYear === currentYear;
+                  });
+                  
+                  if (existingInvoice) {
+                    setAlertMessage(`Customer ${paymentClient.Name} already has an invoice for this month (${existingInvoice.Ref || existingInvoice.InvoiceID})`);
+                    setShowAlert(true);
+                    setShowPaymentConfirm(false);
+                    setPaymentClient(null);
+                    return;
+                  }
+                  
+                  const clientData = {
+                    name: paymentClient.Name,
+                    villa: paymentClient.Villa,
+                    phone: paymentClient.Phone || 'N/A',
+                    fee: paymentClient.Fee || 0,
+                    washmanPackage: paymentClient.Washman_Package || paymentClient.Package || 'Standard Package',
+                    typeOfCar: paymentClient.CarPlates || paymentClient.TypeOfCar || 'N/A',
+                    serves: paymentClient.Serves || '',
+                    payment: 'paid',
+                    paymentMethod: 'Cash',
+                    startDate: paymentClient.Start_Date || new Date().toLocaleDateString('en-GB'),
+                    customerID: paymentClient.CustomerID
+                  };
+                  setSelectedClientForInvoice(clientData);
+                  setShowInvoiceGenerator(true);
+                  setShowClientsPanel(false);
+                  setShowPaymentConfirm(false);
+                  setPaymentClient(null);
+                }}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                💵 Paid Cash
+              </button>
+              <button
+                onClick={() => {
+                  // Check if customer already has invoice this month
+                  const currentMonth = new Date().getMonth() + 1;
+                  const currentYear = new Date().getFullYear();
+                  const existingInvoice = invoices.find(invoice => {
+                    const dateField = invoice.InvoiceDate || invoice.CreatedAt;
+                    if (!dateField) return false;
+                    
+                    const invoiceDate = new Date(dateField);
+                    const invoiceMonth = invoiceDate.getMonth() + 1;
+                    const invoiceYear = invoiceDate.getFullYear();
+                    
+                    return invoice.CustomerID === paymentClient.CustomerID && 
+                           invoiceMonth === currentMonth && 
+                           invoiceYear === currentYear;
+                  });
+                  
+                  if (existingInvoice) {
+                    setAlertMessage(`Customer ${paymentClient.Name} already has an invoice for this month (${existingInvoice.Ref || existingInvoice.InvoiceID})`);
+                    setShowAlert(true);
+                    setShowPaymentConfirm(false);
+                    setPaymentClient(null);
+                    return;
+                  }
+                  
+                  const clientData = {
+                    name: paymentClient.Name,
+                    villa: paymentClient.Villa,
+                    phone: paymentClient.Phone || 'N/A',
+                    fee: paymentClient.Fee || 0,
+                    washmanPackage: paymentClient.Washman_Package || paymentClient.Package || 'Standard Package',
+                    typeOfCar: paymentClient.CarPlates || paymentClient.TypeOfCar || 'N/A',
+                    serves: paymentClient.Serves || '',
+                    payment: 'paid',
+                    paymentMethod: 'Bank',
+                    startDate: paymentClient.Start_Date || new Date().toLocaleDateString('en-GB'),
+                    customerID: paymentClient.CustomerID
+                  };
+                  setSelectedClientForInvoice(clientData);
+                  setShowInvoiceGenerator(true);
+                  setShowClientsPanel(false);
+                  setShowPaymentConfirm(false);
+                  setPaymentClient(null);
+                }}
+                style={{
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                🏦 Paid Bank
+              </button>
+              <button
+                onClick={() => {
+                  // Check if customer already has invoice this month
+                  const currentMonth = new Date().getMonth() + 1;
+                  const currentYear = new Date().getFullYear();
+                  const existingInvoice = invoices.find(invoice => {
+                    const dateField = invoice.InvoiceDate || invoice.CreatedAt;
+                    if (!dateField) return false;
+                    
+                    const invoiceDate = new Date(dateField);
+                    const invoiceMonth = invoiceDate.getMonth() + 1;
+                    const invoiceYear = invoiceDate.getFullYear();
+                    
+                    return invoice.CustomerID === paymentClient.CustomerID && 
+                           invoiceMonth === currentMonth && 
+                           invoiceYear === currentYear;
+                  });
+                  
+                  if (existingInvoice) {
+                    setAlertMessage(`Customer ${paymentClient.Name} already has an invoice for this month (${existingInvoice.Ref || existingInvoice.InvoiceID})`);
+                    setShowAlert(true);
+                    setShowPaymentConfirm(false);
+                    setPaymentClient(null);
+                    return;
+                  }
+                  
+                  const clientData = {
+                    name: paymentClient.Name,
+                    villa: paymentClient.Villa,
+                    phone: paymentClient.Phone || 'N/A',
+                    fee: paymentClient.Fee || 0,
+                    washmanPackage: paymentClient.Washman_Package || paymentClient.Package || 'Standard Package',
+                    typeOfCar: paymentClient.CarPlates || paymentClient.TypeOfCar || 'N/A',
+                    serves: paymentClient.Serves || '',
+                    payment: 'pending',
+                    paymentMethod: '',
+                    startDate: paymentClient.Start_Date || new Date().toLocaleDateString('en-GB'),
+                    customerID: paymentClient.CustomerID
+                  };
+                  setSelectedClientForInvoice(clientData);
+                  setShowInvoiceGenerator(true);
+                  setShowClientsPanel(false);
+                  setShowPaymentConfirm(false);
+                  setPaymentClient(null);
+                }}
+                style={{
+                  backgroundColor: '#ffc107',
+                  color: 'black',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  fontWeight: 'bold'
+                }}
+              >
+                ⏳ Pending
+              </button>
+              <button
+                onClick={() => {
+                  setShowPaymentConfirm(false);
+                  setPaymentClient(null);
+                }}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '14px'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </div>
     </div>
   );
 };

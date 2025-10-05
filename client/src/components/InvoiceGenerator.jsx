@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
-// import letterheadImage from '../assets/Letterhead.jpg';
+import letterheadImage from '../assets/Letterhead.jpg';
 
 const Letterhead = ({ children }) => {
   return (
-    <div style={letterheadStyles.page} className="letterhead-page">
+    <div 
+      style={{
+        ...letterheadStyles.page,
+        backgroundImage: `url(${letterheadImage})`
+      }} 
+      className="letterhead-page"
+    >
       <div style={letterheadStyles.content}>
         {children}
       </div>
@@ -196,41 +202,25 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     const today = new Date();
     const isOneTime = clientData.washmanPackage === 'One-Time Service';
     
+    // Use backend calculated dates if available
     const invoiceDate = clientData.invoiceDate ? new Date(clientData.invoiceDate) : today;
     
-    let startDateObj;
-    if (clientData.startDate) {
-      if (clientData.startDate.includes('/')) {
-        const parts = clientData.startDate.split('/');
-        if (parts.length === 3) {
-          startDateObj = new Date(parts[2], parts[1] - 1, parts[0]);
-        } else {
-          startDateObj = new Date(clientData.startDate);
-        }
-      } else {
-        startDateObj = new Date(clientData.startDate);
-      }
-      
-      if (isNaN(startDateObj.getTime())) {
-        startDateObj = today;
-      }
+    let startDateStr, endDateStr;
+    
+    // For reprints, use the exact serviceDate from the saved invoice
+    if (clientData.isReprint && clientData.serviceDate && clientData.serviceDate.includes(' - ')) {
+      const [start, end] = clientData.serviceDate.split(' - ');
+      startDateStr = start;
+      endDateStr = end;
+    } else if (clientData.serviceDate && clientData.serviceDate.includes(' - ')) {
+      const [start, end] = clientData.serviceDate.split(' - ');
+      startDateStr = start;
+      endDateStr = end;
     } else {
-      startDateObj = today;
+      // Fallback for one-time customers
+      startDateStr = clientData.startDate || today.toLocaleDateString('en-GB');
+      endDateStr = null;
     }
-    
-    // Calculate current month billing cycle
-    const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), startDateObj.getDate());
-    
-    // If we passed this month's billing date, use current month, otherwise previous month
-    if (today.getDate() < startDateObj.getDate()) {
-      currentMonthStart.setMonth(currentMonthStart.getMonth() - 1);
-    }
-    
-    const endDateObj = new Date(currentMonthStart);
-    endDateObj.setDate(endDateObj.getDate() + 29);
-    
-    // Use current month cycle dates for invoice
-    startDateObj = currentMonthStart;
     
     return {
       ref: isTestMode ? 'TEST-INVOICE' : confirmedRef,
@@ -244,8 +234,8 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         packageId: clientData.washmanPackage,
         serves: clientData.serves || clientData.washmanPackage,
         vehicleType: clientData.typeOfCar || '',
-        startDate: startDateObj.toLocaleDateString('en-GB'),
-        endDate: isOneTime ? null : endDateObj.toLocaleDateString('en-GB'),
+        startDate: startDateStr,
+        endDate: isOneTime ? null : endDateStr,
         duration: isOneTime ? '1 Time' : '30 days'
       },
       basePrice: parseInt(clientData.fee) || '',
@@ -318,7 +308,24 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         throw new Error('Failed to save invoice');
       }
       
-      setConfirmedRef(actualRef);
+      const responseData = await response.json();
+      
+      // Update clientData with backend response data
+      if (responseData.success && responseData.invoice) {
+        const backendInvoice = responseData.invoice;
+        setConfirmedRef(backendInvoice.invoiceId);
+        
+        // Update clientData with backend calculated values
+        if (backendInvoice.serviceDate) {
+          clientData.serviceDate = backendInvoice.serviceDate;
+        }
+        if (backendInvoice.invoiceDate) {
+          clientData.invoiceDate = backendInvoice.invoiceDate;
+        }
+      } else {
+        setConfirmedRef(actualRef);
+      }
+      
       setShowRefConfirmDialog(false);
       setIsTestMode(false);
       
@@ -326,7 +333,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       setIsPaid(paymentStatus.toLowerCase().includes('yes/'));
       
       if (onInvoiceCreated) {
-        onInvoiceCreated({ ref: actualRef, clientName: clientData.name });
+        onInvoiceCreated({ ref: confirmedRef || actualRef, clientName: clientData.name });
       }
       
       setShowInvoice(true);
@@ -483,6 +490,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
             @page { size: A4; margin: 0; }
             html, body { height: 297mm !important; overflow: hidden !important; }
             .letterhead-page { height: 297mm !important; overflow: hidden !important; page-break-after: avoid !important; page-break-inside: avoid !important; }
+            .page-header, .header-left, .header-center, .header-actions, .btn-back, button, nav, .navbar, .menu, .hamburger { display: none !important; }
           }
         `}
       </style>
