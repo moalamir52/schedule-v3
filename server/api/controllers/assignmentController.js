@@ -477,6 +477,83 @@ const updateWashType = async (req, res) => {
   }
 };
 
+const cancelBooking = async (req, res) => {
+  console.log('[CANCEL BOOKING] ==> Cancelling booking...');
+  
+  try {
+    const { taskId } = req.body;
+    
+    if (!taskId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required field: taskId' 
+      });
+    }
+    
+    const existingTasks = await getScheduledTasks();
+    const taskIndex = existingTasks.findIndex(task => 
+      `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}` === taskId
+    );
+    
+    if (taskIndex === -1) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Booking not found' 
+      });
+    }
+    
+    const cancelledTask = existingTasks[taskIndex];
+    
+    // Remove the booking from schedule
+    const filteredTasks = existingTasks.filter((task, index) => index !== taskIndex);
+    
+    // Save updated schedule
+    await clearSheet('ScheduledTasks');
+    await addRowsToSheet('ScheduledTasks', filteredTasks.map(task => ({
+      day: task.Day,
+      time: task.Time,
+      customerId: task.CustomerID,
+      customerName: task.CustomerName,
+      villa: task.Villa,
+      carPlate: task.CarPlate,
+      washType: task.WashType,
+      workerName: task.WorkerName,
+      workerId: task.WorkerID,
+      packageType: task.PackageType || ''
+    })));
+    
+    // Log cancellation to history (optional)
+    try {
+      await addRowToSheet('CancelledBookings', [{
+        cancelledAt: new Date().toISOString(),
+        customerId: cancelledTask.CustomerID,
+        customerName: cancelledTask.CustomerName,
+        villa: cancelledTask.Villa,
+        day: cancelledTask.Day,
+        time: cancelledTask.Time,
+        carPlate: cancelledTask.CarPlate,
+        washType: cancelledTask.WashType,
+        workerName: cancelledTask.WorkerName,
+        reason: 'User cancelled'
+      }]);
+    } catch (logError) {
+      console.log('[CANCEL BOOKING] Warning: Could not log to CancelledBookings sheet:', logError.message);
+    }
+    
+    console.log(`[CANCEL BOOKING] ==> Successfully cancelled: ${cancelledTask.CustomerName} - ${cancelledTask.Day} ${cancelledTask.Time}`);
+    
+    res.json({
+      success: true,
+      message: 'Booking cancelled successfully',
+      cancelledBooking: cancelledTask
+    });
+    
+  } catch (error) {
+    console.error('[CANCEL BOOKING] ERROR:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 const deleteManualAppointment = async (req, res) => {
   console.log('[MANUAL DELETE] ==> Deleting appointment...');
   
@@ -678,5 +755,6 @@ module.exports = {
   getAvailableWorkers,
   deleteManualAppointment,
   exportSchedule,
-  updateWashType
+  updateWashType,
+  cancelBooking
 };

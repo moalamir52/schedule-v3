@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import Modal from '../Modal';
 
 const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate }) => {
   const [draggedItem, setDraggedItem] = useState(null);
   const [showOverrideMenu, setShowOverrideMenu] = useState(null);
+  const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
   const days = ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -60,6 +62,63 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       await onWashTypeUpdate(taskId, newWashType);
     }
     setShowOverrideMenu(null);
+  };
+
+  const handleCancelBooking = (appointment) => {
+    setModal({
+      isOpen: true,
+      type: 'confirm',
+      title: 'Cancel Booking',
+      message: `Are you sure you want to cancel this booking?\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nTime: ${appointment.day} ${appointment.time}\nCar: ${appointment.carPlate}`,
+      onConfirm: () => confirmCancelBooking(appointment)
+    });
+  };
+
+  const confirmCancelBooking = async (appointment) => {
+    setModal({ isOpen: false });
+    
+    try {
+      const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/cancel-booking`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ taskId })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to cancel booking');
+      }
+      
+      // Remove the booking from local state
+      if (onScheduleUpdate) {
+        const updatedSchedule = assignedSchedule.filter(task => 
+          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
+        );
+        onScheduleUpdate(updatedSchedule);
+      }
+      
+      setShowOverrideMenu(null);
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Success',
+        message: 'Booking cancelled successfully!'
+      });
+      
+    } catch (error) {
+      console.error('Cancel booking error:', error);
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: `Error cancelling booking: ${error.message}`
+      });
+    }
   };
 
   const handleDrop = (e, targetDay, targetTime, targetWorkerId) => {
@@ -139,6 +198,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   };
 
   return (
+    <>
     <table className="timetable">
       <thead>
         <tr>
@@ -285,6 +345,22 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                       🧽 EXT + INT
                                     </button>
                                     <button
+                                      onClick={() => handleCancelBooking(appointment)}
+                                      style={{
+                                        width: '100%',
+                                        padding: '8px',
+                                        border: 'none',
+                                        backgroundColor: '#dc3545',
+                                        color: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '12px',
+                                        textAlign: 'left',
+                                        borderTop: '1px solid #eee'
+                                      }}
+                                    >
+                                      🗑️ Cancel Booking
+                                    </button>
+                                    <button
                                       onClick={() => setShowOverrideMenu(null)}
                                       style={{
                                         width: '100%',
@@ -298,7 +374,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                         borderTop: '1px solid #eee'
                                       }}
                                     >
-                                      ❌ Cancel
+                                      ❌ Close
                                     </button>
                                   </div>
                                 )}
@@ -316,6 +392,16 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         ))}
       </tbody>
     </table>
+    
+    <Modal
+      isOpen={modal.isOpen}
+      onClose={() => setModal({ isOpen: false })}
+      type={modal.type}
+      title={modal.title}
+      message={modal.message}
+      onConfirm={modal.onConfirm}
+    />
+    </>
   );
 };
 

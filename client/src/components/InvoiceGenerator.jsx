@@ -45,12 +45,16 @@ const Invoice = ({ invoiceData }) => {
     customer,
     service,
     basePrice,
-    isPaid
+    isPaid,
+    vat = 0
   } = invoiceData;
 
-  const totalPrice = basePrice;
-  const displayAmount = `AED ${basePrice}`;
-  const displayTotal = isPaid ? 'PAID' : `AED ${totalPrice}`;
+  const subtotal = basePrice;
+  const vatAmount = (subtotal * (vat || 0)) / 100; // Calculate VAT as percentage
+  const totalPrice = subtotal + vatAmount;
+  const displaySubtotal = `AED ${subtotal}`;
+  const displayVat = `AED ${vatAmount.toFixed(2)}`;
+  const displayTotal = isPaid ? 'PAID' : `AED ${totalPrice.toFixed(2)}`;
 
   const formattedDate = new Date(date).toLocaleDateString('en-GB', {
     day: '2-digit',
@@ -129,13 +133,25 @@ const Invoice = ({ invoiceData }) => {
               )}
             </td>
             <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{service.packageId === 'One-Time Service' ? '1 Time' : service.duration}</td>
-            <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{displayAmount}</td>
+            <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{displaySubtotal}</td>
           </tr>
           <tr>
             <td style={styles.emptyCell}></td>
             <td style={styles.emptyCell}></td>
-            <td style={styles.totalLabelCell}>TOTAL:</td>
-            <td style={{...styles.totalValueCell, color: isPaid ? '#28a745' : 'inherit'}}>{displayTotal}</td>
+            <td style={styles.totalLabelCell}>Subtotal</td>
+            <td style={styles.totalValueCell}>{displaySubtotal}</td>
+          </tr>
+          <tr>
+            <td style={styles.emptyCell}></td>
+            <td style={styles.emptyCell}></td>
+            <td style={styles.totalLabelCell}>VAT</td>
+            <td style={styles.totalValueCell}>{displayVat}</td>
+          </tr>
+          <tr>
+            <td style={styles.emptyCell}></td>
+            <td style={styles.emptyCell}></td>
+            <td style={{...styles.totalLabelCell, backgroundColor: isPaid ? '#28a745' : '#6c757d', color: 'white', fontWeight: 'bold'}}>TOTAL</td>
+            <td style={{...styles.totalValueCell, backgroundColor: isPaid ? '#28a745' : '#6c757d', color: 'white', fontWeight: 'bold', fontSize: '1.2em'}}>{displayTotal}</td>
           </tr>
         </tbody>
       </table>
@@ -151,7 +167,7 @@ const Invoice = ({ invoiceData }) => {
   );
 };
 
-const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, existingPaidStatus, bankConfig: propBankConfig }) => {
+const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, existingPaidStatus, bankConfig: propBankConfig, vatRate: propVatRate }) => {
   const [showInvoice, setShowInvoice] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState(null);
   const [isPaid, setIsPaid] = useState(null);
@@ -165,6 +181,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     accountNumber: '1015942086801',
     iban: 'AE390260001015942086801'
   });
+  const [vatRate, setVatRate] = useState(0);
 
   const previewRefNumber = () => {
     if (existingRef) return existingRef;
@@ -240,6 +257,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       },
       basePrice: parseInt(clientData.fee) || '',
       isPaid: isPaid,
+      vat: vatRate || 0,
       bankConfig: bankConfig
     };
   };
@@ -259,12 +277,15 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   };
 
   React.useEffect(() => {
-    if ((existingRef || clientData.existingRef) && existingPaidStatus !== null) {
+    if ((existingRef || clientData.existingRef)) {
       setConfirmedRef(existingRef || clientData.existingRef);
-      setIsPaid(existingPaidStatus);
+      // Check payment status from clientData or existingPaidStatus
+      const isPaidStatus = existingPaidStatus !== null ? existingPaidStatus : 
+        (clientData.payment && (clientData.payment.toLowerCase().includes('yes/') || clientData.payment.toLowerCase() === 'paid'));
+      setIsPaid(isPaidStatus);
       setShowInvoice(true);
     }
-  }, [existingRef, existingPaidStatus, clientData.existingRef]);
+  }, [existingRef, existingPaidStatus, clientData.existingRef, clientData.payment]);
   
   React.useEffect(() => {
     if (propBankConfig) {
@@ -275,7 +296,16 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         setBankConfig(JSON.parse(savedBankConfig));
       }
     }
-  }, [propBankConfig]);
+    
+    if (propVatRate !== undefined) {
+      setVatRate(propVatRate);
+    } else {
+      const savedVatRate = localStorage.getItem('vatRate');
+      if (savedVatRate) {
+        setVatRate(parseFloat(savedVatRate));
+      }
+    }
+  }, [propBankConfig, propVatRate]);
 
   const handleRefConfirm = async () => {
     try {
@@ -287,6 +317,8 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       const invoiceData = isRegularCustomer ? {
         customerID: clientData.customerID,
         totalAmount: clientData.fee || 0,
+        paymentStatus: clientData.payment || 'pending',
+        paymentMethod: clientData.paymentMethod || 'Cash',
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB'),
         notes: `Package: ${clientData.washmanPackage}, Vehicle: ${clientData.typeOfCar}`
       } : {
@@ -334,7 +366,8 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       setIsTestMode(false);
       
       const paymentStatus = clientData.payment || 'pending';
-      setIsPaid(paymentStatus.toLowerCase().includes('yes/'));
+      const isPaidStatus = paymentStatus.toLowerCase().includes('yes/') || paymentStatus === 'PAID' || paymentStatus.toLowerCase() === 'paid';
+      setIsPaid(isPaidStatus);
       
       if (onInvoiceCreated) {
         onInvoiceCreated({ ref: confirmedRef || actualRef, clientName: clientData.name });

@@ -1,5 +1,5 @@
 const express = require('express');
-const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, deleteManualAppointment, exportSchedule, updateWashType } = require('../controllers/assignmentController');
+const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, deleteManualAppointment, exportSchedule, updateWashType, cancelBooking } = require('../controllers/assignmentController');
 
 const router = express.Router();
 
@@ -11,5 +11,6 @@ router.delete('/manual/:customerId', deleteManualAppointment);
 router.get('/export', exportSchedule);
 router.get('/available-workers', getAvailableWorkers);
 router.put('/update-wash-type', updateWashType);
+router.post('/cancel-booking', cancelBooking);
 
 module.exports = router;

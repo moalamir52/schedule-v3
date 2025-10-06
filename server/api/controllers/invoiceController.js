@@ -23,6 +23,9 @@ const createInvoice = async (req, res) => {
     
     console.log('customerID:', customerID);
     console.log('isRegularInvoice:', isRegularInvoice);
+    console.log('paymentStatus received:', paymentStatus);
+    console.log('paymentStatus type:', typeof paymentStatus);
+    console.log('paymentMethod received:', req.body.paymentMethod);
     
     let customerData = null;
     let billingCycle = null;
@@ -95,10 +98,10 @@ const createInvoice = async (req, res) => {
       phone: isRegularInvoice ? (customerData?.Phone || customerData?.phone || 'N/A') : (phone || 'N/A'),
       packageId: isRegularInvoice ? (customerData?.['Washman Package'] || customerData?.Washman_Package || 'Standard Package') : (packageId || 'One-Time Service'),
       vehicleType: isRegularInvoice ? (customerData?.['Car Type'] || customerData?.CarPlates || customerData?.CarType || 'N/A') : (vehicleType || 'N/A'),
-      services: isRegularInvoice ? (customerData?.['Washman Package'] || customerData?.Washman_Package || 'Car wash service') : (serves || 'Car wash service'),
+      services: isRegularInvoice ? (customerData?.Serves || customerData?.serves || 'Car wash service') : (serves || 'Car wash service'),
       totalAmount: isRegularInvoice ? (totalAmount || customerData?.Fee || customerData?.fee) : amount,
-      status: isRegularInvoice ? (paymentStatus === 'paid' ? 'Paid' : 'Pending') : (paymentStatus === 'yes/cash' || paymentStatus === 'yes/bank' ? 'Paid' : 'Pending'),
-      paymentMethod: isRegularInvoice ? (paymentStatus === 'paid' ? (req.body.paymentMethod || 'Cash') : '') : (paymentStatus === 'yes/cash' ? 'Cash' : paymentStatus === 'yes/bank' ? 'Bank' : ''),
+      status: isRegularInvoice ? (paymentStatus === 'PAID' ? 'Paid' : 'Pending') : (paymentStatus === 'yes/cash' || paymentStatus === 'yes/bank' ? 'Paid' : 'Pending'),
+      paymentMethod: isRegularInvoice ? (paymentStatus === 'PAID' ? (req.body.paymentMethod || 'Cash') : '') : (paymentStatus === 'yes/cash' ? 'Cash' : paymentStatus === 'yes/bank' ? 'Bank' : ''),
       invoiceDate: isRegularInvoice ? `${billingCycle.startDate.getFullYear()}-${String(billingCycle.startDate.getMonth() + 1).padStart(2, '0')}-${String(billingCycle.startDate.getDate()).padStart(2, '0')}` : new Date().toISOString().split('T')[0],
       dueDate: isRegularInvoice ? `${billingCycle.endDate.getFullYear()}-${String(billingCycle.endDate.getMonth() + 1).padStart(2, '0')}-${String(billingCycle.endDate.getDate()).padStart(2, '0')}` : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       serviceDate: isRegularInvoice ? `${String(billingCycle.startDate.getDate()).padStart(2, '0')}/${String(billingCycle.startDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.startDate.getFullYear()} - ${String(billingCycle.endDate.getDate()).padStart(2, '0')}/${String(billingCycle.endDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.endDate.getFullYear()}` : (startDate || new Date().toLocaleDateString('en-GB')),
@@ -123,6 +126,7 @@ const createInvoice = async (req, res) => {
       Vehicle: invoiceData.vehicleType,
       PackageID: invoiceData.packageId,
       Notes: isRegularInvoice ? (notes || `Service Period: ${invoiceData.serviceDate}`) : `Phone: ${invoiceData.phone}, Vehicle: ${invoiceData.vehicleType}, Services: ${invoiceData.services}`,
+      Services: invoiceData.services,
       CreatedBy: 'System',
       CreatedAt: invoiceData.createdAt
     });

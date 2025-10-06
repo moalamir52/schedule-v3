@@ -67,6 +67,8 @@ const InvoicesPage = () => {
   const [bulkInvoiceProgress, setBulkInvoiceProgress] = useState({ current: 0, total: 0, isProcessing: false });
   const [showPaymentMethodModal, setShowPaymentMethodModal] = useState(false);
   const [pendingInvoiceId, setPendingInvoiceId] = useState(null);
+  const [showVatSettings, setShowVatSettings] = useState(false);
+  const [vatRate, setVatRate] = useState(0);
 
   useEffect(() => {
     loadInvoices();
@@ -78,6 +80,12 @@ const InvoicesPage = () => {
     const savedBankConfig = localStorage.getItem('bankConfig');
     if (savedBankConfig) {
       setBankConfig(JSON.parse(savedBankConfig));
+    }
+    
+    // Load VAT rate from localStorage
+    const savedVatRate = localStorage.getItem('vatRate');
+    if (savedVatRate) {
+      setVatRate(parseFloat(savedVatRate));
     }
   }, []);
 
@@ -197,7 +205,7 @@ const InvoicesPage = () => {
       fee: invoice.TotalAmount,
       washmanPackage: invoice.PackageID || 'Standard Service',
       typeOfCar: invoice.Vehicle || 'N/A',
-      serves: invoice.Services || '',
+      serves: invoice.Services || invoice.PackageID || '',
       payment: invoice.Status === 'Paid' ? 'yes/cash' : 'pending',
       invoiceDate: invoice.InvoiceDate,
       serviceDate: serviceDate,
@@ -606,6 +614,23 @@ const InvoicesPage = () => {
             }}
           >
             + New Invoice
+          </button>
+          <button
+            onClick={() => setShowVatSettings(true)}
+            style={{
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(220, 53, 69, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            📊 VAT Settings
           </button>
         </div>
         
@@ -1088,11 +1113,11 @@ const InvoicesPage = () => {
                 }}
               >
                 <option value="pending">⏳ Pending</option>
-                <option value="paid">✅ Paid</option>
+                <option value="PAID">✅ Paid</option>
               </select>
             </div>
             
-            {newInvoice.paymentStatus === 'paid' && (
+            {newInvoice.paymentStatus === 'PAID' && (
               <div style={{ marginBottom: '15px' }}>
                 <label>Payment Method:</label>
                 <select
@@ -2070,6 +2095,9 @@ const InvoicesPage = () => {
         <InvoiceGenerator
           clientData={selectedClientForInvoice}
           bankConfig={bankConfig}
+          vatRate={vatRate}
+          existingRef={selectedClientForInvoice?.existingRef}
+          existingPaidStatus={selectedClientForInvoice?.payment === 'yes/cash' || selectedClientForInvoice?.payment === 'yes/bank' || selectedClientForInvoice?.payment === 'paid'}
           onClose={() => {
             setShowInvoiceGenerator(false);
             setSelectedClientForInvoice(null);
@@ -2281,6 +2309,93 @@ const InvoicesPage = () => {
         </div>
       )}
 
+      {/* VAT Settings Modal */}
+      {showVatSettings && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '30px',
+            borderRadius: '12px',
+            minWidth: '400px',
+            textAlign: 'center',
+            boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
+          }}>
+            <div style={{ marginBottom: '25px', fontSize: '18px', fontWeight: 'bold' }}>
+              📊 VAT Settings
+            </div>
+            <div style={{ marginBottom: '20px', fontSize: '16px', color: '#666' }}>
+              Set the VAT rate for all invoices
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>VAT Rate (%):</label>
+              <input
+                type="number"
+                value={vatRate}
+                onChange={(e) => setVatRate(parseFloat(e.target.value) || 0)}
+                min="0"
+                max="100"
+                step="0.01"
+                style={{
+                  width: '100px',
+                  padding: '8px 12px',
+                  borderRadius: '4px',
+                  border: '1px solid #ddd',
+                  fontSize: '16px',
+                  textAlign: 'center'
+                }}
+              />
+            </div>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  localStorage.setItem('vatRate', vatRate.toString());
+                  setShowVatSettings(false);
+                  setAlertMessage(`VAT rate set to ${vatRate}%`);
+                  setShowAlert(true);
+                }}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}
+              >
+                💾 Save
+              </button>
+              <button
+                onClick={() => setShowVatSettings(false)}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  padding: '12px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Payment Status Confirm Modal */}
       {showPaymentConfirm && paymentClient && (
         <div style={{
@@ -2345,7 +2460,7 @@ const InvoicesPage = () => {
                     washmanPackage: paymentClient.Washman_Package || paymentClient.Package || 'Standard Package',
                     typeOfCar: paymentClient.CarPlates || paymentClient.TypeOfCar || 'N/A',
                     serves: paymentClient.Serves || '',
-                    payment: 'paid',
+                    payment: 'PAID',
                     paymentMethod: 'Cash',
                     startDate: paymentClient.Start_Date || new Date().toLocaleDateString('en-GB'),
                     customerID: paymentClient.CustomerID
@@ -2403,7 +2518,7 @@ const InvoicesPage = () => {
                     washmanPackage: paymentClient.Washman_Package || paymentClient.Package || 'Standard Package',
                     typeOfCar: paymentClient.CarPlates || paymentClient.TypeOfCar || 'N/A',
                     serves: paymentClient.Serves || '',
-                    payment: 'paid',
+                    payment: 'PAID',
                     paymentMethod: 'Bank',
                     startDate: paymentClient.Start_Date || new Date().toLocaleDateString('en-GB'),
                     customerID: paymentClient.CustomerID

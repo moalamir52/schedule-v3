@@ -329,6 +329,7 @@ async function addInvoiceRecord(invoiceData) {
         End: invoiceData.End,
         Vehicle: invoiceData.Vehicle,
         PackageID: invoiceData.PackageID,
+        Services: invoiceData.Services,
         Notes: invoiceData.Notes,
         CreatedBy: invoiceData.CreatedBy,
         CreatedAt: invoiceData.CreatedAt
