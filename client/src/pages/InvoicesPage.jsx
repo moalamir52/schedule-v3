@@ -2069,6 +2069,7 @@ const InvoicesPage = () => {
       {showInvoiceGenerator && selectedClientForInvoice && (
         <InvoiceGenerator
           clientData={selectedClientForInvoice}
+          bankConfig={bankConfig}
           onClose={() => {
             setShowInvoiceGenerator(false);
             setSelectedClientForInvoice(null);

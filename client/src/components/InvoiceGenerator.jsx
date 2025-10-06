@@ -151,7 +151,7 @@ const Invoice = ({ invoiceData }) => {
   );
 };
 
-const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, existingPaidStatus }) => {
+const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, existingPaidStatus, bankConfig: propBankConfig }) => {
   const [showInvoice, setShowInvoice] = useState(false);
   const [confirmedRef, setConfirmedRef] = useState(null);
   const [isPaid, setIsPaid] = useState(null);
@@ -160,10 +160,10 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   const [nextRefNumber, setNextRefNumber] = useState('');
   const [showBankSettings, setShowBankSettings] = useState(false);
   const [bankConfig, setBankConfig] = useState({
-    accountHolderName: 'اسم صاحب الحساب',
-    bankName: 'اسم البنك',
-    accountNumber: 'رقم الحساب',
-    iban: 'رقم الآيبان'
+    accountHolderName: 'GLOGO PARKING CAR WASHING LLC',
+    bankName: 'ENBD',
+    accountNumber: '1015942086801',
+    iban: 'AE390260001015942086801'
   });
 
   const previewRefNumber = () => {
@@ -267,11 +267,15 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   }, [existingRef, existingPaidStatus, clientData.existingRef]);
   
   React.useEffect(() => {
-    const savedBankConfig = localStorage.getItem('bankConfig');
-    if (savedBankConfig) {
-      setBankConfig(JSON.parse(savedBankConfig));
+    if (propBankConfig) {
+      setBankConfig(propBankConfig);
+    } else {
+      const savedBankConfig = localStorage.getItem('bankConfig');
+      if (savedBankConfig) {
+        setBankConfig(JSON.parse(savedBankConfig));
+      }
     }
-  }, []);
+  }, [propBankConfig]);
 
   const handleRefConfirm = async () => {
     try {
