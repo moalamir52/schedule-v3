@@ -4,9 +4,12 @@ import BookingOverview from '../components/schedule/BookingOverview';
 import WorkerScheduleView from '../components/schedule/WorkerScheduleView';
 import AddAppointmentModal from '../components/schedule/AddAppointmentModal';
 import ExportModal from '../components/schedule/ExportModal';
+import CronSettingsModal from '../components/schedule/CronSettingsModal';
 
 const SchedulePage = () => {
-  const [currentView, setCurrentView] = useState('overview');
+  const [currentView, setCurrentView] = useState(() => {
+    return localStorage.getItem('scheduleCurrentView') || 'weekly';
+  });
   const [overviewData, setOverviewData] = useState([]);
   const [assignedSchedule, setAssignedSchedule] = useState([]);
   const [workers, setWorkers] = useState([]);
@@ -14,6 +17,7 @@ const SchedulePage = () => {
   const [error, setError] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
+  const [showCronModal, setShowCronModal] = useState(false);
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'today'
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,6 +50,7 @@ const SchedulePage = () => {
 
   const handleViewChange = (viewName) => {
     setCurrentView(viewName);
+    localStorage.setItem('scheduleCurrentView', viewName);
   };
 
   const handleAutoAssign = async () => {
@@ -92,7 +97,7 @@ const SchedulePage = () => {
         setAssignedSchedule(data.assignments);
       }
     } catch (err) {
-      console.error('Failed to load current schedule:', err);
+      // Silent error handling
     }
   };
 
@@ -148,7 +153,6 @@ const SchedulePage = () => {
       // Refresh the schedule after deleting
       await loadCurrentSchedule();
     } catch (err) {
-      console.error('Delete error:', err);
       alert(`Error deleting appointment: ${err.message}`);
     }
   };
@@ -202,21 +206,16 @@ const SchedulePage = () => {
         )
       );
       
-      console.log(`Wash type updated to ${newWashType} for task ${taskId}`);
     } catch (err) {
-      console.error('Update wash type error:', err);
       alert(`Error updating wash type: ${err.message}`);
     }
   };
 
   const loadScheduleForWeek = async (weekOffset) => {
-    if (weekOffset === 0) {
-      await loadCurrentSchedule();
-      return;
-    }
-    
     try {
       setIsLoading(true);
+      
+      // استخدم نفس API لجميع الأسابيع (بما في ذلك الحالي)
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/week/${weekOffset}`, {
         method: 'POST',
         headers: {
@@ -232,6 +231,11 @@ const SchedulePage = () => {
       
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
+        
+        // حفظ في ScheduledTasks إذا كان الأسبوع الحالي
+        if (weekOffset === 0) {
+          // لا حاجة لحفظ إضافي - الAPI يحفظ تلقائياً
+        }
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -496,11 +500,13 @@ const SchedulePage = () => {
         onAutoAssign={handleAutoAssign}
         onClear={handleClear}
         onAdd={() => {
-          console.log('Add button clicked');
           setShowAddModal(true);
         }}
         onExport={() => {
           setShowExportModal(true);
+        }}
+        onCronSettings={() => {
+          setShowCronModal(true);
         }}
         currentView={currentView}
         currentWeekOffset={currentWeekOffset}
@@ -544,6 +550,11 @@ const SchedulePage = () => {
         onClose={() => setShowExportModal(false)}
         assignedSchedule={assignedSchedule}
         workers={workers}
+      />
+      
+      <CronSettingsModal
+        isOpen={showCronModal}
+        onClose={() => setShowCronModal(false)}
       />
     </div>
   );

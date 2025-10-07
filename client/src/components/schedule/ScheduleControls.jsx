@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiChevronLeft, FiChevronRight, FiSettings, FiEye, FiBarChart, FiZap, FiPlus, FiDownload, FiAlertTriangle } from 'react-icons/fi';
 
-function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
+function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -133,11 +133,14 @@ function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport
         <button 
           style={{
             ...weekButtonStyle,
-            backgroundColor: viewMode === 'week' ? '#28a745' : '#6c757d'
+            backgroundColor: currentWeekOffset === 0 ? '#28a745' : '#6c757d'
           }}
-          onClick={() => onViewModeChange('week')}
-          onMouseEnter={(e) => e.target.style.backgroundColor = viewMode === 'week' ? '#218838' : '#5a6268'}
-          onMouseLeave={(e) => e.target.style.backgroundColor = viewMode === 'week' ? '#28a745' : '#6c757d'}
+          onClick={() => {
+            onViewModeChange('week');
+            onWeekChange(0); // العودة للأسبوع الحالي
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = currentWeekOffset === 0 ? '#218838' : '#5a6268'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = currentWeekOffset === 0 ? '#28a745' : '#6c757d'}
         >
           This Week
         </button>
@@ -270,6 +273,23 @@ function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport
             >
               <FiDownload style={{ color: '#009688' }} />
               Export
+            </div>
+            <div 
+              style={dropdownItemStyle}
+              onClick={() => {
+                onCronSettings();
+                setShowDropdown(false);
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#fff3e0';
+                e.currentTarget.style.color = '#e65100';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#495057';
+              }}
+            >
+              ⏰ Schedule Settings
             </div>
             <div 
               style={{ ...dropdownItemStyle, borderBottom: 'none' }}

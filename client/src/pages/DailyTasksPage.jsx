@@ -41,7 +41,7 @@ const DailyTasksPage = () => {
       const data = await response.json();
       setWorkers(data.filter(worker => worker.Status === 'Active'));
     } catch (err) {
-      console.error('Failed to load workers:', err);
+      // Failed to load workers
     }
   };
 
@@ -53,8 +53,7 @@ const DailyTasksPage = () => {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/today?day=${day}&weekOffset=${weekOff}`);
       const data = await response.json();
       
-      console.log(`Loading tasks for: ${day} (Week offset: ${weekOff})`);
-      console.log('Response:', data);
+
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load tasks');

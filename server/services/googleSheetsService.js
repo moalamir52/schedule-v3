@@ -29,7 +29,7 @@ async function loadSheet() {
   if (sheetsLoaded) return;
   await doc.loadInfo();
   sheetsLoaded = true;
-  console.log('Google Sheets document loaded successfully.');
+
 }
 
 function mapRowsToObjects(rows, headers) {
@@ -105,7 +105,7 @@ async function addHistoryRecord(historyData) {
     });
     await sheet.saveUpdatedCells();
     
-    console.log(`New history record added to row ${nextRowIndex}`);
+
 }
 
 // Add new customer
@@ -219,7 +219,7 @@ async function clearSheet(sheetName) {
     await sheet.clear('A2:Z' + sheet.rowCount);
   }
   
-  console.log(`Sheet '${sheetName}' data cleared successfully.`);
+
 }
 
 async function addRowsToSheet(sheetName, data) {
@@ -232,7 +232,7 @@ async function addRowsToSheet(sheetName, data) {
   if (data.length === 0) return;
   
   // Always set headers first
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType'];
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
   await sheet.setHeaderRow(headers);
   await sheet.loadHeaderRow();
   
@@ -247,11 +247,12 @@ async function addRowsToSheet(sheetName, data) {
     WashType: item.washType,
     WorkerName: item.workerName,
     WorkerID: item.workerId,
-    PackageType: item.packageType || ''
+    PackageType: item.packageType || '',
+    isLocked: item.isLocked || 'FALSE'
   }));
   
   await sheet.addRows(rowsData);
-  console.log(`Added ${data.length} rows to sheet '${sheetName}'.`);
+
 }
 
 async function getScheduledTasks() {
@@ -260,8 +261,24 @@ async function getScheduledTasks() {
   if (!sheet) {
     return []; // Return empty array if sheet doesn't exist yet
   }
+  await sheet.loadHeaderRow();
   const rows = await sheet.getRows();
-  return mapRowsToObjects(rows, sheet.headerValues);
+  const allTasks = mapRowsToObjects(rows, sheet.headerValues);
+  
+  // Remove duplicates when reading from sheet
+  const uniqueTasks = [];
+  const seen = new Set();
+  allTasks.forEach(task => {
+    const key = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      uniqueTasks.push(task);
+    }
+  });
+  
+
+  
+  return uniqueTasks;
 }
 
 async function addRowToSheet(sheetName, data) {
@@ -272,7 +289,7 @@ async function addRowToSheet(sheetName, data) {
   }
   
   // Ensure headers exist
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType'];
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
   if (sheet.headerValues.length === 0) {
     await sheet.setHeaderRow(headers);
     await sheet.loadHeaderRow();
@@ -289,11 +306,49 @@ async function addRowToSheet(sheetName, data) {
     WashType: data[0].washType,
     WorkerName: data[0].workerName,
     WorkerID: data[0].workerId,
-    PackageType: data[0].packageType || ''
+    PackageType: data[0].packageType || '',
+    isLocked: data[0].isLocked || 'FALSE'
   };
   
   await sheet.addRow(rowData);
-  console.log(`Added single row to sheet '${sheetName}'.`);
+
+}
+
+async function clearAndWriteSheet(sheetName, data) {
+  await loadSheet();
+  const sheet = doc.sheetsByTitle[sheetName];
+  if (!sheet) {
+    throw new Error(`Sheet '${sheetName}' not found.`);
+  }
+  
+  // Clear all content including headers
+  await sheet.clear();
+  
+  // Always set headers first
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
+  await sheet.setHeaderRow(headers);
+  await sheet.loadHeaderRow();
+  
+  if (data.length > 0) {
+    // Add all rows at once
+    const rowsData = data.map(item => ({
+      Day: item.day,
+      Time: item.time,
+      CustomerID: item.customerId,
+      CustomerName: item.customerName,
+      Villa: item.villa,
+      CarPlate: item.carPlate,
+      WashType: item.washType,
+      WorkerName: item.workerName,
+      WorkerID: item.workerId,
+      PackageType: item.packageType || '',
+      isLocked: item.isLocked || 'FALSE'
+    }));
+    
+    await sheet.addRows(rowsData);
+  }
+  
+
 }
 
 async function addInvoiceRecord(invoiceData) {
@@ -335,7 +390,7 @@ async function addInvoiceRecord(invoiceData) {
         CreatedAt: invoiceData.CreatedAt
     });
     
-    console.log(`New invoice record added: ${refNumber}`);
+
     return refNumber;
 }
 
@@ -350,8 +405,6 @@ async function getInvoices() {
 }
 
 async function updateInvoiceStatus(invoiceId, status, paymentMethod) {
-    console.log('[SERVICE] updateInvoiceStatus called with:', { invoiceId, status, paymentMethod });
-    
     await loadSheet();
     const sheet = doc.sheetsByTitle['invoices'];
     if (!sheet) {
@@ -359,33 +412,25 @@ async function updateInvoiceStatus(invoiceId, status, paymentMethod) {
     }
     
     const rows = await sheet.getRows();
-    console.log('[SERVICE] Total rows found:', rows.length);
     
     // Try both InvoiceID and Ref columns
     let row = rows.find(r => r.get('InvoiceID') === invoiceId);
     if (!row) {
-        console.log('[SERVICE] Not found by InvoiceID, trying Ref column...');
         row = rows.find(r => r.get('Ref') === invoiceId);
     }
     
     if (!row) {
-        console.log('[SERVICE] Available InvoiceIDs:', rows.map(r => r.get('InvoiceID')));
-        console.log('[SERVICE] Available Refs:', rows.map(r => r.get('Ref')));
         throw new Error(`Invoice not found: ${invoiceId}`);
     }
     
-    console.log('[SERVICE] Found invoice row, updating...');
     if (status) {
-        console.log('[SERVICE] Setting status to:', status);
         row.set('Status', status);
     }
     if (paymentMethod) {
-        console.log('[SERVICE] Setting paymentMethod to:', paymentMethod);
         row.set('PaymentMethod', paymentMethod);
     }
     
     await row.save();
-    console.log(`[SERVICE] Invoice ${invoiceId} updated successfully`);
 }
 
 async function updateInvoiceRecord(invoiceId, updateData) {
@@ -413,7 +458,7 @@ async function updateInvoiceRecord(invoiceId, updateData) {
     });
     
     await row.save();
-    console.log(`Invoice ${invoiceId} updated successfully`);
+
 }
 
 async function deleteInvoiceRecord(invoiceId) {
@@ -473,7 +518,7 @@ async function deleteInvoiceRecord(invoiceId) {
     // Delete from original sheet
     await row.delete();
     
-    console.log(`Invoice ${invoiceId} moved to deleted_invoices`);
+
 }
 
 async function addWorkerToSheet(workerData) {
@@ -484,7 +529,7 @@ async function addWorkerToSheet(workerData) {
   }
   
   await sheet.addRow(workerData);
-  console.log(`New worker added: ${workerData.Name}`);
+
 }
 
 async function deleteWorkerFromSheet(workerName) {
@@ -502,7 +547,7 @@ async function deleteWorkerFromSheet(workerName) {
   }
   
   await row.delete();
-  console.log(`Worker deleted: ${workerName}`);
+
 }
 
 async function getAdditionalServices() {
@@ -523,7 +568,7 @@ async function addServiceToSheet(serviceData) {
   }
   
   await sheet.addRow(serviceData);
-  console.log(`New service added: ${serviceData.ServiceName}`);
+
 }
 
 async function deleteServiceFromSheet(serviceName) {
@@ -541,7 +586,7 @@ async function deleteServiceFromSheet(serviceName) {
   }
   
   await row.delete();
-  console.log(`Service deleted: ${serviceName}`);
+
 }
 
 async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
@@ -642,7 +687,7 @@ async function addUser(userData) {
   };
   
   await sheet.addRow(userRecord);
-  console.log(`New user added: ${userData.username}`);
+
 }
 
 async function getUsers() {
@@ -674,7 +719,7 @@ async function updateUser(userId, updatedData) {
   });
   
   await row.save();
-  console.log(`User ${userId} updated successfully`);
+
 }
 
 async function deleteUser(userId) {
@@ -692,7 +737,7 @@ async function deleteUser(userId) {
   }
   
   await row.delete();
-  console.log(`User ${userId} deleted successfully`);
+
 }
 
 module.exports = {
@@ -715,6 +760,7 @@ module.exports = {
   addRowsToSheet,
   getScheduledTasks,
   addRowToSheet,
+  clearAndWriteSheet,
   addInvoiceRecord,
   getInvoices,
   updateInvoiceStatus,

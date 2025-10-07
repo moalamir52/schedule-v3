@@ -20,14 +20,8 @@ const getScheduleOverview = async (req, res) => {
     // Loop through each customer and parse appointments
     customers.forEach(customer => {
       if (!customer || customer.Status !== 'Active') {
-        if (customer && customer.Name) {
-          console.log(`❌ SKIPPED Customer: ${customer.Name} - Status: ${customer.Status || 'undefined'}`);
-        }
         return;
       }
-      
-      console.log(`✅ Processing Customer: ${customer.Name}`);
-      console.log(`   📅 Days: "${customer.Days || 'empty'}" | ⏰ Time: "${customer.Time || 'empty'}" | 📝 Notes: "${customer.Notes || 'empty'}"`);
       
       const timeField = customer.Time || '';
       const daysField = customer.Days || '';
@@ -78,7 +72,6 @@ const getScheduleOverview = async (req, res) => {
             });
           }
         });
-        console.log(`  → Priority 2 (Multiple Times): ${customerAppointments.length} appointments`);
       } else if (daysField && timeField) {
         // Standard schedule: Create appointments for all days at the standard time
         const customerDays = parseDaysField(daysField);
@@ -95,7 +88,6 @@ const getScheduleOverview = async (req, res) => {
             customerAppointments.push(apt);
           }
         });
-        console.log(`  → Standard Schedule: ${customerAppointments.length} appointments`);
       }
       
       // Now handle Notes overrides - these modify or add to the standard schedule
@@ -122,29 +114,7 @@ const getScheduleOverview = async (req, res) => {
             customerAppointments.push(apt);
           }
         });
-        console.log(`  → Notes Overrides Applied: ${specificMatches.length} modifications`);
       }
-      
-      if (customerAppointments.length === 0) {
-        console.log(`  ⚠️ NO APPOINTMENTS generated for ${customer.Name} - Time: "${timeField}", Days: "${daysField}", Notes: "${notesField}"`);
-      }
-    });
-    
-    console.log(`\n📊 SUMMARY: Generated ${appointments.length} total appointments from ${customers.length} customers`);
-    
-    // Show appointments by day and time
-    console.log('\n📅 APPOINTMENTS BY DAY AND TIME:');
-    days.forEach(day => {
-      timeSlots.forEach(time => {
-        const dayTimeAppointments = appointments.filter(apt => apt.day === day && apt.time === time);
-        if (dayTimeAppointments.length > 0) {
-          const customerNames = dayTimeAppointments.map(apt => {
-            const customer = customers.find(c => c.CustomerID === apt.customerId);
-            return customer ? `${customer.Name} (Villa: ${customer.Villa || 'N/A'})` : apt.customerId;
-          });
-          console.log(`[${day}] at [${time}]: ${customerNames.join(', ')}`);
-        }
-      });
     });
     
     // Initialize counts object

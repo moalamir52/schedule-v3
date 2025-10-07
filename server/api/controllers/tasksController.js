@@ -1,12 +1,8 @@
-const { getScheduledTasks, addHistoryRecord, getCustomers } = require('../../services/googleSheetsService');
+const { getScheduledTasks, addHistoryRecord, getCustomers, clearAndWriteSheet } = require('../../services/googleSheetsService');
 
 const getAllTasks = async (req, res) => {
-  console.log('[ALL TASKS] ==> Getting all scheduled tasks...');
-  
   try {
     const scheduledTasks = await getScheduledTasks();
-    
-    console.log(`[ALL TASKS] Found ${scheduledTasks.length} total tasks`);
     
     res.json({
       success: true,
@@ -15,14 +11,11 @@ const getAllTasks = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[ALL TASKS] ERROR:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
 const getTodayTasks = async (req, res) => {
-  console.log('[DAILY TASKS] ==> Getting tasks...');
-  
   try {
     const scheduledTasks = await getScheduledTasks();
     
@@ -47,12 +40,6 @@ const getTodayTasks = async (req, res) => {
     
     // Filter tasks for today only
     const todayTasks = scheduledTasks.filter(task => task.Day === todayName);
-    
-    console.log(`[DAILY TASKS] Requested day: ${todayName} (Week offset: ${weekOffset})`);
-    console.log(`[DAILY TASKS] Target date: ${targetDateString}`);
-    console.log(`[DAILY TASKS] Total scheduled tasks: ${scheduledTasks.length}`);
-    console.log(`[DAILY TASKS] Available tasks:`, scheduledTasks.map(t => ({ Day: t.Day, Customer: t.CustomerName })));
-    console.log(`[DAILY TASKS] Found ${todayTasks.length} tasks for ${todayName}`);
     
     // Format tasks for frontend
     const formattedTasks = todayTasks.map(task => ({
@@ -79,18 +66,13 @@ const getTodayTasks = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[DAILY TASKS] ERROR:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
 const completeTask = async (req, res) => {
-  console.log('[COMPLETE TASK] ==> Completing task...');
-  
   try {
     const { taskId, customerID, carPlate, washType, villa, workerName, packageType, actualWashDate } = req.body;
-    
-    console.log('[COMPLETE TASK] Request data:', { taskId, customerID, carPlate, washType, villa, workerName, packageType });
     
     if (!taskId || !customerID || !washType) {
       return res.status(400).json({ 
@@ -99,7 +81,7 @@ const completeTask = async (req, res) => {
       });
     }
     
-    // Create history record with all required fields
+    // Create history record
     const now = new Date();
     const historyRecord = {
       WashID: `${customerID}-${carPlate}-${now.getTime()}`,
@@ -115,18 +97,31 @@ const completeTask = async (req, res) => {
       WorkerName: workerName || ''
     };
     
-    console.log('[COMPLETE TASK] History record:', historyRecord);
-    
     // Save to wash_history sheet
-    try {
-      await addHistoryRecord(historyRecord);
-      console.log('[COMPLETE TASK] ==> History record saved successfully');
-    } catch (sheetError) {
-      console.error('[COMPLETE TASK] Sheet save error details:', sheetError);
-      throw new Error(`Failed to save to wash_history: ${sheetError.message}`);
-    }
+    await addHistoryRecord(historyRecord);
     
-    console.log(`[COMPLETE TASK] ==> Task completed: ${customerID} - ${carPlate} - ${washType}`);
+    // Remove completed task from scheduled tasks
+    const existingTasks = await getScheduledTasks();
+    const remainingTasks = existingTasks.filter(task => 
+      `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}` !== taskId
+    );
+    
+    // Update scheduled tasks sheet
+    const updatedSchedule = remainingTasks.map(task => ({
+      day: task.Day,
+      time: task.Time,
+      customerId: task.CustomerID,
+      customerName: task.CustomerName,
+      villa: task.Villa,
+      carPlate: task.CarPlate,
+      washType: task.WashType,
+      workerName: task.WorkerName,
+      workerId: task.WorkerID,
+      packageType: task.PackageType || '',
+      isLocked: task.isLocked || 'FALSE'
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
     
     res.json({
       success: true,
@@ -135,7 +130,6 @@ const completeTask = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[COMPLETE TASK] ERROR:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

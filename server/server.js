@@ -46,7 +46,12 @@ app.use('/api/workers', workersRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/customers', clientRoutes);
+app.use('/api/cron', require('./api/routes/cronRoutes'));
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  
+  // Start cron service
+  const cronService = require('./services/cronService');
+  cronService.start();
 });
