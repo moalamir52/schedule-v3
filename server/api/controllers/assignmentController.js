@@ -536,30 +536,60 @@ const updateTaskAssignment = async (req, res) => {
       
       const task = existingTasks[taskIndex];
       
-      // Check for conflicts only if worker is actually changing
-      if (task.WorkerName !== newWorkerName) {
-        const workerConflict = existingTasks.find((t, index) => 
-          index !== taskIndex &&
-          t.WorkerName === newWorkerName && 
-          t.Day === task.Day && 
-          t.Time === task.Time
-        );
-        
-        if (workerConflict) {
-          return res.status(400).json({ 
-            success: false, 
-            error: `Worker ${newWorkerName} is already assigned at ${task.Day} ${task.Time}` 
-          });
+      // Check if this is a multi-car customer move
+      const customerTasks = existingTasks.filter(t => 
+        t.CustomerID === task.CustomerID && 
+        t.Day === task.Day && 
+        t.Time === task.Time
+      );
+      
+      if (customerTasks.length > 1 && task.WorkerName !== newWorkerName) {
+        // Multi-car customer: move all cars to new worker
+        customerTasks.forEach(customerTask => {
+          const customerTaskIndex = existingTasks.findIndex(t => 
+            t.CustomerID === customerTask.CustomerID && 
+            t.Day === customerTask.Day && 
+            t.Time === customerTask.Time && 
+            t.CarPlate === customerTask.CarPlate
+          );
+          
+          if (customerTaskIndex !== -1) {
+            existingTasks[customerTaskIndex].WorkerName = newWorkerName;
+            existingTasks[customerTaskIndex].WorkerID = newWorker.WorkerID;
+            existingTasks[customerTaskIndex].isLocked = 'TRUE';
+            
+            if (newWashType && customerTaskIndex === taskIndex) {
+              existingTasks[customerTaskIndex].WashType = newWashType;
+            }
+          }
+        });
+      } else {
+        // Single car customer or wash type change only
+        // Check for conflicts only if worker is actually changing
+        if (task.WorkerName !== newWorkerName) {
+          const workerConflict = existingTasks.find((t, index) => 
+            index !== taskIndex &&
+            t.WorkerName === newWorkerName && 
+            t.Day === task.Day && 
+            t.Time === task.Time
+          );
+          
+          if (workerConflict) {
+            return res.status(400).json({ 
+              success: false, 
+              error: `Worker ${newWorkerName} is already assigned at ${task.Day} ${task.Time}` 
+            });
+          }
         }
-      }
-      
-      // Update task and lock it
-      existingTasks[taskIndex].WorkerName = newWorkerName;
-      existingTasks[taskIndex].WorkerID = newWorker.WorkerID;
-      existingTasks[taskIndex].isLocked = 'TRUE';
-      
-      if (newWashType) {
-        existingTasks[taskIndex].WashType = newWashType;
+        
+        // Update task and lock it
+        existingTasks[taskIndex].WorkerName = newWorkerName;
+        existingTasks[taskIndex].WorkerID = newWorker.WorkerID;
+        existingTasks[taskIndex].isLocked = 'TRUE';
+        
+        if (newWashType) {
+          existingTasks[taskIndex].WashType = newWashType;
+        }
       }
     }
     
