@@ -410,81 +410,90 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                 {/* Override Menu */}
                                 {showOverrideMenu === `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}` && (
                                   <div style={{
-                                    position: 'absolute',
-                                    top: '100%',
-                                    left: '0',
+                                    position: 'fixed',
+                                    top: '50%',
+                                    left: '50%',
+                                    transform: 'translate(-50%, -50%)',
                                     backgroundColor: 'white',
                                     border: '2px solid #28a745',
-                                    borderRadius: '6px',
-                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                                    zIndex: 1000,
-                                    minWidth: '120px'
+                                    borderRadius: '8px',
+                                    boxShadow: '0 8px 25px rgba(0,0,0,0.3)',
+                                    zIndex: 10000,
+                                    minWidth: '200px'
                                   }}>
-                                    <div style={{ padding: '8px', borderBottom: '1px solid #eee', fontSize: '12px', fontWeight: 'bold', color: '#28a745' }}>
-                                      Change to:
+                                    <div style={{
+                                      padding: '12px 15px',
+                                      backgroundColor: '#f8f9fa',
+                                      borderBottom: '1px solid #eee',
+                                      fontSize: '16px',
+                                      fontWeight: 'bold',
+                                      color: '#28a745',
+                                      textAlign: 'center'
+                                    }}>
+                                      Change Wash Type
                                     </div>
                                     <button
-                                      onClick={() => handleWashTypeChange(appointment, 'EXT')}
-                                      disabled={appointment.washType === 'EXT'}
                                       style={{
+                                        display: 'block',
                                         width: '100%',
-                                        padding: '8px',
+                                        padding: '15px 18px',
                                         border: 'none',
-                                        backgroundColor: appointment.washType === 'EXT' ? '#f8f9fa' : 'white',
-                                        color: appointment.washType === 'EXT' ? '#6c757d' : '#28a745',
-                                        cursor: appointment.washType === 'EXT' ? 'not-allowed' : 'pointer',
-                                        fontSize: '12px',
-                                        textAlign: 'left'
+                                        backgroundColor: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        textAlign: 'center',
+                                        borderBottom: '1px solid #f0f0f0'
                                       }}
+                                      onClick={() => handleWashTypeChange(appointment, 'EXT')}
                                     >
                                       🚗 EXT Only
                                     </button>
                                     <button
-                                      onClick={() => handleWashTypeChange(appointment, 'INT')}
-                                      disabled={appointment.washType === 'INT'}
                                       style={{
+                                        display: 'block',
                                         width: '100%',
-                                        padding: '8px',
+                                        padding: '15px 18px',
                                         border: 'none',
-                                        backgroundColor: appointment.washType === 'INT' ? '#f8f9fa' : 'white',
-                                        color: appointment.washType === 'INT' ? '#6c757d' : '#dc3545',
-                                        cursor: appointment.washType === 'INT' ? 'not-allowed' : 'pointer',
-                                        fontSize: '12px',
-                                        textAlign: 'left',
-                                        borderTop: '1px solid #eee'
+                                        backgroundColor: 'white',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        textAlign: 'center',
+                                        borderBottom: '1px solid #f0f0f0'
                                       }}
+                                      onClick={() => handleWashTypeChange(appointment, 'INT')}
                                     >
                                       🧽 EXT + INT
                                     </button>
                                     <button
-                                      onClick={() => handleCancelBooking(appointment)}
                                       style={{
+                                        display: 'block',
                                         width: '100%',
-                                        padding: '8px',
+                                        padding: '15px 18px',
                                         border: 'none',
                                         backgroundColor: '#dc3545',
                                         color: 'white',
                                         cursor: 'pointer',
-                                        fontSize: '12px',
-                                        textAlign: 'left',
-                                        borderTop: '1px solid #eee'
+                                        fontSize: '16px',
+                                        textAlign: 'center',
+                                        borderBottom: '1px solid #c82333'
                                       }}
+                                      onClick={() => handleCancelBooking(appointment)}
                                     >
                                       🗑️ Cancel Booking
                                     </button>
                                     <button
-                                      onClick={() => setShowOverrideMenu(null)}
                                       style={{
+                                        display: 'block',
                                         width: '100%',
-                                        padding: '8px',
+                                        padding: '15px 18px',
                                         border: 'none',
-                                        backgroundColor: '#f8f9fa',
-                                        color: '#6c757d',
+                                        backgroundColor: '#6c757d',
+                                        color: 'white',
                                         cursor: 'pointer',
-                                        fontSize: '12px',
-                                        textAlign: 'left',
-                                        borderTop: '1px solid #eee'
+                                        fontSize: '16px',
+                                        textAlign: 'center'
                                       }}
+                                      onClick={() => setShowOverrideMenu(null)}
                                     >
                                       ❌ Close
                                     </button>

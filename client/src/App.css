@@ -423,6 +423,95 @@
   transform: rotate(90deg);
 }
 
+/* Override Menu Styles */
+.wash-type-override-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background-color: white;
+  border: 2px solid #28a745;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+  z-index: 9999;
+  min-width: 140px;
+  overflow: hidden;
+}
+
+.override-menu-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  font-size: 13px;
+  font-weight: bold;
+  color: #28a745;
+  background-color: #f8f9fa;
+}
+
+.override-menu-button {
+  width: 100%;
+  padding: 12px 15px;
+  border: none;
+  background-color: white;
+  color: #333;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: all 0.2s ease;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.override-menu-button:hover:not(:disabled) {
+  background-color: #f8f9fa;
+  color: #28a745;
+}
+
+.override-menu-button:disabled {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.override-menu-button.cancel-btn {
+  background-color: #dc3545;
+  color: white;
+  border-bottom: none;
+}
+
+.override-menu-button.cancel-btn:hover {
+  background-color: #c82333;
+  color: white;
+}
+
+.override-menu-button.close-btn {
+  background-color: #f8f9fa;
+  color: #6c757d;
+  border-bottom: none;
+}
+
+.override-menu-button.close-btn:hover {
+  background-color: #e9ecef;
+  color: #495057;
+}
+
+/* Mobile Override Menu */
+@media (max-width: 768px) {
+  .wash-type-override-menu {
+    min-width: 160px;
+    border-radius: 10px;
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+  }
+  
+  .override-menu-header {
+    padding: 12px 15px;
+    font-size: 14px;
+  }
+  
+  .override-menu-button {
+    padding: 15px 18px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+}
+
 /* Responsive Design */
 @media (max-width: 600px) {
   .modal-content {
