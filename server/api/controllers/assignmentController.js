@@ -536,19 +536,21 @@ const updateTaskAssignment = async (req, res) => {
       
       const task = existingTasks[taskIndex];
       
-      // Check for conflicts
-      const workerConflict = existingTasks.find((t, index) => 
-        index !== taskIndex &&
-        t.WorkerName === newWorkerName && 
-        t.Day === task.Day && 
-        t.Time === task.Time
-      );
-      
-      if (workerConflict) {
-        return res.status(400).json({ 
-          success: false, 
-          error: `Worker ${newWorkerName} is already assigned at ${task.Day} ${task.Time}` 
-        });
+      // Check for conflicts only if worker is actually changing
+      if (task.WorkerName !== newWorkerName) {
+        const workerConflict = existingTasks.find((t, index) => 
+          index !== taskIndex &&
+          t.WorkerName === newWorkerName && 
+          t.Day === task.Day && 
+          t.Time === task.Time
+        );
+        
+        if (workerConflict) {
+          return res.status(400).json({ 
+            success: false, 
+            error: `Worker ${newWorkerName} is already assigned at ${task.Day} ${task.Time}` 
+          });
+        }
       }
       
       // Update task and lock it
