@@ -1,6 +1,6 @@
 const { getCustomers, getAllHistory } = require('./googleSheetsService');
 
-async function buildWeeklySchedule() {
+async function buildWeeklySchedule(weekOffset = 0) {
   // Get all data in just two API calls
   const allCustomers = await getCustomers();
   const allHistory = await getAllHistory();
@@ -18,6 +18,8 @@ async function buildWeeklySchedule() {
     // Parse car plates into array
     const carPlates = customer.CarPlates.split(',').map(plate => plate.trim());
     
+
+    
     for (const carPlate of carPlates) {
       // Filter history locally instead of API call
       const history = allHistory
@@ -25,7 +27,7 @@ async function buildWeeklySchedule() {
         .sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
       
       // Determine wash schedule based on package
-      const washSchedule = calculateWashSchedule(customer, carPlate, carPlates, history);
+      const washSchedule = calculateWashSchedule(customer, carPlate, carPlates, history, allHistory, weekOffset);
       
       // Add to schedule array
       washSchedule.forEach(wash => {
@@ -35,7 +37,8 @@ async function buildWeeklySchedule() {
           carPlate: wash.carPlate,
           washDay: wash.washDay,
           washTime: wash.washTime,
-          washType: wash.washType
+          washType: wash.washType,
+          scheduleDate: new Date().toISOString().split('T')[0]
         });
       });
     }
@@ -44,24 +47,33 @@ async function buildWeeklySchedule() {
   return schedule;
 }
 
-function calculateWashSchedule(customer, carPlate, allCarPlates, history) {
+function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHistory, weekOffset = 0) {
   const package = customer.Washman_Package;
   const washSchedule = [];
   
   // Parse package to get frequency and wash types
   const packageInfo = parsePackage(package);
+  packageInfo.weekOffset = weekOffset; // Add weekOffset to packageInfo
   
   // Generate wash days for the week based on frequency
   const washDays = generateWashDays(packageInfo.frequency, customer.WashDay);
   
   washDays.forEach((day, index) => {
+    // For multi-car customers, determine which car gets INT for this visit
+    let intCarForThisVisit = null;
+    if (allCarPlates.length > 1) {
+      intCarForThisVisit = determineIntCarForCustomer(allCarPlates, allHistory, index, weekOffset);
+    }
+    
     const washType = determineWashType(
       packageInfo, 
       index, 
       allCarPlates, 
       carPlate, 
       history, 
-      day
+      day,
+      allHistory,
+      intCarForThisVisit
     );
     
     washSchedule.push({
@@ -81,7 +93,7 @@ function parsePackage(packageStr) {
   const hasInt = packageStr.includes('INT');
   const isBiWeek = packageStr.includes('bi week');
   
-  return { frequency, hasInt, isBiWeek };
+  return { frequency, hasInt, isBiWeek, packageStr };
 }
 
 function generateWashDays(frequency, startDay) {
@@ -98,38 +110,134 @@ function generateWashDays(frequency, startDay) {
   return washDays;
 }
 
-function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlate, history, washDay) {
+function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlate, history, washDay, allHistory, intCarForThisCycle) {
+  const packageName = packageInfo.packageStr || '';
+  
+  console.log(`[WASH-TYPE] ${currentCarPlate} - Package: ${packageName} - Visit: ${visitIndex + 1}`);
+  
   // Rule 1: 'Ext Only' packages are always EXT
   if (!packageInfo.hasInt) {
+    console.log(`[EXT-ONLY] ${currentCarPlate}: EXT (Ext Only package)`);
     return 'EXT';
   }
   
-  // Rule 2: For bi-week packages, INT only applies on first week of cycle
-  if (packageInfo.isBiWeek) {
-    const isFirstWeekOfCycle = checkIfFirstWeekOfBiWeekCycle(history);
+  let washType = 'EXT';
+  
+  // Rule 2: Single car customers - INT based on package type
+  if (allCarPlates.length === 1) {
+    if (packageName.toLowerCase().includes('2 ext 1 int')) {
+      // 2 EXT 1 INT: EXT, INT, EXT
+      washType = (visitIndex === 1) ? 'INT' : 'EXT';
+      console.log(`[2EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
+    }
+    else if (packageName.toLowerCase().includes('3 ext 1 int')) {
+      // 3 EXT 1 INT: EXT, INT, EXT, EXT
+      washType = (visitIndex === 1) ? 'INT' : 'EXT';
+      console.log(`[3EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
+    }
+    else {
+      console.log(`[DEFAULT] ${currentCarPlate} - Visit ${visitIndex + 1}: EXT (Unknown package)`);
+    }
+  } else {
+    // Rule 3: Multi-car customers - alternate INT between cars per visit
+    if (packageName.toLowerCase().includes('2 ext 1 int')) {
+      // For 2 EXT 1 INT: Visit 1 & 2 have INT rotation, Visit 3 is all EXT
+      if (visitIndex === 0 || visitIndex === 1) {
+        washType = (currentCarPlate === intCarForThisCycle) ? 'INT' : 'EXT';
+      } else {
+        washType = 'EXT'; // Visit 3 is all EXT
+      }
+    }
+    else if (packageName.toLowerCase().includes('3 ext 1 int')) {
+      // For 3 EXT 1 INT: Visit 1 & 2 have INT rotation, Visit 3 & 4 are all EXT
+      if (visitIndex === 0 || visitIndex === 1) {
+        washType = (currentCarPlate === intCarForThisCycle) ? 'INT' : 'EXT';
+      } else {
+        washType = 'EXT'; // Visit 3 & 4 are all EXT
+      }
+    }
+    else {
+      // Default multi-car logic
+      washType = (currentCarPlate === intCarForThisCycle) ? 'INT' : 'EXT';
+    }
+    
+    console.log(`[MULTI-CAR] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType} (INT car: ${intCarForThisCycle})`);
+  }
+  
+  // Rule 4: For bi-week packages, INT only applies on first week of cycle
+  if (packageInfo.isBiWeek && washType === 'INT') {
+    const isFirstWeekOfCycle = checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, packageInfo.weekOffset || 0);
+    console.log(`[BI-WEEK] ${currentCarPlate}: washType was ${washType}, isFirstWeek: ${isFirstWeekOfCycle}`);
     if (!isFirstWeekOfCycle) {
+      console.log(`[BI-WEEK] ${currentCarPlate}: Converting INT to EXT (second week)`);
       return 'EXT';
     }
   }
   
-  // Rule 3: Single car customers - INT on specific visits
-  if (allCarPlates.length === 1) {
-    return getSingleCarWashType(packageInfo.frequency, visitIndex);
-  }
-  
-  // Rule 4: Multi-car customers - INT alternates between cars
-  return getMultiCarWashType(allCarPlates, currentCarPlate, history);
+  return washType;
 }
 
-function checkIfFirstWeekOfBiWeekCycle(history) {
-  if (history.length === 0) return true;
+function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0) {
+  // Get all wash history for this customer's cars
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate)
+  ).sort((a, b) => {
+    // Parse dates in DD-MMM-YYYY format (e.g., 8-Oct-2025)
+    const parseCustomDate = (dateStr) => {
+      if (!dateStr) return new Date(0);
+      const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                     'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0]);
+        const month = months[parts[1]];
+        const year = parseInt(parts[2]);
+        return new Date(year, month, day);
+      }
+      return new Date(dateStr); // Fallback to default parsing
+    };
+    
+    return parseCustomDate(b.WashDate) - parseCustomDate(a.WashDate);
+  });
   
-  const lastWashDate = new Date(history[0].WashDate);
+  if (customerHistory.length === 0) {
+    // No history: week 0 = first week, week 1 = second week, week 2 = first week again
+    const isFirstWeek = (weekOffset % 2) === 0;
+    console.log(`[BI-WEEK] No history - Week ${weekOffset}: ${isFirstWeek ? 'First week (INT)' : 'Second week (EXT)'}`);
+    return isFirstWeek;
+  }
+  
+  // Parse the custom date format
+  const parseCustomDate = (dateStr) => {
+    if (!dateStr) return new Date(0);
+    const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                   'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0]);
+      const month = months[parts[1]];
+      const year = parseInt(parts[2]);
+      return new Date(year, month, day);
+    }
+    return new Date(dateStr); // Fallback to default parsing
+  };
+  
+  const lastWashDate = parseCustomDate(customerHistory[0].WashDate);
   const currentDate = new Date();
-  const daysDiff = Math.floor((currentDate - lastWashDate) / (1000 * 60 * 60 * 24));
+  // Add weekOffset to current date for future/past weeks
+  const targetDate = new Date(currentDate.getTime() + (weekOffset * 7 * 24 * 60 * 60 * 1000));
+  const daysDiff = Math.floor((targetDate - lastWashDate) / (1000 * 60 * 60 * 1000));
   
-  // If last wash was more than 7 days ago, we're in first week of new cycle
-  return daysDiff > 7;
+  console.log(`[BI-WEEK] Last wash: ${lastWashDate.toDateString()}, Target date: ${targetDate.toDateString()}, Days diff: ${daysDiff}`);
+  
+  // Bi-weekly cycle: 14 days = 2 weeks
+  // Calculate which week of the bi-weekly cycle we're in
+  const weeksSinceLastWash = Math.floor(daysDiff / 7);
+  const isFirstWeek = (weeksSinceLastWash % 2) === 0;
+  
+  console.log(`[BI-WEEK] Weeks since last wash: ${weeksSinceLastWash}, Is first week (INT time): ${isFirstWeek}`);
+  
+  return isFirstWeek;
 }
 
 function getSingleCarWashType(frequency, visitIndex) {
@@ -146,15 +254,20 @@ function getSingleCarWashType(frequency, visitIndex) {
   return 'EXT';
 }
 
-function getMultiCarWashType(allCarPlates, currentCarPlate, history) {
-  // Find last INT wash across all customer's cars to determine alternation
-  const lastIntWash = findLastIntWashForCustomer(allCarPlates, history);
+function getMultiCarWashType(allCarPlates, currentCarPlate, allHistory) {
+  // Find last INT wash across ALL customer's cars
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate) && record.WashType === 'INT'
+  ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
   
-  if (!lastIntWash) {
+  if (customerHistory.length === 0) {
     // No previous INT wash, give INT to first car alphabetically
     const sortedPlates = [...allCarPlates].sort();
     return currentCarPlate === sortedPlates[0] ? 'INT' : 'EXT';
   }
+  
+  // Get the last INT wash across all cars
+  const lastIntWash = customerHistory[0];
   
   // Alternate INT to different car than last time
   const currentCarIndex = allCarPlates.indexOf(currentCarPlate);
@@ -164,12 +277,37 @@ function getMultiCarWashType(allCarPlates, currentCarPlate, history) {
   return currentCarIndex === nextIntCarIndex ? 'INT' : 'EXT';
 }
 
-function findLastIntWashForCustomer(allCarPlates, history) {
-  // This would need to check history across all customer's cars
-  // Simplified implementation - check current car's history
-  return history.find(record => record.WashType === 'INT');
+function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex = 0, weekOffset = 0) {
+  // For multi-car customers: alternate INT between cars based on visit number
+  const sortedPlates = [...allCarPlates].sort();
+  
+  // Check if there's any previous INT wash history
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate) && record.WashType === 'INT'
+  ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
+  
+  let baseCarIndex = 0; // Default to first car
+  
+  if (customerHistory.length > 0) {
+    // Find which car got INT last time and continue rotation from there
+    const lastIntCar = customerHistory[0].CarPlate;
+    const lastIntCarIndex = sortedPlates.indexOf(lastIntCar);
+    baseCarIndex = (lastIntCarIndex + 1) % sortedPlates.length;
+  } else {
+    // No history: use weekOffset to determine starting car rotation
+    baseCarIndex = weekOffset % sortedPlates.length;
+  }
+  
+  // Alternate based on visit number
+  const intCarIndex = (baseCarIndex + visitIndex) % sortedPlates.length;
+  
+  console.log(`[MULTI-CAR] Week ${weekOffset}, Visit ${visitIndex + 1}: Base car index: ${baseCarIndex}, INT car: ${sortedPlates[intCarIndex]}`);
+  
+  return sortedPlates[intCarIndex];
 }
 
 module.exports = {
-  buildWeeklySchedule
+  buildWeeklySchedule,
+  determineIntCarForCustomer,
+  checkIfFirstWeekOfBiWeekCycle
 };

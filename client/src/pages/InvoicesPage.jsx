@@ -9,6 +9,7 @@ const InvoicesPage = () => {
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
+  const [monthFilter, setMonthFilter] = useState('All');
   const [showInvoiceGenerator, setShowInvoiceGenerator] = useState(false);
   const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
   const [showOneTimeInvoiceForm, setShowOneTimeInvoiceForm] = useState(false);
@@ -89,6 +90,13 @@ const InvoicesPage = () => {
     }
   }, []);
 
+  // Recalculate stats when month filter changes
+  useEffect(() => {
+    if (invoices && invoices.length > 0) {
+      calculateStats(invoices);
+    }
+  }, [monthFilter, invoices]);
+
   const loadInvoices = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/all`);
@@ -105,12 +113,22 @@ const InvoicesPage = () => {
   };
 
   const calculateStats = (invoiceData) => {
+    if (!invoiceData || !Array.isArray(invoiceData)) {
+      return;
+    }
+    
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
     
-    // Filter invoices for current month
-    const thisMonthInvoices = invoiceData.filter(invoice => {
+    // Determine which month to calculate stats for
+    let targetMonth = currentMonth;
+    if (monthFilter !== 'All' && monthFilter !== 'Current') {
+      targetMonth = parseInt(monthFilter);
+    }
+    
+    // Filter invoices for target month
+    const monthInvoices = invoiceData.filter(invoice => {
       const dateField = invoice.InvoiceDate || invoice.CreatedAt;
       if (!dateField) return false;
       
@@ -118,24 +136,31 @@ const InvoicesPage = () => {
       const invoiceMonth = invoiceDate.getMonth() + 1;
       const invoiceYear = invoiceDate.getFullYear();
       
-      return invoiceMonth === currentMonth && invoiceYear === currentYear;
+      if (monthFilter === 'All') {
+        return invoiceMonth === currentMonth && invoiceYear === currentYear;
+      } else if (monthFilter === 'Current') {
+        return invoiceMonth === currentMonth && invoiceYear === currentYear;
+      } else {
+        return invoiceMonth === targetMonth && invoiceYear === currentYear;
+      }
     });
     
     // Calculate monthly stats
-    const thisMonthTotal = thisMonthInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
-    const thisMonthCount = thisMonthInvoices.length;
+    const monthTotal = monthInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const monthCount = monthInvoices.length;
     
-    const paidInvoices = invoiceData.filter(inv => inv.Status === 'Paid');
-    const pendingInvoices = invoiceData.filter(inv => inv.Status === 'Pending');
+    // Filter month invoices by status
+    const monthPaidInvoices = monthInvoices.filter(inv => inv.Status === 'Paid');
+    const monthPendingInvoices = monthInvoices.filter(inv => inv.Status === 'Pending');
     
-    const paidTotal = paidInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
-    const pendingTotal = pendingInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const monthPaidTotal = monthPaidInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
+    const monthPendingTotal = monthPendingInvoices.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
     const allTimeTotal = invoiceData.reduce((sum, inv) => sum + (parseFloat(inv.TotalAmount) || 0), 0);
     
     setMonthlyStats({
-      thisMonth: { total: thisMonthTotal, count: thisMonthCount },
-      paid: { total: paidTotal, count: paidInvoices.length },
-      pending: { total: pendingTotal, count: pendingInvoices.length },
+      thisMonth: { total: monthTotal, count: monthCount },
+      paid: { total: monthPaidTotal, count: monthPaidInvoices.length },
+      pending: { total: monthPendingTotal, count: monthPendingInvoices.length },
       allTime: { total: allTimeTotal, count: invoiceData.length }
     });
   };
@@ -242,7 +267,7 @@ const InvoicesPage = () => {
   };
 
   const createBulkInvoices = async () => {
-    if (availableClients.length === 0) {
+    if (!availableClients || availableClients.length === 0) {
       setAlertMessage('No clients available for invoicing this month');
       setShowAlert(true);
       return;
@@ -427,15 +452,38 @@ const InvoicesPage = () => {
   };
 
   const getFilteredInvoices = () => {
+    if (!invoices || !Array.isArray(invoices)) {
+      return [];
+    }
     return invoices.filter(invoice => {
       const matchesSearch = !searchTerm || 
-        invoice.CustomerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.Villa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        invoice.InvoiceID.toLowerCase().includes(searchTerm.toLowerCase());
+        invoice.CustomerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.Villa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        invoice.InvoiceID?.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'All' || invoice.Status === statusFilter;
       
-      return matchesSearch && matchesStatus;
+      let matchesMonth = true;
+      if (monthFilter !== 'All') {
+        const dateField = invoice.InvoiceDate || invoice.CreatedAt;
+        if (dateField) {
+          const invoiceDate = new Date(dateField);
+          const invoiceMonth = invoiceDate.getMonth() + 1;
+          const invoiceYear = invoiceDate.getFullYear();
+          const currentYear = new Date().getFullYear();
+          
+          if (monthFilter === 'Current') {
+            const currentMonth = new Date().getMonth() + 1;
+            matchesMonth = invoiceMonth === currentMonth && invoiceYear === currentYear;
+          } else {
+            matchesMonth = invoiceMonth === parseInt(monthFilter) && invoiceYear === currentYear;
+          }
+        } else {
+          matchesMonth = false;
+        }
+      }
+      
+      return matchesSearch && matchesStatus && matchesMonth;
     });
   };
 
@@ -562,7 +610,7 @@ const InvoicesPage = () => {
               transition: 'all 0.3s ease'
             }}
           >
-            👥 Clients ({availableClients.length})
+            👥 Clients ({availableClients?.length || 0})
           </button>
           <button
             onClick={() => setShowOneTimeInvoiceForm(true)}
@@ -583,13 +631,14 @@ const InvoicesPage = () => {
           </button>
           <button
             onClick={() => setShowBulkInvoiceModal(true)}
+            disabled={!availableClients || availableClients.length === 0}
             style={{
-              backgroundColor: '#6f42c1',
+              backgroundColor: (!availableClients || availableClients.length === 0) ? '#6c757d' : '#6f42c1',
               color: 'white',
               border: 'none',
               borderRadius: '10px',
               padding: '12px 20px',
-              cursor: 'pointer',
+              cursor: (!availableClients || availableClients.length === 0) ? 'not-allowed' : 'pointer',
               fontSize: '16px',
               fontWeight: 'bold',
               boxShadow: '0 4px 12px rgba(111, 66, 193, 0.3)',
@@ -639,32 +688,31 @@ const InvoicesPage = () => {
         display: 'flex',
         gap: '15px',
         alignItems: 'center',
-        flexWrap: 'wrap'
+        marginBottom: '20px',
+        justifyContent: 'center'
       }}>
-        <div style={{ flex: 1, minWidth: '200px' }}>
-          <input
-            type="text"
-            placeholder="Search by customer name, villa, or invoice ID..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '8px 12px',
-              border: '1px solid #ddd',
-              borderRadius: '4px',
-              fontSize: '14px'
-            }}
-          />
-        </div>
+        <input
+          type="text"
+          placeholder="Search by customer name, villa, or invoice ID..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            width: '400px',
+            padding: '8px 12px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '14px'
+          }}
+        />
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           style={{
+            width: '200px',
             padding: '8px 12px',
             border: '1px solid #ddd',
             borderRadius: '4px',
-            fontSize: '14px',
-            minWidth: '120px'
+            fontSize: '14px'
           }}
         >
           <option value="All">All Status</option>
@@ -672,8 +720,34 @@ const InvoicesPage = () => {
           <option value="Paid">Paid</option>
           <option value="Overdue">Overdue</option>
         </select>
-        <div style={{ fontSize: '14px', color: '#666' }}>
-          Total: {getFilteredInvoices().length} invoices
+        <select
+          value={monthFilter}
+          onChange={(e) => setMonthFilter(e.target.value)}
+          style={{
+            width: '200px',
+            padding: '8px 12px',
+            border: '1px solid #ddd',
+            borderRadius: '4px',
+            fontSize: '14px'
+          }}
+        >
+          <option value="All">All Months</option>
+          <option value="Current">Current Month</option>
+          <option value="1">January</option>
+          <option value="2">February</option>
+          <option value="3">March</option>
+          <option value="4">April</option>
+          <option value="5">May</option>
+          <option value="6">June</option>
+          <option value="7">July</option>
+          <option value="8">August</option>
+          <option value="9">September</option>
+          <option value="10">October</option>
+          <option value="11">November</option>
+          <option value="12">December</option>
+        </select>
+        <div style={{ fontSize: '14px', color: '#666', whiteSpace: 'nowrap' }}>
+          Total: {getFilteredInvoices().length}
         </div>
       </div>
 
@@ -946,7 +1020,7 @@ const InvoicesPage = () => {
             {!bulkInvoiceProgress.isProcessing ? (
               <>
                 <div style={{ marginBottom: '20px', fontSize: '16px', color: '#666' }}>
-                  This will create invoices for all available clients ({availableClients.length} clients) for the current month.
+                  This will create invoices for all available clients ({availableClients?.length || 0} clients) for the current month.
                 </div>
                 
                 <div style={{
@@ -957,7 +1031,7 @@ const InvoicesPage = () => {
                   border: '1px solid #dee2e6'
                 }}>
                   <strong>Month:</strong> {new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}<br/>
-                  <strong>Clients:</strong> {availableClients.length}<br/>
+                  <strong>Clients:</strong> {availableClients?.length || 0}<br/>
                   <strong>Status:</strong> All invoices will be created as "Pending"
                 </div>
                 
@@ -1075,7 +1149,7 @@ const InvoicesPage = () => {
                 }}
               >
                 <option value="">Select Customer</option>
-                {customers.map(customer => (
+                {(customers || []).map(customer => (
                   <option key={customer.CustomerID} value={customer.CustomerID}>
                     {customer.Name} - {customer.Villa}
                   </option>
@@ -1789,10 +1863,10 @@ const InvoicesPage = () => {
               {/* Available Clients */}
               <div>
                 <h4 style={{ color: '#28a745', marginBottom: '15px' }}>
-                  ✅ Available for Invoice ({availableClients.filter(client => 
-                    client.Name.toLowerCase().includes(availableSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(availableSearch.toLowerCase())
-                  ).length})
+                  ✅ Available for Invoice ({availableClients?.filter(client => 
+                    client.Name?.toLowerCase().includes(availableSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(availableSearch.toLowerCase())
+                  ).length || 0})
                 </h4>
                 <input
                   type="text"
@@ -1809,9 +1883,9 @@ const InvoicesPage = () => {
                   }}
                 />
                 <div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #ddd', borderRadius: '8px' }}>
-                  {availableClients.filter(client => 
-                    client.Name.toLowerCase().includes(availableSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(availableSearch.toLowerCase())
+                  {(availableClients || []).filter(client => 
+                    client.Name?.toLowerCase().includes(availableSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(availableSearch.toLowerCase())
                   ).map(client => (
                     <div key={client.CustomerID} style={{
                       padding: '12px',
@@ -1843,9 +1917,9 @@ const InvoicesPage = () => {
                       </button>
                     </div>
                   ))}
-                  {availableClients.filter(client => 
-                    client.Name.toLowerCase().includes(availableSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(availableSearch.toLowerCase())
+                  {(availableClients || []).filter(client => 
+                    client.Name?.toLowerCase().includes(availableSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(availableSearch.toLowerCase())
                   ).length === 0 && (
                     <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
                       {availableSearch ? 'No clients match your search' : 'All clients have invoices for this month'}
@@ -1857,10 +1931,10 @@ const InvoicesPage = () => {
               {/* Invoiced Clients */}
               <div>
                 <h4 style={{ color: '#ffc107', marginBottom: '15px' }}>
-                  📝 Already Invoiced ({invoicedClients.filter(client => 
-                    client.Name.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(invoicedSearch.toLowerCase())
-                  ).length})
+                  📝 Already Invoiced ({invoicedClients?.filter(client => 
+                    client.Name?.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(invoicedSearch.toLowerCase())
+                  ).length || 0})
                 </h4>
                 <input
                   type="text"
@@ -1877,9 +1951,9 @@ const InvoicesPage = () => {
                   }}
                 />
                 <div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #ddd', borderRadius: '8px' }}>
-                  {invoicedClients.filter(client => 
-                    client.Name.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(invoicedSearch.toLowerCase())
+                  {(invoicedClients || []).filter(client => 
+                    client.Name?.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(invoicedSearch.toLowerCase())
                   ).map(client => {
                     // Find the invoice for this client
                     const clientInvoice = invoices.find(inv => inv.CustomerID === client.CustomerID);
@@ -1952,9 +2026,9 @@ const InvoicesPage = () => {
                       </div>
                     );
                   })}
-                  {invoicedClients.filter(client => 
-                    client.Name.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
-                    client.Villa.toLowerCase().includes(invoicedSearch.toLowerCase())
+                  {(invoicedClients || []).filter(client => 
+                    client.Name?.toLowerCase().includes(invoicedSearch.toLowerCase()) ||
+                    client.Villa?.toLowerCase().includes(invoicedSearch.toLowerCase())
                   ).length === 0 && (
                     <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
                       {invoicedSearch ? 'No clients match your search' : 'No invoices created this month'}

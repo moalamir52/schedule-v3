@@ -1,14 +1,13 @@
 const { getCustomers, getWorkers, getAllHistory, getScheduledTasks, clearAndWriteSheet, addRowToSheet } = require('../../services/googleSheetsService');
+const { determineIntCarForCustomer, checkIfFirstWeekOfBiWeekCycle } = require('../../services/logicService');
 
 const autoAssignSchedule = async (req, res) => {
   const weekOffset = parseInt(req.params.weekOffset) || 0;
   
-  const systemDate = new Date();
-  const correctedToday = new Date('2025-10-07');
+  const today = new Date();
   console.log(`\n🚀 [SCHEDULE DEBUG] Starting schedule generation for weekOffset: ${weekOffset}`);
   console.log(`📅 ${weekOffset === 0 ? 'CURRENT WEEK' : weekOffset > 0 ? `WEEK +${weekOffset} (FUTURE)` : `WEEK ${weekOffset} (PAST)`}`);
-  console.log(`❌ SYSTEM DATE (WRONG): ${systemDate.toDateString()}`);
-  console.log(`✅ CORRECTED DATE: ${correctedToday.toDateString()} (7 Oct 2025)`);
+  console.log(`📅 TODAY: ${today.toDateString()}`);
   
   try {
     // 1. Fetch All Data
@@ -95,6 +94,11 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
     const timeField = customer.Time || '';
     const daysField = customer.Days || '';
     const notesField = customer.Notes || '';
+    const carPlates = (customer.CarPlates || '').split(',').map(p => p.trim()).filter(p => p);
+    if (carPlates.length === 0) carPlates.push('');
+    
+    // For multi-car customers, track visit counter for alternating INT
+    let visitCounter = 0;
     
     // Parse specific day/time overrides from Notes
     const specificPattern = /(Sat|Mon|Tue|Wed|Thu|Thurs|Fri)[@\s]*(at\s*)?(\d{1,2}:\d{2}\s*(AM|PM))/gi;
@@ -125,8 +129,12 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
     if (dayTimeMatches.length > 0) {
       dayTimeMatches.forEach((dayTime, index) => {
         if (days.includes(dayTime.day) && timeSlots.includes(dayTime.time)) {
-          const carPlates = (customer.CarPlates || '').split(',').map(p => p.trim()).filter(p => p);
-          if (carPlates.length === 0) carPlates.push('');
+          // For multi-car customers, determine which car gets INT for this visit
+          let intCarForThisVisit = null;
+          if (carPlates.length > 1) {
+            visitCounter++;
+            intCarForThisVisit = determineIntCarForCustomer(carPlates, allHistory, visitCounter - 1, weekOffset);
+          }
           
           carPlates.forEach(carPlate => {
             const visitNumber = index + 1;
@@ -137,7 +145,7 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
               customerName: customer.Name,
               villa: customer.Villa,
               carPlate,
-              washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset),
+              washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit),
               packageType: customer.Washman_Package || ''
             });
           });
@@ -155,8 +163,12 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
           if (!hasSpecificOverride) {
             times.forEach(time => {
               if (timeSlots.includes(time)) {
-                const carPlates = (customer.CarPlates || '').split(',').map(p => p.trim()).filter(p => p);
-                if (carPlates.length === 0) carPlates.push('');
+                // For multi-car customers, determine which car gets INT for this visit
+                let intCarForThisVisit = null;
+                if (carPlates.length > 1) {
+                  visitCounter++;
+                  intCarForThisVisit = determineIntCarForCustomer(carPlates, allHistory, visitCounter - 1, weekOffset);
+                }
                 
                 carPlates.forEach(carPlate => {
                   const visitNumber = dayIndex + 1;
@@ -167,7 +179,7 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
                     customerName: customer.Name,
                     villa: customer.Villa,
                     carPlate,
-                    washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset),
+                    washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit),
                     packageType: customer.Washman_Package || ''
                   });
                 });
@@ -181,8 +193,12 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
     // Add specific appointments from Notes
     specificMatches.forEach((appointment, index) => {
       if (days.includes(appointment.day) && timeSlots.includes(appointment.time)) {
-        const carPlates = (customer.CarPlates || '').split(',').map(p => p.trim()).filter(p => p);
-        if (carPlates.length === 0) carPlates.push('');
+        // For multi-car customers, determine which car gets INT for this visit
+        let intCarForThisVisit = null;
+        if (carPlates.length > 1) {
+          visitCounter++;
+          intCarForThisVisit = determineIntCarForCustomer(carPlates, allHistory, visitCounter - 1, weekOffset);
+        }
         
         carPlates.forEach(carPlate => {
           const visitNumber = index + 1;
@@ -193,7 +209,7 @@ function generateAllAppointments(customers, allHistory, weekOffset) {
             customerName: customer.Name,
             villa: customer.Villa,
             carPlate,
-            washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset),
+            washType: calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit),
             packageType: customer.Washman_Package || ''
           });
         });
@@ -289,6 +305,8 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
       }
       
       if (assigned) {
+        task.scheduleDate = new Date().toISOString().split('T')[0];
+        task.isBiWeekly = task.packageType?.includes('bi week') || false;
         assignedTasks.push(task);
       }
     });
@@ -309,7 +327,9 @@ function formatLockedTask(lockedTask) {
     workerName: lockedTask.WorkerName,
     workerId: lockedTask.WorkerID,
     packageType: lockedTask.PackageType || '',
-    isLocked: 'TRUE'
+    isLocked: 'TRUE',
+    scheduleDate: lockedTask.ScheduleDate || new Date().toISOString().split('T')[0],
+    isBiWeekly: lockedTask.PackageType?.includes('bi week') || false
   };
 }
 
@@ -329,7 +349,8 @@ const getSchedule = async (req, res) => {
       workerName: task.WorkerName,
       workerId: task.WorkerID,
       packageType: task.PackageType || '',
-      isLocked: task.isLocked || 'FALSE'
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
     }));
     
     res.json({
@@ -424,7 +445,8 @@ const addManualAppointment = async (req, res) => {
       washType: washType || 'EXT',
       workerName,
       workerId: worker.WorkerID,
-      isLocked: 'TRUE'
+      isLocked: 'TRUE',
+      scheduleDate: new Date().toISOString().split('T')[0]
     };
     
     await addRowToSheet('ScheduledTasks', [newAppointment]);
@@ -561,7 +583,8 @@ const updateTaskAssignment = async (req, res) => {
       workerName: task.WorkerName,
       workerId: task.WorkerID,
       packageType: task.PackageType || '',
-      isLocked: task.isLocked || 'FALSE'
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
     }));
     
     await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
@@ -579,156 +602,174 @@ const updateTaskAssignment = async (req, res) => {
 };
 
 // Helper functions
-function calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset = 0) {
+function calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset = 0, intCarForThisVisit = null) {
   const packageName = customer.Washman_Package || '';
   const carPlates = (customer.CarPlates || '').split(',').map(p => p.trim()).filter(p => p);
-  const isMultiCar = carPlates.length > 1;
-  const carIndex = carPlates.indexOf(carPlate);
   
-  // 2 Ext Only packages
-  if (packageName.toLowerCase().includes('2 ext only')) {
+  console.log(`[WASH-TYPE] ${customer.Name} - ${carPlate} - Package: ${packageName} - Visit: ${visitNumber}`);
+  
+  // Rule 1: 'Ext Only' packages are always EXT
+  if (packageName.toLowerCase().includes('ext only')) {
+    console.log(`[EXT-ONLY] ${customer.Name} - ${carPlate}: EXT (Ext Only package)`);
     return 'EXT';
   }
   
-  // Bi-weekly packages
-  if (packageName.toLowerCase().includes('bi week')) {
-    const carHistory = allHistory.filter(record => 
-      record.CarPlate === carPlate && record.CustomerID === customer.CustomerID
-    ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
+  let washType = 'EXT';
+  
+  // Rule 2: Single car customers - INT based on package type
+  if (carPlates.length === 1) {
+    if (packageName.toLowerCase().includes('2 ext 1 int')) {
+      // 2 EXT 1 INT: EXT, INT, EXT
+      washType = (visitNumber === 2) ? 'INT' : 'EXT';
+      console.log(`[2EXT1INT] ${customer.Name} - Visit ${visitNumber}: ${washType}`);
+    }
+    else if (packageName.toLowerCase().includes('3 ext 1 int')) {
+      // 3 EXT 1 INT: EXT, INT, EXT, EXT
+      washType = (visitNumber === 2) ? 'INT' : 'EXT';
+      console.log(`[3EXT1INT] ${customer.Name} - Visit ${visitNumber}: ${washType}`);
+    }
+    else {
+      console.log(`[DEFAULT] ${customer.Name} - Visit ${visitNumber}: EXT (Unknown package)`);
+    }
+  } else {
+    // Rule 3: Multi-car customers - alternate INT between cars per visit
+    washType = (carPlate === intCarForThisVisit) ? 'INT' : 'EXT';
     
-    // تتبع خاص لعميل P1 012
-    const isP1Customer = customer.Villa === 'P1 012' || customer.CustomerID === 'CUST-018' || customer.Name?.toLowerCase().includes('mostafa');
-    
-    // تتبع جميع العملاء bi-weekly
-    console.log(`🔄 [BI-WEEKLY] ${customer.CustomerID} (${customer.Name}) Villa:${customer.Villa} - ${carPlate} - WeekOffset:${weekOffset}`);
-    
-    if (isP1Customer) {
-      console.log(`\n🎯 [MOSTAFA P1-012 TRACKING] ${customer.CustomerID} (${customer.Name}) Villa:${customer.Villa} - ${carPlate}:`);
-      console.log(`  📦 Package: ${packageName}`);
-      console.log(`  📅 WeekOffset: ${weekOffset} (${weekOffset === 0 ? 'Current Week' : weekOffset > 0 ? 'Future Week' : 'Past Week'})`);
-      console.log(`  📋 History records: ${carHistory.length}`);
-      if (carHistory.length > 0) {
-        console.log(`  📊 Raw history data:`, carHistory[0]);
+    // Apply package-specific rules for multi-car customers
+    if (packageName.toLowerCase().includes('2 ext 1 int')) {
+      // For 2 EXT 1 INT: Only visits 1 & 2 can have INT, visit 3 is all EXT
+      if (visitNumber >= 3) {
+        washType = 'EXT';
+      }
+    }
+    else if (packageName.toLowerCase().includes('3 ext 1 int')) {
+      // For 3 EXT 1 INT: Only visits 1 & 2 can have INT, visits 3 & 4 are all EXT
+      if (visitNumber >= 3) {
+        washType = 'EXT';
       }
     }
     
-    if (carHistory.length === 0) {
-      if (isP1Customer) {
-        console.log(`  ❌ No history - using weekOffset % 2 = ${weekOffset % 2}`);
-      }
-      // بدون تاريخ - استخدم weekOffset للحساب
-      if (weekOffset % 2 === 0) {
-        const result = calculateMultiCarWashType(packageName, visitNumber, carIndex, isMultiCar);
-        if (isP1Customer) {
-          console.log(`  ✅ Result: ${result} (even week - interior time)`);
-        }
-        return result;
-      } else {
-        if (isP1Customer) {
-          console.log(`  ✅ Result: EXT (odd week - exterior only)`);
-        }
-        return 'EXT';
-      }
-    }
-    
-    // إصلاح parsing التاريخ للصيغة DD-MM-YYYY
-    const rawDate = carHistory[0].WashDate;
-    let lastWashDate;
-    
-    if (rawDate && rawDate.includes('-')) {
-      // تحويل من DD-MM-YYYY إلى YYYY-MM-DD
-      const parts = rawDate.split('-');
-      if (parts.length === 3) {
-        const day = parts[0].padStart(2, '0');
-        const month = parts[1].padStart(2, '0');
-        const year = parts[2];
-        
-        const isoDate = `${year}-${month}-${day}`;
-        lastWashDate = new Date(isoDate);
-        
-        if (isP1Customer) {
-          console.log(`  🔧 Parsed date: '${rawDate}' (DD-MM-YYYY) → '${isoDate}' → ${lastWashDate.toDateString()}`);
-        }
-      } else {
-        lastWashDate = new Date(rawDate);
-      }
-    } else {
-      lastWashDate = new Date(rawDate);
-    }
-    // ضبط التاريخ الصحيح - 7 أكتوبر 2025
-    const today = new Date('2025-10-07'); // التاريخ الصحيح
-    const currentWeekStart = new Date(today);
-    const dayOfWeek = today.getDay(); // 0=Sunday, 6=Saturday
-    const daysToSaturday = dayOfWeek === 6 ? 0 : (6 - dayOfWeek) % 7;
-    currentWeekStart.setDate(today.getDate() - (dayOfWeek === 0 ? 1 : dayOfWeek + 1)); // Go to last Saturday
-    
-    // إضافة weekOffset
-    currentWeekStart.setDate(currentWeekStart.getDate() + (weekOffset * 7));
-    const daysSinceLastWash = Math.floor((currentWeekStart - lastWashDate) / (1000 * 60 * 60 * 24));
-    
-    const weeksSinceLastWash = Math.floor(daysSinceLastWash / 7);
-    
-    if (isP1Customer) {
-      console.log(`  🕐 Last wash: ${lastWashDate.toDateString()} (${lastWashDate.getTime() ? 'Valid' : 'Invalid'})`);
-      console.log(`  📆 Target week start: ${currentWeekStart.toDateString()}`);
-      console.log(`  📅 Today: ${today.toDateString()}`);
-      console.log(`  ⏱️ Days since last wash: ${daysSinceLastWash}`);
-      console.log(`  📊 Weeks since last wash: ${weeksSinceLastWash}`);
-    }
-    
-    // الحساب الصحيح: إذا مر أسبوعين أو أكثر = وقت الداخلي
-    if (weeksSinceLastWash >= 2) {
-      // bi-weekly: بعد أسبوعين = غسيل داخلي
-      if (isP1Customer) {
-        console.log(`  ✅ Result: INT (>=2 weeks, bi-weekly interior time!)`);
-        console.log(`  🎯 P1-012 gets INTERIOR wash this week!\n`);
-      }
-      return 'INT';
-    } else {
-      if (isP1Customer) {
-        console.log(`  ✅ Result: EXT (<2 weeks, exterior only)`);
-        console.log(`  ⏳ P1-012 needs to wait ${2 - weeksSinceLastWash} more week(s) for interior\n`);
-      }
+    console.log(`[MULTI-CAR] ${customer.Name} - Visit ${visitNumber} - ${carPlate}: ${washType} (INT car: ${intCarForThisVisit})`);
+  }
+  
+  // Rule 4: For bi-week packages, INT only applies on first week of cycle
+  if (packageName.toLowerCase().includes('bi week') && washType === 'INT') {
+    const isFirstWeek = checkIfFirstWeekOfBiWeekCycleFromHistory(carPlates, allHistory, weekOffset);
+    console.log(`[BI-WEEK] ${customer.Name} - ${carPlate}: isFirstWeek = ${isFirstWeek}`);
+    if (!isFirstWeek) {
+      console.log(`[BI-WEEK] ${customer.Name} - ${carPlate}: Converting INT to EXT (second week)`);
       return 'EXT';
     }
   }
   
-  return calculateMultiCarWashType(packageName, visitNumber, carIndex, isMultiCar);
+  return washType;
 }
 
-function calculateMultiCarWashType(packageName, visitNumber, carIndex, isMultiCar) {
-  if (!isMultiCar) {
-    if (packageName.toLowerCase().includes('2 ext 1 int week') && visitNumber === 2) {
-      return 'INT';
-    }
-    if (packageName.toLowerCase().includes('3 ext 1 int week') && visitNumber === 2) {
-      return 'INT';
-    }
-    return 'EXT';
+// Helper functions copied from logicService.js
+function determineIntCarForCustomerFromHistory(allCarPlates, allHistory) {
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate) && record.WashType === 'INT'
+  ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
+  
+  if (customerHistory.length === 0) {
+    const sortedPlates = [...allCarPlates].sort();
+    return sortedPlates[0];
   }
   
-  if (packageName.toLowerCase().includes('2 ext 1 int week')) {
-    if (visitNumber === 1) {
-      return carIndex === 1 ? 'INT' : 'EXT';
-    }
-    if (visitNumber === 2) {
-      return carIndex === 0 ? 'INT' : 'EXT';
-    }
+  const lastIntWash = customerHistory[0];
+  const lastIntCarIndex = allCarPlates.indexOf(lastIntWash.CarPlate);
+  const nextIntCarIndex = (lastIntCarIndex + 1) % allCarPlates.length;
+  
+  return allCarPlates[nextIntCarIndex];
+}
+
+function determineIntCarForVisit(allCarPlates, allHistory, visitNumber) {
+  // For multi-car customers: alternate INT between cars based on visit number
+  // Visit 1: first car gets INT, Visit 2: second car gets INT, etc.
+  
+  // If no history exists, start with first car alphabetically
+  const sortedPlates = [...allCarPlates].sort();
+  
+  // Check if there's any previous INT wash history
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate) && record.WashType === 'INT'
+  ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
+  
+  let baseCarIndex = 0; // Default to first car
+  
+  if (customerHistory.length > 0) {
+    // Find which car got INT last time and continue rotation from there
+    const lastIntCar = customerHistory[0].CarPlate;
+    const lastIntCarIndex = sortedPlates.indexOf(lastIntCar);
+    baseCarIndex = (lastIntCarIndex + 1) % sortedPlates.length;
   }
   
-  if (packageName.toLowerCase().includes('3 ext 1 int week')) {
-    if (visitNumber === 1) {
-      return carIndex === 1 ? 'INT' : 'EXT';
-    }
-    if (visitNumber === 2) {
-      return carIndex === 0 ? 'INT' : 'EXT';
-    }
-    if (visitNumber === 3) {
-      return 'EXT';
-    }
+  // Alternate based on visit number
+  const intCarIndex = (baseCarIndex + visitNumber - 1) % sortedPlates.length;
+  
+  console.log(`[MULTI-CAR] Visit ${visitNumber}: Base car index: ${baseCarIndex}, INT car: ${sortedPlates[intCarIndex]}`);
+  
+  return sortedPlates[intCarIndex];
+}
+
+function checkIfFirstWeekOfBiWeekCycleFromHistory(allCarPlates, allHistory, weekOffset = 0) {
+  const customerHistory = allHistory.filter(record => 
+    allCarPlates.includes(record.CarPlate)
+  ).sort((a, b) => {
+    const parseCustomDate = (dateStr) => {
+      if (!dateStr) return new Date(0);
+      const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                     'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
+      const parts = dateStr.split('-');
+      if (parts.length === 3) {
+        const day = parseInt(parts[0]);
+        const month = months[parts[1]];
+        const year = parseInt(parts[2]);
+        return new Date(year, month, day);
+      }
+      return new Date(dateStr);
+    };
+    
+    return parseCustomDate(b.WashDate) - parseCustomDate(a.WashDate);
+  });
+  
+  if (customerHistory.length === 0) {
+    // No history: week 0 = first week, week 1 = second week, week 2 = first week again
+    const isFirstWeek = (weekOffset % 2) === 0;
+    console.log(`[BI-WEEK] No history - Week ${weekOffset}: ${isFirstWeek ? 'First week (INT)' : 'Second week (EXT)'}`);
+    return isFirstWeek;
   }
   
-  return 'EXT';
+  const parseCustomDate = (dateStr) => {
+    if (!dateStr) return new Date(0);
+    const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                   'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const day = parseInt(parts[0]);
+      const month = months[parts[1]];
+      const year = parseInt(parts[2]);
+      return new Date(year, month, day);
+    }
+    return new Date(dateStr);
+  };
+  
+  const lastWashDate = parseCustomDate(customerHistory[0].WashDate);
+  const currentDate = new Date();
+  // Add weekOffset to current date for future/past weeks
+  const targetDate = new Date(currentDate.getTime() + (weekOffset * 7 * 24 * 60 * 60 * 1000));
+  const daysDiff = Math.floor((targetDate - lastWashDate) / (1000 * 60 * 60 * 1000));
+  
+  console.log(`[BI-WEEK] Last wash: ${lastWashDate.toDateString()}, Target date: ${targetDate.toDateString()}, Days diff: ${daysDiff}`);
+  
+  // Bi-weekly cycle: 14 days = 2 weeks
+  // Calculate which week of the bi-weekly cycle we're in
+  const weeksSinceLastWash = Math.floor(daysDiff / 7);
+  const isFirstWeek = (weeksSinceLastWash % 2) === 0;
+  
+  console.log(`[BI-WEEK] Weeks since last wash: ${weeksSinceLastWash}, Is first week (INT time): ${isFirstWeek}`);
+  
+  return isFirstWeek;
 }
 
 function expandDayName(shortDay) {

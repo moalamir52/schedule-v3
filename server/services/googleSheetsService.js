@@ -89,19 +89,33 @@ async function addHistoryRecord(historyData) {
         throw new Error("Sheet 'wash_history' not found.");
     }
     
+    // Format date as DD-MMM-YYYY (e.g., 8-Oct-2025)
+    const formatDate = (date) => {
+        const d = new Date(date);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
+    };
+    
     // Get all existing rows to find the next empty row
     const rows = await sheet.getRows();
     const nextRowIndex = rows.length + 2; // +2 because row 1 is headers and array is 0-indexed
     
+    // Prepare data with formatted date
+    const dataWithFormattedDate = {
+        ...historyData,
+        WashDate: historyData.WashDate ? formatDate(historyData.WashDate) : formatDate(new Date())
+    };
+    
     // Prepare data in correct order matching actual sheet columns
     const headers = ['WashID', 'CustomerID', 'CarPlate', 'WashDate', 'PackageType', 'Villa', 'WashTypePerformed', 'VisitNumberInWeek', 'WeekInCycle', 'Status', 'WorkerName'];
-    const values = headers.map(header => historyData[header] || '');
+    const values = headers.map(header => dataWithFormattedDate[header] || '');
     
     // Use raw API to append to specific row
     await sheet.loadCells(`A${nextRowIndex}:K${nextRowIndex}`);
     headers.forEach((header, index) => {
         const cell = sheet.getCell(nextRowIndex - 1, index); // -1 because getCell is 0-indexed
-        cell.value = historyData[header] || '';
+        cell.value = dataWithFormattedDate[header] || '';
     });
     await sheet.saveUpdatedCells();
     
@@ -232,7 +246,7 @@ async function addRowsToSheet(sheetName, data) {
   if (data.length === 0) return;
   
   // Always set headers first
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
   await sheet.setHeaderRow(headers);
   await sheet.loadHeaderRow();
   
@@ -248,7 +262,8 @@ async function addRowsToSheet(sheetName, data) {
     WorkerName: item.workerName,
     WorkerID: item.workerId,
     PackageType: item.packageType || '',
-    isLocked: item.isLocked || 'FALSE'
+    isLocked: item.isLocked || 'FALSE',
+    ScheduleDate: item.scheduleDate || new Date().toISOString().split('T')[0]
   }));
   
   await sheet.addRows(rowsData);
@@ -289,7 +304,7 @@ async function addRowToSheet(sheetName, data) {
   }
   
   // Ensure headers exist
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
   if (sheet.headerValues.length === 0) {
     await sheet.setHeaderRow(headers);
     await sheet.loadHeaderRow();
@@ -307,7 +322,8 @@ async function addRowToSheet(sheetName, data) {
     WorkerName: data[0].workerName,
     WorkerID: data[0].workerId,
     PackageType: data[0].packageType || '',
-    isLocked: data[0].isLocked || 'FALSE'
+    isLocked: data[0].isLocked || 'FALSE',
+    ScheduleDate: data[0].scheduleDate || new Date().toISOString().split('T')[0]
   };
   
   await sheet.addRow(rowData);
@@ -325,7 +341,7 @@ async function clearAndWriteSheet(sheetName, data) {
   await sheet.clear();
   
   // Always set headers first
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked'];
+  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
   await sheet.setHeaderRow(headers);
   await sheet.loadHeaderRow();
   
@@ -342,7 +358,8 @@ async function clearAndWriteSheet(sheetName, data) {
       WorkerName: item.workerName,
       WorkerID: item.workerId,
       PackageType: item.packageType || '',
-      isLocked: item.isLocked || 'FALSE'
+      isLocked: item.isLocked || 'FALSE',
+      ScheduleDate: item.scheduleDate || new Date().toISOString().split('T')[0]
     }));
     
     await sheet.addRows(rowsData);

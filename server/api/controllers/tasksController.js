@@ -118,7 +118,8 @@ const completeTask = async (req, res) => {
       workerName: task.WorkerName,
       workerId: task.WorkerID,
       packageType: task.PackageType || '',
-      isLocked: task.isLocked || 'FALSE'
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
     }));
     
     await clearAndWriteSheet('ScheduledTasks', updatedSchedule);

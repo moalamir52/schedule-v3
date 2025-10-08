@@ -5,6 +5,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const [draggedItem, setDraggedItem] = useState(null);
   const [showOverrideMenu, setShowOverrideMenu] = useState(null);
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
+  const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
   const days = ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -91,6 +92,30 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     }
     
     setShowOverrideMenu(null);
+  };
+
+  const handleCustomerNameClick = async (customerId) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${customerId}`);
+      const data = await response.json();
+      
+      if (response.ok) {
+        // Get all scheduled appointments for this customer
+        const customerAppointments = assignedSchedule.filter(appointment => 
+          appointment.customerId === customerId
+        );
+        
+        setCustomerInfo({ 
+          isOpen: true, 
+          data: data,
+          appointments: customerAppointments
+        });
+      } else {
+        alert('Failed to fetch customer information');
+      }
+    } catch (error) {
+      alert('Error fetching customer information: ' + error.message);
+    }
   };
 
   const handleCancelBooking = (appointment) => {
@@ -347,11 +372,14 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                 className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''}`}
                                 style={{ position: 'relative' }}
                               >
-                                <div className="customer-name">
+                                <div 
+                                  className={`customer-name ${appointment.packageType && appointment.packageType.toLowerCase().includes('bi week') ? 'bi-week-badge' : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCustomerNameClick(appointment.customerId);
+                                  }}
+                                >
                                   {appointment.customerName}
-                                  {appointment.packageType && appointment.packageType.toLowerCase().includes('bi week') && (
-                                    <span className="bi-week-badge">BI</span>
-                                  )}
 
                                   {appointment.customerId && appointment.customerId.startsWith('MANUAL_') && (
                                     <button 
@@ -368,7 +396,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                     </button>
                                   )}
                                 </div>
-                                <div className="villa">Villa {appointment.villa}</div>
+                                <div className="villa">{appointment.villa}</div>
                                 <div className="car-plate">{appointment.carPlate}</div>
                                 <div 
                                   className="wash-type"
@@ -485,6 +513,83 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       message={modal.message}
       onConfirm={modal.onConfirm}
     />
+    
+    {/* Customer Info Modal */}
+    {customerInfo.isOpen && (
+      <div className="customer-info-modal" onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] })}>
+        <div className="customer-info-content" onClick={(e) => e.stopPropagation()}>
+          <div className="customer-info-header">
+            <h3>{customerInfo.data?.CustomerName || 'Customer Information'}</h3>
+            <button 
+              className="close-customer-info"
+              onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] })}
+            >
+              ×
+            </button>
+          </div>
+          <div className="customer-info-body">
+            <div className="info-row">
+              <span className="info-label">Name:</span>
+              <span className="info-value">{customerInfo.data?.Name || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Villa:</span>
+              <span className="info-value">{customerInfo.data?.Villa || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Phone:</span>
+              <span className="info-value">{customerInfo.data?.Phone || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Package:</span>
+              <span className="info-value">{customerInfo.data?.Washman_Package || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Serves:</span>
+              <span className="info-value">{customerInfo.data?.Serves || '-'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Car Plates:</span>
+              <span className="info-value">{customerInfo.data?.CarPlates || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Wash Days:</span>
+              <span className="info-value">{customerInfo.data?.Days || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Scheduled Appointments:</span>
+              <span className="info-value">
+                {customerInfo.appointments && customerInfo.appointments.length > 0 ? (
+                  <div style={{ textAlign: 'right' }}>
+                    {customerInfo.appointments.map((apt, index) => (
+                      <div key={index} style={{ marginBottom: '4px' }}>
+                        {apt.day} {apt.time} - {apt.carPlate} ({apt.washType})
+                      </div>
+                    ))}
+                  </div>
+                ) : 'No appointments scheduled'}
+              </span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Fee:</span>
+              <span className="info-value">{customerInfo.data?.Fee || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Start Date:</span>
+              <span className="info-value">{customerInfo.data?.['start date'] || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Payment:</span>
+              <span className="info-value">{customerInfo.data?.payment || 'N/A'}</span>
+            </div>
+            <div className="info-row">
+              <span className="info-label">Status:</span>
+              <span className="info-value">{customerInfo.data?.Status || 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 };
