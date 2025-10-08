@@ -608,8 +608,8 @@ function calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumb
   
   console.log(`[WASH-TYPE] ${customer.Name} - ${carPlate} - Package: ${packageName} - Visit: ${visitNumber}`);
   
-  // Rule 1: 'Ext Only' packages are always EXT
-  if (packageName.toLowerCase().includes('ext only')) {
+  // Rule 1: Packages without 'INT' are always EXT
+  if (!packageName.toLowerCase().includes('int')) {
     console.log(`[EXT-ONLY] ${customer.Name} - ${carPlate}: EXT (Ext Only package)`);
     return 'EXT';
   }
