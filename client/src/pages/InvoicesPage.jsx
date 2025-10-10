@@ -70,6 +70,10 @@ const InvoicesPage = () => {
   const [pendingInvoiceId, setPendingInvoiceId] = useState(null);
   const [showVatSettings, setShowVatSettings] = useState(false);
   const [vatRate, setVatRate] = useState(0);
+  const [showDueOnly, setShowDueOnly] = useState(false);
+  const [showDueToday, setShowDueToday] = useState(false);
+  const [showClientDetails, setShowClientDetails] = useState(false);
+  const [selectedClientDetails, setSelectedClientDetails] = useState(null);
 
   useEffect(() => {
     loadInvoices();
@@ -100,13 +104,19 @@ const InvoicesPage = () => {
   const loadInvoices = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/all`);
-      const data = await response.json();
-      if (data.success) {
-        setInvoices(data.invoices);
-        calculateStats(data.invoices);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success) {
+          setInvoices(data.invoices || []);
+          calculateStats(data.invoices || []);
+        }
+      } else {
+        console.error('Server error:', response.status);
+        setInvoices([]);
       }
     } catch (err) {
       console.error('Failed to load invoices:', err);
+      setInvoices([]);
     } finally {
       setIsLoading(false);
     }
@@ -168,14 +178,32 @@ const InvoicesPage = () => {
   const loadMonthlyStats = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/stats`);
-      const data = await response.json();
-      setMonthlyStats(data);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && typeof data === 'object') {
+          setMonthlyStats(data);
+        }
+      }
     } catch (err) {
       console.error('Failed to load monthly stats:', err);
     }
   };
 
   const handleOneTimeInvoice = async () => {
+    // Get the highest GLOGO number from existing invoices
+    let maxGlogoNumber = 2510041; // Start from base number
+    invoices.forEach(invoice => {
+      if (invoice.Ref && invoice.Ref.startsWith('GLOGO-')) {
+        const match = invoice.Ref.match(/GLOGO-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num > maxGlogoNumber) maxGlogoNumber = num;
+        }
+      }
+    });
+    
+    const nextGlogoNumber = maxGlogoNumber + 1;
+    
     const tempClient = {
       name: oneTimeInvoiceData.clientName || 'Walk-in Customer',
       villa: oneTimeInvoiceData.villa || 'N/A',
@@ -185,7 +213,9 @@ const InvoicesPage = () => {
       typeOfCar: oneTimeInvoiceData.vehicleTypes || 'N/A',
       serves: oneTimeInvoiceData.serves || 'One-time car wash service',
       payment: oneTimeInvoiceData.paymentStatus,
-      startDate: new Date().toLocaleDateString('en-GB')
+      startDate: new Date().toLocaleDateString('en-GB'),
+      isOneTime: true,
+      nextInvoiceNumber: `GLOGO-${nextGlogoNumber}`
     };
 
     // Invoice will be saved by InvoiceGenerator
@@ -246,8 +276,10 @@ const InvoicesPage = () => {
   const loadCustomers = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/customers`);
-      const data = await response.json();
-      setCustomers(data);
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(data || []);
+      }
     } catch (err) {
       console.error('Failed to load customers:', err);
     }
@@ -256,10 +288,12 @@ const InvoicesPage = () => {
   const loadAvailableClients = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/available`);
-      const data = await response.json();
-      if (data.success) {
-        setAvailableClients(data.availableClients);
-        setInvoicedClients(data.invoicedClients);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success) {
+          setAvailableClients(data.availableClients || []);
+          setInvoicedClients(data.invoicedClients || []);
+        }
       }
     } catch (err) {
       console.error('Failed to load available clients:', err);
@@ -483,7 +517,34 @@ const InvoicesPage = () => {
         }
       }
       
-      return matchesSearch && matchesStatus && matchesMonth;
+      // Apply due today filter - only pending invoices with service start today or before
+      let matchesDueToday = true;
+      if (showDueToday) {
+        if (invoice.Status !== 'Pending') {
+          matchesDueToday = false;
+        } else {
+          const today = new Date();
+          const todayDate = today.getDate();
+          
+          if (invoice.Start) {
+            let serviceStartDay;
+            if (invoice.Start.includes('/')) {
+              const startParts = invoice.Start.split('/');
+              if (startParts.length === 3) {
+                serviceStartDay = parseInt(startParts[0]);
+              }
+            } else if (invoice.Start.includes('-')) {
+              const startDate = new Date(invoice.Start);
+              serviceStartDay = startDate.getDate();
+            }
+            matchesDueToday = serviceStartDay && serviceStartDay <= todayDate;
+          } else {
+            matchesDueToday = false;
+          }
+        }
+      }
+      
+      return matchesSearch && matchesStatus && matchesMonth && matchesDueToday;
     });
   };
 
@@ -681,6 +742,31 @@ const InvoicesPage = () => {
           >
             📊 VAT Settings
           </button>
+          <button
+            onClick={() => {
+              setShowDueToday(!showDueToday);
+              if (!showDueToday) {
+                setStatusFilter('Pending');
+                setSearchTerm('');
+              } else {
+                setStatusFilter('All');
+              }
+            }}
+            style={{
+              backgroundColor: showDueToday ? '#28a745' : '#17a2b8',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(23, 162, 184, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            📋 {showDueToday ? 'Show All' : 'Due Today'}
+          </button>
         </div>
         
       {/* Search and Filter Bar */}
@@ -776,9 +862,9 @@ const InvoicesPage = () => {
           onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
         >
           <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📅</div>
-          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats.thisMonth.total} AED</h3>
+          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats?.thisMonth?.total || 0} AED</h3>
           <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>This Month</p>
-          <small style={{ color: '#666' }}>{monthlyStats.thisMonth.count} invoices</small>
+          <small style={{ color: '#666' }}>{monthlyStats?.thisMonth?.count || 0} invoices</small>
         </div>
 
         <div 
@@ -799,9 +885,9 @@ const InvoicesPage = () => {
           onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
         >
           <div style={{ fontSize: '2rem', marginBottom: '10px' }}>✅</div>
-          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats.paid.total} AED</h3>
+          <h3 style={{ color: '#28a745', margin: '0 0 5px 0' }}>{monthlyStats?.paid?.total || 0} AED</h3>
           <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Paid</p>
-          <small style={{ color: '#666' }}>{monthlyStats.paid.count} invoices</small>
+          <small style={{ color: '#666' }}>{monthlyStats?.paid?.count || 0} invoices</small>
         </div>
 
         <div 
@@ -822,9 +908,9 @@ const InvoicesPage = () => {
           onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
         >
           <div style={{ fontSize: '2rem', marginBottom: '10px' }}>⏳</div>
-          <h3 style={{ color: '#ffc107', margin: '0 0 5px 0' }}>{monthlyStats.pending.total} AED</h3>
+          <h3 style={{ color: '#ffc107', margin: '0 0 5px 0' }}>{monthlyStats?.pending?.total || 0} AED</h3>
           <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Pending</p>
-          <small style={{ color: '#666' }}>{monthlyStats.pending.count} invoices</small>
+          <small style={{ color: '#666' }}>{monthlyStats?.pending?.count || 0} invoices</small>
         </div>
 
         <div 
@@ -845,9 +931,9 @@ const InvoicesPage = () => {
           onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
         >
           <div style={{ fontSize: '2rem', marginBottom: '10px' }}>📊</div>
-          <h3 style={{ color: '#6f42c1', margin: '0 0 5px 0' }}>{monthlyStats.allTime.total} AED</h3>
+          <h3 style={{ color: '#6f42c1', margin: '0 0 5px 0' }}>{monthlyStats?.allTime?.total || 0} AED</h3>
           <p style={{ margin: '0 0 5px 0', fontWeight: 'bold' }}>Total</p>
-          <small style={{ color: '#666' }}>{monthlyStats.allTime.count} invoices</small>
+          <small style={{ color: '#666' }}>{monthlyStats?.allTime?.count || 0} invoices</small>
         </div>
       </div>
 
@@ -860,12 +946,13 @@ const InvoicesPage = () => {
             <table style={{ width: '100%', minWidth: '1400px', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: '8px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
               <thead>
                 <tr style={{ backgroundColor: '#28a745' }}>
+                  <th style={tableHeaderStyle}>#</th>
+                  <th style={tableHeaderStyle}>Created</th>
                   <th style={tableHeaderStyle}>REF</th>
                   <th style={tableHeaderStyle}>Invoice ID</th>
                   <th style={tableHeaderStyle}>Customer</th>
                   <th style={tableHeaderStyle}>Villa</th>
                   <th style={tableHeaderStyle}>Amount</th>
-                  <th style={tableHeaderStyle}>Created</th>
                   <th style={tableHeaderStyle}>Service Start</th>
                   <th style={tableHeaderStyle}>Due Date</th>
                   <th style={tableHeaderStyle}>Status</th>
@@ -876,22 +963,39 @@ const InvoicesPage = () => {
               <tbody>
                 {getFilteredInvoices().map((invoice, index) => (
                   <tr key={invoice.InvoiceID} style={{
-                    backgroundColor: index % 2 === 0 ? 'white' : '#f9f9f9',
-                    borderBottom: '1px solid #dee2e6'
+                    backgroundColor: index % 2 === 0 ? '#f0f8f0' : '#e8f5e8',
+                    borderBottom: '1px solid #c3e6c3'
                   }}>
+                    <td style={tableCellStyle}>
+                      <strong style={{ color: '#28a745', fontSize: '16px' }}>{index + 1}</strong>
+                    </td>
+                    <td style={tableCellStyle}>
+                      {invoice.CreatedAt ? new Date(invoice.CreatedAt).toLocaleDateString('en-GB') : '-'}
+                    </td>
                     <td style={tableCellStyle}>
                       <strong style={{ color: '#28a745' }}>{invoice.Ref || '-'}</strong>
                     </td>
                     <td style={tableCellStyle}>
                       <strong style={{ color: '#007bff' }}>{invoice.InvoiceID}</strong>
                     </td>
-                    <td style={tableCellStyle}>{invoice.CustomerName}</td>
+                    <td style={tableCellStyle}>
+                      <span 
+                        onClick={() => {
+                          setSelectedClientDetails(invoice);
+                          setShowClientDetails(true);
+                        }}
+                        style={{
+                          cursor: 'pointer',
+                          color: '#007bff',
+                          textDecoration: 'underline'
+                        }}
+                      >
+                        {invoice.CustomerName}
+                      </span>
+                    </td>
                     <td style={tableCellStyle}>{invoice.Villa}</td>
                     <td style={tableCellStyle}>
                       <strong style={{ color: '#28a745' }}>AED {invoice.TotalAmount}</strong>
-                    </td>
-                    <td style={tableCellStyle}>
-                      {invoice.CreatedAt ? new Date(invoice.CreatedAt).toLocaleDateString('en-GB') : '-'}
                     </td>
                     <td style={tableCellStyle}>
                       {invoice.Start || (invoice.InvoiceDate ? new Date(invoice.InvoiceDate).toLocaleDateString('en-GB') : '-')}
@@ -1882,11 +1986,32 @@ const InvoicesPage = () => {
                     marginBottom: '10px'
                   }}
                 />
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <button
+                    onClick={() => setShowDueOnly(!showDueOnly)}
+                    style={{
+                      backgroundColor: showDueOnly ? '#28a745' : '#17a2b8',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '6px 12px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    📅 {showDueOnly ? 'Show All' : 'Due Today'}
+                  </button>
+                </div>
                 <div style={{ maxHeight: '400px', overflow: 'auto', border: '1px solid #ddd', borderRadius: '8px' }}>
-                  {(availableClients || []).filter(client => 
-                    client.Name?.toLowerCase().includes(availableSearch.toLowerCase()) ||
-                    client.Villa?.toLowerCase().includes(availableSearch.toLowerCase())
-                  ).map(client => (
+                  {(availableClients || []).filter(client => {
+                    const today = new Date().getDate();
+                    const matchesSearch = client.Name?.toLowerCase().includes(availableSearch.toLowerCase()) ||
+                      client.Villa?.toLowerCase().includes(availableSearch.toLowerCase());
+                    if (!showDueOnly) return matchesSearch;
+                    if (!client.Start_Date) return false;
+                    const startDay = parseInt(client.Start_Date.split('/')[0]);
+                    return matchesSearch && startDay <= today;
+                  }).map(client => (
                     <div key={client.CustomerID} style={{
                       padding: '12px',
                       borderBottom: '1px solid #eee',
@@ -1895,8 +2020,16 @@ const InvoicesPage = () => {
                       alignItems: 'center'
                     }}>
                       <div>
-                        <strong>{client.Name}</strong><br/>
+                        <strong>{client.Name}</strong>
+                        {(() => {
+                          const today = new Date().getDate();
+                          const startDay = client.Start_Date ? parseInt(client.Start_Date.split('/')[0]) : null;
+                          const isDue = startDay && startDay <= today;
+                          return isDue ? <span style={{ color: '#dc3545', fontSize: '12px', marginLeft: '5px' }}>📅 DUE</span> : null;
+                        })()}
+                        <br/>
                         <small style={{ color: '#666' }}>Villa: {client.Villa} | Fee: AED {client.Fee}</small>
+                        {client.Start_Date && <><br/><small style={{ color: '#17a2b8' }}>Start: Day {client.Start_Date.split('/')[0]}</small></>}
                       </div>
                       <button
                         onClick={() => {
@@ -2465,6 +2598,300 @@ const InvoicesPage = () => {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Client Details Modal */}
+      {showClientDetails && selectedClientDetails && (
+        <div 
+          onClick={() => setShowClientDetails(false)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              padding: '30px',
+              width: '700px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              overflow: 'auto'
+            }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+              borderBottom: '2px solid #28a745',
+              paddingBottom: '10px'
+            }}>
+              <h3 style={{ color: '#28a745', margin: 0 }}>👤 Client Complete Details</h3>
+              <button
+                onClick={() => setShowClientDetails(false)}
+                style={{
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gap: '20px' }}>
+              {/* Basic Info Section */}
+              <div style={{
+                backgroundColor: '#f8f9fa',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #dee2e6'
+              }}>
+                <h4 style={{ color: '#28a745', margin: '0 0 15px 0' }}>📋 Basic Information</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Name:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>{selectedClientDetails.CustomerName}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Villa:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>{selectedClientDetails.Villa}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Phone:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        // Extract phone from Notes for one-time invoices
+                        if (selectedClientDetails.Notes && selectedClientDetails.Notes.includes('Phone:')) {
+                          const phoneMatch = selectedClientDetails.Notes.match(/Phone: ([^,]+)/);
+                          if (phoneMatch) return phoneMatch[1];
+                        }
+                        // Get phone from customer data
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.Phone || 'N/A';
+                      })()} 
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Customer ID:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px', color: '#007bff' }}>{selectedClientDetails.CustomerID || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Service Package & Vehicle Info */}
+              <div style={{
+                backgroundColor: '#e7f3ff',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #b3d9ff'
+              }}>
+                <h4 style={{ color: '#007bff', margin: '0 0 15px 0' }}>🚗 Vehicle & Package Details</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Package/Service:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.Washman_Package || customerData?.Package || selectedClientDetails.PackageID || 'Standard Service';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Vehicle Type:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.CarPlates || customerData?.TypeOfCar || selectedClientDetails.Vehicle || 'N/A';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Services (Serves):</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.Serves || selectedClientDetails.Services || 'N/A';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Number of Cars:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        if (customerData?.CarPlates) {
+                          return customerData.CarPlates.split(',').length;
+                        }
+                        return '1';
+                      })()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule & Timing */}
+              <div style={{
+                backgroundColor: '#fff3cd',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #ffeaa7'
+              }}>
+                <h4 style={{ color: '#856404', margin: '0 0 15px 0' }}>📅 Schedule & Timing</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Service Start Date:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.Start_Date || selectedClientDetails.Start || '-';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Service End Date:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {(() => {
+                        const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                        return customerData?.End_Date || selectedClientDetails.End || '-';
+                      })()}
+                    </p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Due Date:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>{selectedClientDetails.DueDate || '-'}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Service Schedule:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {selectedClientDetails.Start && selectedClientDetails.End ? 
+                        `${selectedClientDetails.Start} - ${selectedClientDetails.End}` : 
+                        selectedClientDetails.Start || 'N/A'
+                      }
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Invoice & Payment Info */}
+              <div style={{
+                backgroundColor: '#d4edda',
+                padding: '15px',
+                borderRadius: '8px',
+                border: '1px solid #c3e6cb'
+              }}>
+                <h4 style={{ color: '#155724', margin: '0 0 15px 0' }}>💰 Invoice & Payment Details</h4>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Invoice ID:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px', color: '#007bff' }}>{selectedClientDetails.InvoiceID}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>REF Number:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px', color: '#28a745' }}>{selectedClientDetails.Ref || '-'}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Amount:</label>
+                    <p style={{ margin: '5px 0', fontSize: '18px', color: '#28a745', fontWeight: 'bold' }}>AED {selectedClientDetails.TotalAmount}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Status:</label>
+                    <p style={{ 
+                      margin: '5px 0', 
+                      fontSize: '16px',
+                      color: selectedClientDetails.Status === 'Paid' ? '#28a745' : selectedClientDetails.Status === 'Pending' ? '#ffc107' : '#dc3545',
+                      fontWeight: 'bold'
+                    }}>{selectedClientDetails.Status}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Payment Method:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>{selectedClientDetails.PaymentMethod || '-'}</p>
+                  </div>
+                  <div>
+                    <label style={{ fontWeight: 'bold', color: '#666' }}>Created Date:</label>
+                    <p style={{ margin: '5px 0', fontSize: '16px' }}>
+                      {selectedClientDetails.CreatedAt ? new Date(selectedClientDetails.CreatedAt).toLocaleDateString('en-GB') : '-'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Additional Customer Info */}
+              {(() => {
+                const customerData = customers.find(c => c.CustomerID === selectedClientDetails.CustomerID);
+                if (customerData) {
+                  return (
+                    <div style={{
+                      backgroundColor: '#f3e5f5',
+                      padding: '15px',
+                      borderRadius: '8px',
+                      border: '1px solid #e1bee7'
+                    }}>
+                      <h4 style={{ color: '#6a1b9a', margin: '0 0 15px 0' }}>📊 Additional Customer Info</h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                        {customerData.Fee && (
+                          <div>
+                            <label style={{ fontWeight: 'bold', color: '#666' }}>Monthly Fee:</label>
+                            <p style={{ margin: '5px 0', fontSize: '16px' }}>AED {customerData.Fee}</p>
+                          </div>
+                        )}
+                        {customerData.Payment && (
+                          <div>
+                            <label style={{ fontWeight: 'bold', color: '#666' }}>Payment Status:</label>
+                            <p style={{ margin: '5px 0', fontSize: '16px' }}>{customerData.Payment}</p>
+                          </div>
+                        )}
+                        {customerData.Location && (
+                          <div>
+                            <label style={{ fontWeight: 'bold', color: '#666' }}>Location:</label>
+                            <p style={{ margin: '5px 0', fontSize: '16px' }}>{customerData.Location}</p>
+                          </div>
+                        )}
+                        {customerData.Email && (
+                          <div>
+                            <label style={{ fontWeight: 'bold', color: '#666' }}>Email:</label>
+                            <p style={{ margin: '5px 0', fontSize: '16px' }}>{customerData.Email}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+              
+              {/* Notes Section */}
+              {selectedClientDetails.Notes && (
+                <div style={{
+                  backgroundColor: '#f8f9fa',
+                  padding: '15px',
+                  borderRadius: '8px',
+                  border: '1px solid #dee2e6'
+                }}>
+                  <h4 style={{ color: '#6c757d', margin: '0 0 10px 0' }}>📝 Notes</h4>
+                  <p style={{ 
+                    margin: '0', 
+                    fontSize: '14px', 
+                    lineHeight: '1.5'
+                  }}>{selectedClientDetails.Notes}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
