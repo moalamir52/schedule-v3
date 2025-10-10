@@ -19,7 +19,11 @@ const login = async (req, res) => {
     }
     
     const token = jwt.sign(
-      { id: user.UserID, role: user.Role },
+      { 
+        userId: user.UserID, 
+        username: user.Username,
+        role: user.Role 
+      },
       'YOUR_SECRET_KEY'
     );
     

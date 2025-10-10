@@ -1,4 +1,4 @@
-const { getCustomers, getWorkers, getAllHistory, getScheduledTasks, clearAndWriteSheet, addRowToSheet, addAuditLog } = require('../../services/googleSheetsService');
+const { getCustomers, getWorkers, getAllHistory, getScheduledTasks, clearAndWriteSheet, addRowToSheet, addAuditLog, updateTaskInSheet } = require('../../services/googleSheetsService');
 const { determineIntCarForCustomer, checkIfFirstWeekOfBiWeekCycle } = require('../../services/logicService');
 
 const autoAssignSchedule = async (req, res) => {
@@ -861,6 +861,8 @@ const updateTaskAssignment = async (req, res) => {
       
       if (customerTasks.length > 1) {
         // Multi-car customer: lock all cars and update the specific one
+        let auditData = null;
+        
         customerTasks.forEach(customerTask => {
           const customerTaskIndex = existingTasks.findIndex(t => 
             t.CustomerID === customerTask.CustomerID && 
@@ -886,11 +888,34 @@ const updateTaskAssignment = async (req, res) => {
                 existingTasks[customerTaskIndex].WashType = newWashType;
               }
               
-              // Log the change (disabled temporarily)
+              // Log the change
               console.log(`[AUDIT] Task updated: ${existingTasks[customerTaskIndex].CustomerName} - ${oldWorker} -> ${newWorkerName}`);
+              
+              // Store audit data for later
+              auditData = {
+                action: 'TASK_UPDATE',
+                userId: req.headers['x-user-id'] || 'SYSTEM',
+                userName: req.headers['x-user-name'] || 'System',
+                customerID: existingTasks[customerTaskIndex].CustomerID,
+                customerName: existingTasks[customerTaskIndex].CustomerName,
+                villa: existingTasks[customerTaskIndex].Villa,
+                carPlate: existingTasks[customerTaskIndex].CarPlate,
+                day: existingTasks[customerTaskIndex].Day,
+                time: existingTasks[customerTaskIndex].Time,
+                oldWorker: oldWorker,
+                newWorker: newWorkerName,
+                oldWashType: oldWashType,
+                newWashType: newWashType,
+                changeReason: 'Multi-car customer task update'
+              };
             }
           }
         });
+        
+        // Add audit log asynchronously after forEach
+        if (auditData) {
+          addAuditLog(auditData).catch(err => console.error('[AUDIT] Background logging failed:', err.message));
+        }
       } else {
         // Single car customer or wash type change only
         // Check for conflicts only if worker is actually changing AND it's not a slot swap
@@ -927,39 +952,111 @@ const updateTaskAssignment = async (req, res) => {
           existingTasks[taskIndex].WashType = newWashType;
         }
         
-        // Log the change (disabled temporarily)
+        // Log the change
         console.log(`[AUDIT] Single task updated: ${existingTasks[taskIndex].CustomerName} - ${oldWorker} -> ${newWorkerName}`);
+        
+        // Add audit log asynchronously (don't wait)
+        addAuditLog({
+          action: 'TASK_UPDATE',
+          userId: req.headers['x-user-id'] || 'SYSTEM',
+          userName: req.headers['x-user-name'] || 'System',
+          customerID: existingTasks[taskIndex].CustomerID,
+          customerName: existingTasks[taskIndex].CustomerName,
+          villa: existingTasks[taskIndex].Villa,
+          carPlate: existingTasks[taskIndex].CarPlate,
+          day: existingTasks[taskIndex].Day,
+          time: existingTasks[taskIndex].Time,
+          oldWorker: oldWorker,
+          newWorker: newWorkerName,
+          oldWashType: oldWashType,
+          newWashType: newWashType,
+          changeReason: 'Manual task update'
+        }).catch(err => console.error('[AUDIT] Background logging failed:', err.message));
       }
     }
     
-    // Save updated schedule - remove duplicates first
-    const uniqueTasks = [];
-    const seen = new Set();
-    existingTasks.forEach(task => {
-      const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueTasks.push(task);
+    // Use fast update for single task changes
+    if (!isSlotSwap) {
+      const taskIdParts = taskId.split('-');
+      const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
+      const day = taskIdParts[2];
+      const carPlate = taskIdParts.slice(4).join('-') || '';
+      
+      const updates = {
+        WorkerName: newWorkerName,
+        WorkerID: newWorker.WorkerID,
+        isLocked: 'TRUE'
+      };
+      
+      if (newWashType) {
+        updates.WashType = newWashType;
       }
-    });
-    
-    const updatedSchedule = uniqueTasks.map(task => ({
-      day: task.Day || task.day,
-      appointmentDate: task.AppointmentDate || task.appointmentDate || '',
-      time: task.Time || task.time,
-      customerId: task.CustomerID || task.customerId,
-      customerName: task.CustomerName || task.customerName,
-      villa: task.Villa || task.villa,
-      carPlate: (task.CarPlate || task.carPlate) || '',
-      washType: (task.WashType || task.washType) || 'EXT',
-      workerName: (task.WorkerName || task.workerName) || '',
-      workerId: (task.WorkerID || task.workerId) || '',
-      packageType: (task.PackageType || task.packageType) || '',
-      isLocked: task.isLocked || 'FALSE',
-      scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0]
-    }));
-    
-    await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+      
+      const fastUpdateSuccess = await updateTaskInSheet(taskId, updates);
+      
+      if (fastUpdateSuccess) {
+        console.log('[PERFORMANCE] Fast update completed in <1 second');
+      } else {
+        console.log('[PERFORMANCE] Fast update failed, falling back to full sheet rewrite');
+        // Fallback to full rewrite if fast update fails
+        const uniqueTasks = [];
+        const seen = new Set();
+        existingTasks.forEach(task => {
+          const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueTasks.push(task);
+          }
+        });
+        
+        const updatedSchedule = uniqueTasks.map(task => ({
+          day: task.Day || task.day,
+          appointmentDate: task.AppointmentDate || task.appointmentDate || '',
+          time: task.Time || task.time,
+          customerId: task.CustomerID || task.customerId,
+          customerName: task.CustomerName || task.customerName,
+          villa: task.Villa || task.villa,
+          carPlate: (task.CarPlate || task.carPlate) || '',
+          washType: (task.WashType || task.washType) || 'EXT',
+          workerName: (task.WorkerName || task.workerName) || '',
+          workerId: (task.WorkerID || task.workerId) || '',
+          packageType: (task.PackageType || task.packageType) || '',
+          isLocked: task.isLocked || 'FALSE',
+          scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0]
+        }));
+        
+        await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+      }
+    } else {
+      // For slot swaps, still need full rewrite
+      const uniqueTasks = [];
+      const seen = new Set();
+      existingTasks.forEach(task => {
+        const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          uniqueTasks.push(task);
+        }
+      });
+      
+      const updatedSchedule = uniqueTasks.map(task => ({
+        day: task.Day || task.day,
+        appointmentDate: task.AppointmentDate || task.appointmentDate || '',
+        time: task.Time || task.time,
+        customerId: task.CustomerID || task.customerId,
+        customerName: task.CustomerName || task.customerName,
+        villa: task.Villa || task.villa,
+        carPlate: (task.CarPlate || task.carPlate) || '',
+        washType: (task.WashType || task.washType) || 'EXT',
+        workerName: (task.WorkerName || task.workerName) || '',
+        workerId: (task.WorkerID || task.workerId) || '',
+        packageType: (task.PackageType || task.packageType) || '',
+        isLocked: task.isLocked || 'FALSE',
+        scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0]
+      }));
+      
+      await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+    }
     
 
     

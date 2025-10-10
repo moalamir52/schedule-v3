@@ -244,13 +244,18 @@
 
 /* Sticky header for both rows */
 .timetable thead tr:first-child th {
+  position: sticky;
   top: 0;
-  z-index: 102;
+  z-index: 101;
+  height: 50px;
 }
 
 .timetable thead tr:nth-child(2) th {
-  top: 40px;
-  z-index: 101;
+  position: sticky;
+  top: 50px;
+  z-index: 102;
+  background-color: #28a745;
+  height: 35px;
 }
 
 .timetable .time-slot {
@@ -258,6 +263,17 @@
   font-weight: bold;
   padding: 8px;
   width: 80px;
+  position: sticky;
+  left: 0;
+  z-index: 103;
+}
+
+/* Make first column (time) sticky on horizontal scroll */
+.timetable thead tr th:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 104;
+  background-color: #28a745;
 }
 
 /* فواصل بين الأيام */

@@ -18,11 +18,18 @@ const login = async (username, password) => {
   
   // Decode token to get user data
   const payload = JSON.parse(atob(token.split('.')[1]));
+  
+  // Store user info for audit logging
+  localStorage.setItem('userId', payload.userId || 'WEB-USER');
+  localStorage.setItem('userName', payload.username || 'Web User');
+  
   return payload;
 };
 
 const logout = () => {
   localStorage.removeItem('token');
+  localStorage.removeItem('userId');
+  localStorage.removeItem('userName');
 };
 
 const register = async (username, password, role) => {

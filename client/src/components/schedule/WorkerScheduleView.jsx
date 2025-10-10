@@ -7,11 +7,40 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
   const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
+  const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
   ];
+  
+  // Auto-refresh to sync changes from other users
+  React.useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/get-schedule`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.assignments) {
+            // Only update if there are actual changes
+            const currentScheduleStr = JSON.stringify(assignedSchedule.sort((a, b) => a.customerId.localeCompare(b.customerId)));
+            const newScheduleStr = JSON.stringify(data.assignments.sort((a, b) => a.customerId.localeCompare(b.customerId)));
+            
+            if (currentScheduleStr !== newScheduleStr) {
+              console.log('[AUTO-SYNC] Schedule updated from other users');
+              if (onScheduleUpdate) {
+                onScheduleUpdate(data.assignments);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        // Silently fail - don't disturb user experience
+      }
+    }, 10000); // Check every 10 seconds
+    
+    return () => clearInterval(interval);
+  }, [assignedSchedule, onScheduleUpdate]);
   
   // Close override menu when clicking outside
   React.useEffect(() => {
@@ -71,13 +100,28 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   };
 
   const handleWashTypeChange = async (appointment, newWashType) => {
+    const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
+    
+    // Update UI immediately for better UX
+    if (onScheduleUpdate) {
+      const updatedSchedule = assignedSchedule.map(task => 
+        `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+          ? { ...task, washType: newWashType, isLocked: 'TRUE' }
+          : task
+      );
+      onScheduleUpdate(updatedSchedule);
+    }
+    
+    setShowOverrideMenu(null);
+    
+    // Send update to server in background
     try {
-      const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+          'X-User-Name': localStorage.getItem('userName') || 'Web User'
         },
         body: JSON.stringify({ 
           taskId, 
@@ -86,27 +130,26 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         })
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.error || 'Failed to update wash type');
       }
       
-      // Update local state
-      if (onScheduleUpdate) {
-        const updatedSchedule = assignedSchedule.map(task => 
-          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
-            ? { ...task, washType: newWashType, isLocked: 'TRUE' }
-            : task
-        );
-        onScheduleUpdate(updatedSchedule);
-      }
+      // Mark update time for sync
+      setLastUpdateTime(Date.now());
       
     } catch (error) {
+      // Revert UI change if server update failed
+      if (onScheduleUpdate) {
+        const revertedSchedule = assignedSchedule.map(task => 
+          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+            ? { ...task, washType: appointment.washType, isLocked: appointment.isLocked }
+            : task
+        );
+        onScheduleUpdate(revertedSchedule);
+      }
       alert(`Error updating wash type: ${error.message}`);
     }
-    
-    setShowOverrideMenu(null);
   };
 
   const handleCustomerNameClick = async (customerId) => {
@@ -200,11 +243,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       setDraggedItem(null);
       return;
     }
-    
-    // If dragging to same day/time but different worker, it's a simple worker change
-    if (sourceDay === targetDay && sourceTime === targetTime && sourceWorkerId !== targetWorkerId) {
-      // This is just a worker change, not a slot swap
-    }
 
     // Find the dragged appointment
     const draggedAppointment = assignedSchedule.find(appointment => 
@@ -226,10 +264,73 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       appointment.time === targetTime
     );
 
+    const taskId = `${customerId}-${sourceDay}-${sourceTime}-${draggedAppointment.carPlate}`;
+    const targetWorkerName = workers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
+    
+    // Update UI immediately for better UX
+    let updatedSchedule;
+    
+    if (existingAppointments.length > 0) {
+      // Handle swap
+      updatedSchedule = assignedSchedule.map(appointment => {
+        // Move dragged appointment to target
+        if (appointment.customerId === customerId && 
+            appointment.day === sourceDay && 
+            appointment.time === sourceTime && 
+            appointment.workerId === sourceWorkerId) {
+          return {
+            ...appointment,
+            day: targetDay,
+            time: targetTime,
+            workerId: targetWorkerId,
+            workerName: targetWorkerName,
+            isLocked: 'TRUE'
+          };
+        }
+        // Move existing appointments to source
+        if (appointment.workerId === targetWorkerId && 
+            appointment.day === targetDay && 
+            appointment.time === targetTime) {
+          const sourceWorkerName = workers.find(w => (w.WorkerID || w.Name) === sourceWorkerId)?.Name || sourceWorkerId;
+          return {
+            ...appointment,
+            day: sourceDay,
+            time: sourceTime,
+            workerId: sourceWorkerId,
+            workerName: sourceWorkerName,
+            isLocked: 'TRUE'
+          };
+        }
+        return appointment;
+      });
+    } else {
+      // Handle simple move
+      updatedSchedule = assignedSchedule.map(appointment => {
+        if (appointment.customerId === customerId && 
+            appointment.day === sourceDay && 
+            appointment.time === sourceTime && 
+            appointment.workerId === sourceWorkerId) {
+          return {
+            ...appointment,
+            day: targetDay,
+            time: targetTime,
+            workerId: targetWorkerId,
+            workerName: targetWorkerName,
+            isLocked: 'TRUE'
+          };
+        }
+        return appointment;
+      });
+    }
+
+    if (onScheduleUpdate) {
+      onScheduleUpdate(updatedSchedule);
+    }
+    
+    setDraggedItem(null);
+
+    // Send update to server in background
     try {
-      const taskId = `${customerId}-${sourceDay}-${sourceTime}-${draggedAppointment.carPlate}`;
-      const targetWorkerName = workers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
-      
       let requestBody = { 
         taskId, 
         newWorkerName: targetWorkerName,
@@ -247,82 +348,28 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+          'X-User-Name': localStorage.getItem('userName') || 'Web User'
         },
         body: JSON.stringify(requestBody)
       });
       
-      const data = await response.json();
-      
       if (!response.ok) {
+        const data = await response.json();
         throw new Error(data.error || 'Failed to update task assignment');
       }
       
-      // Update local state based on whether it's a swap or simple move
-      let updatedSchedule;
-      
-      if (existingAppointments.length > 0) {
-        // Handle swap
-        updatedSchedule = assignedSchedule.map(appointment => {
-          // Move dragged appointment to target
-          if (appointment.customerId === customerId && 
-              appointment.day === sourceDay && 
-              appointment.time === sourceTime && 
-              appointment.workerId === sourceWorkerId) {
-            return {
-              ...appointment,
-              day: targetDay,
-              time: targetTime,
-              workerId: targetWorkerId,
-              workerName: targetWorkerName,
-              isLocked: 'TRUE'
-            };
-          }
-          // Move existing appointments to source
-          if (appointment.workerId === targetWorkerId && 
-              appointment.day === targetDay && 
-              appointment.time === targetTime) {
-            const sourceWorkerName = workers.find(w => (w.WorkerID || w.Name) === sourceWorkerId)?.Name || sourceWorkerId;
-            return {
-              ...appointment,
-              day: sourceDay,
-              time: sourceTime,
-              workerId: sourceWorkerId,
-              workerName: sourceWorkerName,
-              isLocked: 'TRUE'
-            };
-          }
-          return appointment;
-        });
-      } else {
-        // Handle simple move
-        updatedSchedule = assignedSchedule.map(appointment => {
-          if (appointment.customerId === customerId && 
-              appointment.day === sourceDay && 
-              appointment.time === sourceTime && 
-              appointment.workerId === sourceWorkerId) {
-            return {
-              ...appointment,
-              day: targetDay,
-              time: targetTime,
-              workerId: targetWorkerId,
-              workerName: targetWorkerName,
-              isLocked: 'TRUE'
-            };
-          }
-          return appointment;
-        });
-      }
-
-      if (onScheduleUpdate) {
-        onScheduleUpdate(updatedSchedule);
-      }
+      // Mark update time for sync
+      setLastUpdateTime(Date.now());
       
     } catch (error) {
+      // Revert UI changes if server update failed
+      if (onScheduleUpdate) {
+        onScheduleUpdate(assignedSchedule);
+      }
       alert(`Error updating assignment: ${error.message}`);
     }
-    
-    setDraggedItem(null);
   };
 
   return (

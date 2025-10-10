@@ -779,64 +779,132 @@ async function deleteUser(userId) {
 
 }
 
-async function addAuditLog(auditData) {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['ScheduleAuditLog'];
-  if (!sheet) {
-    throw new Error("Sheet 'ScheduleAuditLog' not found.");
+async function updateTaskInSheet(taskId, updates) {
+  try {
+    const startTime = Date.now();
+    await loadSheet();
+    const sheet = doc.sheetsByTitle['ScheduledTasks'];
+    if (!sheet) {
+      return false;
+    }
+    
+    const rows = await sheet.getRows();
+    const taskIdParts = taskId.split('-');
+    const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
+    const day = taskIdParts[2];
+    const carPlate = taskIdParts.slice(4).join('-') || '';
+    
+    const row = rows.find(r => 
+      r.get('CustomerID') === customerId &&
+      r.get('Day') === day &&
+      (r.get('CarPlate') || '') === carPlate
+    );
+    
+    if (row) {
+      Object.keys(updates).forEach(key => {
+        row.set(key, updates[key]);
+      });
+      await row.save();
+      const duration = Date.now() - startTime;
+      console.log(`[FAST-UPDATE] Updated task ${taskId} in ${duration}ms`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error('[FAST-UPDATE] Error:', error.message);
+    return false;
   }
-  
-  const logRecord = {
-    LogID: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-    Timestamp: new Date().toISOString(),
-    UserID: auditData.userId || 'SYSTEM',
-    UserName: auditData.userName || 'System',
-    Action: auditData.action,
-    CustomerID: auditData.customerID || '',
-    CustomerName: auditData.customerName || '',
-    Villa: auditData.villa || '',
-    CarPlate: auditData.carPlate || '',
-    Day: auditData.day || '',
-    Time: auditData.time || '',
-    OldWorker: auditData.oldWorker || '',
-    NewWorker: auditData.newWorker || '',
-    OldWashType: auditData.oldWashType || '',
-    NewWashType: auditData.newWashType || '',
-    ChangeReason: auditData.changeReason || ''
-  };
-  
-  await sheet.addRow(logRecord);
-  console.log(`[AUDIT] ${auditData.action} logged for ${auditData.customerName || 'Unknown'}`);
+}
+
+async function addAuditLog(auditData) {
+  try {
+    await loadSheet();
+    let sheet = doc.sheetsByTitle['ScheduleAuditLog'];
+    
+    if (!sheet) {
+      console.log('[AUDIT] ScheduleAuditLog sheet not found, creating it...');
+      sheet = await doc.addSheet({
+        title: 'ScheduleAuditLog',
+        headerValues: ['LogID', 'Timestamp', 'UserID', 'UserName', 'Action', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'Day', 'Time', 'OldWorker', 'NewWorker', 'OldWashType', 'NewWashType', 'ChangeReason']
+      });
+      console.log('[AUDIT] ScheduleAuditLog sheet created successfully');
+    }
+    
+    const logRecord = {
+      LogID: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      Timestamp: new Date().toISOString(),
+      UserID: auditData.userId || 'SYSTEM',
+      UserName: auditData.userName || 'System',
+      Action: auditData.action,
+      CustomerID: auditData.customerID || '',
+      CustomerName: auditData.customerName || '',
+      Villa: auditData.villa || '',
+      CarPlate: auditData.carPlate || '',
+      Day: auditData.day || '',
+      Time: auditData.time || '',
+      OldWorker: auditData.oldWorker || '',
+      NewWorker: auditData.newWorker || '',
+      OldWashType: auditData.oldWashType || '',
+      NewWashType: auditData.newWashType || '',
+      ChangeReason: auditData.changeReason || ''
+    };
+    
+    await sheet.addRow(logRecord);
+    console.log(`[AUDIT] ${auditData.action} logged for ${auditData.customerName || 'Unknown'}`);
+  } catch (error) {
+    console.error('[AUDIT] Error adding audit log:', error.message);
+    // Don't throw error to avoid breaking the main functionality
+  }
 }
 
 async function getAuditLogs(filters = {}) {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['ScheduleAuditLog'];
-  if (!sheet) {
+  try {
+    await loadSheet();
+    let sheet = doc.sheetsByTitle['ScheduleAuditLog'];
+    
+    if (!sheet) {
+      console.log('[AUDIT] ScheduleAuditLog sheet not found, creating it...');
+      // Create the sheet if it doesn't exist
+      sheet = await doc.addSheet({
+        title: 'ScheduleAuditLog',
+        headerValues: ['LogID', 'Timestamp', 'UserID', 'UserName', 'Action', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'Day', 'Time', 'OldWorker', 'NewWorker', 'OldWashType', 'NewWashType', 'ChangeReason']
+      });
+      console.log('[AUDIT] ScheduleAuditLog sheet created successfully');
+      return []; // Return empty array for new sheet
+    }
+    
+    const rows = await sheet.getRows();
+    if (!rows || rows.length === 0) {
+      console.log('[AUDIT] No audit logs found');
+      return [];
+    }
+    
+    let logs = mapRowsToObjects(rows, sheet.headerValues);
+    
+    // Apply filters
+    if (filters.userId) {
+      logs = logs.filter(log => log.UserID === filters.userId);
+    }
+    if (filters.action) {
+      logs = logs.filter(log => log.Action === filters.action);
+    }
+    if (filters.customerID) {
+      logs = logs.filter(log => log.CustomerID === filters.customerID);
+    }
+    if (filters.dateFrom) {
+      logs = logs.filter(log => new Date(log.Timestamp) >= new Date(filters.dateFrom));
+    }
+    if (filters.dateTo) {
+      logs = logs.filter(log => new Date(log.Timestamp) <= new Date(filters.dateTo));
+    }
+    
+    console.log(`[AUDIT] Found ${logs.length} audit logs after filtering`);
+    return logs.sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
+  } catch (error) {
+    console.error('[AUDIT] Error getting audit logs:', error.message);
     return [];
   }
-  
-  const rows = await sheet.getRows();
-  let logs = mapRowsToObjects(rows, sheet.headerValues);
-  
-  // Apply filters
-  if (filters.userId) {
-    logs = logs.filter(log => log.UserID === filters.userId);
-  }
-  if (filters.action) {
-    logs = logs.filter(log => log.Action === filters.action);
-  }
-  if (filters.customerID) {
-    logs = logs.filter(log => log.CustomerID === filters.customerID);
-  }
-  if (filters.dateFrom) {
-    logs = logs.filter(log => new Date(log.Timestamp) >= new Date(filters.dateFrom));
-  }
-  if (filters.dateTo) {
-    logs = logs.filter(log => new Date(log.Timestamp) <= new Date(filters.dateTo));
-  }
-  
-  return logs.sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
 }
 
 module.exports = {
@@ -860,6 +928,7 @@ module.exports = {
   getScheduledTasks,
   addRowToSheet,
   clearAndWriteSheet,
+  updateTaskInSheet,
   addInvoiceRecord,
   getInvoices,
   updateInvoiceStatus,
