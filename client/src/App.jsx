@@ -8,6 +8,7 @@ import DailyTasksPage from './pages/DailyTasksPage.jsx';
 import InvoicesPage from './pages/InvoicesPage.jsx';
 import OperationsPage from './pages/OperationsPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
+import AuditReportPage from './pages/AuditReportPage.jsx';
 import authService from './services/authService.js';
 import './App.css';
 
@@ -107,6 +108,7 @@ function App() {
             <Route path="/invoices" element={<InvoicesPage />} />
             <Route path="/operations" element={<OperationsPage />} />
             <Route path="/users" element={<UsersPage />} />
+            <Route path="/audit-report" element={<AuditReportPage />} />
           </Routes>
         </main>
       </div>

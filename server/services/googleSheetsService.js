@@ -29,7 +29,6 @@ async function loadSheet() {
   if (sheetsLoaded) return;
   await doc.loadInfo();
   sheetsLoaded = true;
-
 }
 
 function mapRowsToObjects(rows, headers) {
@@ -246,13 +245,14 @@ async function addRowsToSheet(sheetName, data) {
   if (data.length === 0) return;
   
   // Always set headers first
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+  const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
   await sheet.setHeaderRow(headers);
   await sheet.loadHeaderRow();
   
   // Add all rows at once
   const rowsData = data.map(item => ({
     Day: item.day,
+    AppointmentDate: item.appointmentDate || '',
     Time: item.time,
     CustomerID: item.customerId,
     CustomerName: item.customerName,
@@ -271,29 +271,44 @@ async function addRowsToSheet(sheetName, data) {
 }
 
 async function getScheduledTasks() {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['ScheduledTasks'];
-  if (!sheet) {
-    return []; // Return empty array if sheet doesn't exist yet
-  }
-  await sheet.loadHeaderRow();
-  const rows = await sheet.getRows();
-  const allTasks = mapRowsToObjects(rows, sheet.headerValues);
-  
-  // Remove duplicates when reading from sheet
-  const uniqueTasks = [];
-  const seen = new Set();
-  allTasks.forEach(task => {
-    const key = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      uniqueTasks.push(task);
+  try {
+    await loadSheet();
+    const sheet = doc.sheetsByTitle['ScheduledTasks'];
+    if (!sheet) {
+      return [];
     }
-  });
-  
-
-  
-  return uniqueTasks;
+    
+    // Force reload sheet info
+    await sheet.loadCells();
+    
+    // Check if sheet is empty
+    if (sheet.rowCount <= 1) {
+      return [];
+    }
+    
+    // Set headers manually if needed
+    const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+    
+    // Get all rows as raw data
+    const rows = await sheet.getRows();
+    if (!rows || rows.length === 0) {
+      return [];
+    }
+    
+    // Map rows manually using headers
+    const allTasks = rows.map(row => {
+      const task = {};
+      headers.forEach((header, index) => {
+        task[header] = row._rawData[index] || '';
+      });
+      return task;
+    });
+    
+    return allTasks;
+  } catch (error) {
+    console.error('[SHEETS] Error:', error.message);
+    return [];
+  }
 }
 
 async function addRowToSheet(sheetName, data) {
@@ -304,7 +319,7 @@ async function addRowToSheet(sheetName, data) {
   }
   
   // Ensure headers exist
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+  const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
   if (sheet.headerValues.length === 0) {
     await sheet.setHeaderRow(headers);
     await sheet.loadHeaderRow();
@@ -313,6 +328,7 @@ async function addRowToSheet(sheetName, data) {
   // Add single row
   const rowData = {
     Day: data[0].day,
+    AppointmentDate: data[0].appointmentDate || '',
     Time: data[0].time,
     CustomerID: data[0].customerId,
     CustomerName: data[0].customerName,
@@ -337,35 +353,41 @@ async function clearAndWriteSheet(sheetName, data) {
     throw new Error(`Sheet '${sheetName}' not found.`);
   }
   
-  // Clear all content including headers
-  await sheet.clear();
-  
-  // Always set headers first
-  const headers = ['Day', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
-  await sheet.setHeaderRow(headers);
-  await sheet.loadHeaderRow();
-  
-  if (data.length > 0) {
-    // Add all rows at once
-    const rowsData = data.map(item => ({
-      Day: item.day,
-      Time: item.time,
-      CustomerID: item.customerId,
-      CustomerName: item.customerName,
-      Villa: item.villa,
-      CarPlate: item.carPlate,
-      WashType: item.washType,
-      WorkerName: item.workerName,
-      WorkerID: item.workerId,
-      PackageType: item.packageType || '',
-      isLocked: item.isLocked || 'FALSE',
-      ScheduleDate: item.scheduleDate || new Date().toISOString().split('T')[0]
-    }));
+  try {
+    // Clear all content including headers
+    await sheet.clear();
     
-    await sheet.addRows(rowsData);
+    // Always set headers first
+    const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+    await sheet.setHeaderRow(headers);
+    
+    // Wait for headers to be set properly
+    await new Promise(resolve => setTimeout(resolve, 200));
+    
+    if (data.length > 0) {
+      // Add all rows at once
+      const rowsData = data.map(item => ({
+        Day: item.day,
+        AppointmentDate: item.appointmentDate || '',
+        Time: item.time,
+        CustomerID: item.customerId,
+        CustomerName: item.customerName,
+        Villa: item.villa,
+        CarPlate: item.carPlate,
+        WashType: item.washType,
+        WorkerName: item.workerName,
+        WorkerID: item.workerId,
+        PackageType: item.packageType || '',
+        isLocked: item.isLocked || 'FALSE',
+        ScheduleDate: item.scheduleDate || new Date().toISOString().split('T')[0]
+      }));
+      
+      await sheet.addRows(rowsData);
+    }
+  } catch (error) {
+    console.error(`[SHEETS] Error in clearAndWriteSheet: ${error.message}`);
+    throw error;
   }
-  
-
 }
 
 async function addInvoiceRecord(invoiceData) {
@@ -757,6 +779,66 @@ async function deleteUser(userId) {
 
 }
 
+async function addAuditLog(auditData) {
+  await loadSheet();
+  const sheet = doc.sheetsByTitle['ScheduleAuditLog'];
+  if (!sheet) {
+    throw new Error("Sheet 'ScheduleAuditLog' not found.");
+  }
+  
+  const logRecord = {
+    LogID: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    Timestamp: new Date().toISOString(),
+    UserID: auditData.userId || 'SYSTEM',
+    UserName: auditData.userName || 'System',
+    Action: auditData.action,
+    CustomerID: auditData.customerID || '',
+    CustomerName: auditData.customerName || '',
+    Villa: auditData.villa || '',
+    CarPlate: auditData.carPlate || '',
+    Day: auditData.day || '',
+    Time: auditData.time || '',
+    OldWorker: auditData.oldWorker || '',
+    NewWorker: auditData.newWorker || '',
+    OldWashType: auditData.oldWashType || '',
+    NewWashType: auditData.newWashType || '',
+    ChangeReason: auditData.changeReason || ''
+  };
+  
+  await sheet.addRow(logRecord);
+  console.log(`[AUDIT] ${auditData.action} logged for ${auditData.customerName || 'Unknown'}`);
+}
+
+async function getAuditLogs(filters = {}) {
+  await loadSheet();
+  const sheet = doc.sheetsByTitle['ScheduleAuditLog'];
+  if (!sheet) {
+    return [];
+  }
+  
+  const rows = await sheet.getRows();
+  let logs = mapRowsToObjects(rows, sheet.headerValues);
+  
+  // Apply filters
+  if (filters.userId) {
+    logs = logs.filter(log => log.UserID === filters.userId);
+  }
+  if (filters.action) {
+    logs = logs.filter(log => log.Action === filters.action);
+  }
+  if (filters.customerID) {
+    logs = logs.filter(log => log.CustomerID === filters.customerID);
+  }
+  if (filters.dateFrom) {
+    logs = logs.filter(log => new Date(log.Timestamp) >= new Date(filters.dateFrom));
+  }
+  if (filters.dateTo) {
+    logs = logs.filter(log => new Date(log.Timestamp) <= new Date(filters.dateTo));
+  }
+  
+  return logs.sort((a, b) => new Date(b.Timestamp) - new Date(a.Timestamp));
+}
+
 module.exports = {
   getCustomers,
   getHistoryForCar,
@@ -788,5 +870,7 @@ module.exports = {
   addUser,
   getUsers,
   updateUser,
-  deleteUser
+  deleteUser,
+  addAuditLog,
+  getAuditLogs
 };

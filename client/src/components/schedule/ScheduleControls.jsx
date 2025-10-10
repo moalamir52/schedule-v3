@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiChevronLeft, FiChevronRight, FiSettings, FiEye, FiBarChart, FiZap, FiPlus, FiDownload, FiAlertTriangle } from 'react-icons/fi';
 
-function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
+function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -163,6 +163,19 @@ function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport
         >
           Today
         </button>
+        <button 
+          style={{
+            ...buttonStyle,
+            backgroundColor: showAllSlots ? '#28a745' : '#6c757d',
+            color: 'white',
+            fontWeight: '600'
+          }}
+          onClick={onToggleShowAllSlots}
+          onMouseEnter={(e) => e.target.style.backgroundColor = showAllSlots ? '#218838' : '#5a6268'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = showAllSlots ? '#28a745' : '#6c757d'}
+        >
+          📊 {showAllSlots ? 'Hide All Slots' : 'Show All Slots'}
+        </button>
       </div>
 
       <div style={actionsContainerStyle} className="actions-container">
@@ -180,7 +193,7 @@ function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport
           <div style={dropdownStyle}>
             <div 
               style={dropdownItemStyle}
-              onClick={onAutoAssign}
+              onClick={() => onAutoAssign(false)}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#fff3e0';
                 e.currentTarget.style.color = '#f57c00';
@@ -191,8 +204,9 @@ function ScheduleControls({ onAutoAssign, onClear, onViewChange, onAdd, onExport
               }}
             >
               <FiZap style={{ color: '#ff9800' }} />
-              Auto
+              Auto (Smart)
             </div>
+
             <div 
               style={dropdownItemStyle}
               onClick={onClear}

@@ -21,6 +21,8 @@ const SchedulePage = () => {
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
   const [viewMode, setViewMode] = useState('week'); // 'week' or 'today'
   const [searchTerm, setSearchTerm] = useState('');
+  const [showAllSlots, setShowAllSlots] = useState(false);
+  const [customerFilter, setCustomerFilter] = useState('');
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -57,11 +59,51 @@ const SchedulePage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign`, {
+      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/0`;
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ showAllSlots })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      if (data.success && data.assignments) {
+        setAssignedSchedule(data.assignments);
+      } else {
+        throw new Error(data.error || 'Invalid response format');
+      }
+    } catch (err) {
+      setError(err.message);
+      setAssignedSchedule([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleToggleShowAllSlots = async () => {
+    const newShowAllSlots = !showAllSlots;
+    setShowAllSlots(newShowAllSlots);
+    
+    // Auto-generate schedule with new mode
+    setIsLoading(true);
+    setError(null);
+    try {
+      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/${currentWeekOffset}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ showAllSlots: newShowAllSlots })
       });
       
       const data = await response.json();
@@ -168,6 +210,11 @@ const SchedulePage = () => {
       filtered = filtered.filter(item => item.day === todayName);
     }
     
+    // Filter by customer if selected
+    if (customerFilter.trim()) {
+      filtered = filtered.filter(item => item.customerId === customerFilter);
+    }
+    
     // Filter by search term
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
@@ -181,14 +228,44 @@ const SchedulePage = () => {
     return filtered;
   };
 
+  const handleCustomerFilter = (customerId) => {
+    if (customerFilter === customerId) {
+      // If already filtered by this customer, clear filter
+      setCustomerFilter('');
+    } else {
+      // Filter by this customer
+      setCustomerFilter(customerId);
+    }
+  };
+
   const handleWashTypeUpdate = async (taskId, newWashType) => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-wash-type`, {
+      // Parse taskId to get task components
+      const taskParts = taskId.split('-');
+      const [customerId, day, ...rest] = taskParts;
+      const carPlate = rest[rest.length - 1] === 'NOPLATE' ? '' : rest[rest.length - 1];
+      
+      // Find the task to get worker name
+      const task = assignedSchedule.find(t => 
+        t.customerId === customerId &&
+        t.day === day &&
+        (t.carPlate || 'NOPLATE') === carPlate
+      );
+      
+      if (!task) {
+        throw new Error('Task not found');
+      }
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ taskId, newWashType })
+        body: JSON.stringify({ 
+          taskId, 
+          newWorkerName: task.workerName,
+          newWashType 
+        })
       });
       
       const data = await response.json();
@@ -201,7 +278,7 @@ const SchedulePage = () => {
       setAssignedSchedule(prev => 
         prev.map(task => 
           `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
-            ? { ...task, washType: newWashType }
+            ? { ...task, washType: newWashType, isLocked: 'TRUE' }
             : task
         )
       );
@@ -215,8 +292,7 @@ const SchedulePage = () => {
     try {
       setIsLoading(true);
       
-      // استخدم نفس API لجميع الأسابيع (بما في ذلك الحالي)
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/week/${weekOffset}`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/${weekOffset}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -231,11 +307,6 @@ const SchedulePage = () => {
       
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
-        
-        // حفظ في ScheduledTasks إذا كان الأسبوع الحالي
-        if (weekOffset === 0) {
-          // لا حاجة لحفظ إضافي - الAPI يحفظ تلقائياً
-        }
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -490,6 +561,32 @@ const SchedulePage = () => {
                   ✕
                 </button>
               )}
+              {customerFilter && (
+                <span style={{
+                  color: '#28a745',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}>
+                  Filtered by: {(() => {
+                    const customer = assignedSchedule.find(item => item.customerId === customerFilter);
+                    return customer ? `${customer.customerName} (Villa ${customer.villa})` : customerFilter;
+                  })()}
+                  <button
+                    onClick={() => setCustomerFilter('')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#dc3545',
+                      cursor: 'pointer',
+                      fontSize: '16px',
+                      marginLeft: '8px'
+                    }}
+                    title="Clear filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -498,6 +595,8 @@ const SchedulePage = () => {
       <ScheduleControls 
         onViewChange={handleViewChange}
         onAutoAssign={handleAutoAssign}
+        onToggleShowAllSlots={handleToggleShowAllSlots}
+        showAllSlots={showAllSlots}
         onClear={handleClear}
         onAdd={() => {
           setShowAddModal(true);
@@ -510,9 +609,71 @@ const SchedulePage = () => {
         }}
         currentView={currentView}
         currentWeekOffset={currentWeekOffset}
-        onWeekChange={(offset) => {
-          setCurrentWeekOffset(offset);
-          loadScheduleForWeek(offset);
+        onWeekChange={async (offset) => {
+          // Calculate week dates
+          const today = new Date();
+          const currentDay = today.getDay();
+          let saturdayOfWeek = new Date(today);
+          
+          if (currentDay === 0) {
+            saturdayOfWeek.setDate(today.getDate() - 1);
+          } else if (currentDay === 6) {
+            // Already Saturday
+          } else {
+            saturdayOfWeek.setDate(today.getDate() - currentDay - 1);
+          }
+          
+          saturdayOfWeek.setDate(saturdayOfWeek.getDate() + (offset * 7));
+          const endOfWeek = new Date(saturdayOfWeek);
+          endOfWeek.setDate(saturdayOfWeek.getDate() + 6);
+          
+          const startDate = saturdayOfWeek.toLocaleDateString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          });
+          const endDate = endOfWeek.toLocaleDateString('en-US', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+          });
+          
+          // Show confirmation dialog
+          const confirmed = window.confirm(
+            `Generate auto schedule for week ${startDate} to ${endDate}?`
+          );
+          
+          if (confirmed) {
+            setCurrentWeekOffset(offset);
+            setIsLoading(true);
+            
+            try {
+              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/${offset}`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ showAllSlots })
+              });
+              
+              const data = await response.json();
+              
+              if (!response.ok) {
+                throw new Error(data.error || `HTTP error! status: ${response.status}`);
+              }
+              
+              if (data.success && data.assignments) {
+                setAssignedSchedule(data.assignments);
+              } else {
+                throw new Error(data.error || 'Invalid response format');
+              }
+            } catch (err) {
+              setError(err.message);
+              setAssignedSchedule([]);
+            } finally {
+              setIsLoading(false);
+            }
+          }
         }}
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -533,6 +694,8 @@ const SchedulePage = () => {
           onScheduleUpdate={setAssignedSchedule}
           onDeleteAppointment={handleDeleteAppointment}
           onWashTypeUpdate={handleWashTypeUpdate}
+          onCustomerFilter={handleCustomerFilter}
+          customerFilter={customerFilter}
           viewMode={viewMode}
           currentWeekOffset={currentWeekOffset}
         />

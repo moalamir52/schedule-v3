@@ -800,6 +800,60 @@ const OperationsPage = () => {
       </div>
       )}
 
+      {/* Actions Section */}
+      <div className="card" style={{ marginBottom: '2rem' }}>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.5rem'
+        }}>
+          <h2 style={{
+            color: 'var(--brand-primary)',
+            fontSize: '1.5rem',
+            fontWeight: '600',
+            margin: '0'
+          }}>
+            ⚡ Actions
+          </h2>
+        </div>
+
+        <div className="stats-grid">
+          <div className="stat-card" style={{ cursor: 'pointer' }}
+            onClick={() => window.location.href = '/audit-report'}
+          >
+            <div>
+              <h4 style={{
+                color: '#17a2b8',
+                fontSize: '1.2rem',
+                fontWeight: '600',
+                margin: '0 0 0.5rem 0'
+              }}>
+                📊 Audit Report
+              </h4>
+              <p style={{
+                color: '#6c757d',
+                fontSize: '0.9rem',
+                margin: '0'
+              }}>
+                View schedule changes and modifications
+              </p>
+            </div>
+            
+            <div style={{
+              backgroundColor: '#17a2b8',
+              color: 'white',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              fontSize: '0.9rem',
+              fontWeight: '600'
+            }}>
+              📈 View Report
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Additional Services Management Section */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{

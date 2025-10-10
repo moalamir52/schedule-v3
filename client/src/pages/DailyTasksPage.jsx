@@ -8,24 +8,40 @@ const DailyTasksPage = () => {
   const [editingTask, setEditingTask] = useState(null);
   const [workers, setWorkers] = useState([]);
   const [editValues, setEditValues] = useState({});
+  const [completingAll, setCompletingAll] = useState(false);
   const [selectedDay, setSelectedDay] = useState(() => {
     const today = new Date();
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return dayNames[today.getDay()];
+    const todayName = dayNames[today.getDay()];
+    // If today is Sunday (holiday), default to Monday
+    return todayName === 'Sunday' ? 'Monday' : todayName;
   });
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week, 1 = next week
   
-  const dayOptions = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   
   const getWeekDateRange = (offset) => {
     const today = new Date();
-    const currentDay = today.getDay();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - currentDay + (offset * 7));
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    
+    // Find the Monday of current work week (Monday is start of work week)
+    let mondayOfWeek = new Date(today);
+    if (currentDay === 0) { // Sunday - go to next Monday
+      mondayOfWeek.setDate(today.getDate() + 1);
+    } else if (currentDay === 1) { // Monday - start of work week
+      // Already Monday
+    } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
+      mondayOfWeek.setDate(today.getDate() - currentDay + 1);
+    }
+    
+    // Add week offset
+    mondayOfWeek.setDate(mondayOfWeek.getDate() + (offset * 7));
+    
+    const endOfWeek = new Date(mondayOfWeek);
+    endOfWeek.setDate(mondayOfWeek.getDate() + 5); // Saturday
+    
     return {
-      start: startOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      start: mondayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       end: endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     };
   };
@@ -138,6 +154,40 @@ const DailyTasksPage = () => {
         newSet.delete(task.id);
         return newSet;
       });
+    }
+  };
+
+  const completeAllTasks = async () => {
+    if (completingAll || tasks.length === 0) return;
+    
+    const confirmed = window.confirm(`Are you sure you want to complete all ${tasks.length} tasks? This action cannot be undone.`);
+    if (!confirmed) return;
+    
+    try {
+      setCompletingAll(true);
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/complete-all`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ tasks })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to complete all tasks');
+      }
+      
+      // Clear all tasks
+      setTasks([]);
+      alert(`Successfully completed ${data.completedCount} tasks!`);
+      
+    } catch (err) {
+      alert(`Error completing all tasks: ${err.message}`);
+    } finally {
+      setCompletingAll(false);
     }
   };
 
@@ -270,12 +320,43 @@ const DailyTasksPage = () => {
                   color: '#28a745',
                   fontSize: '14px',
                   fontWeight: '600',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  minWidth: '180px'
                 }}
               >
-                {dayOptions.map(day => (
-                  <option key={day} value={day}>{day}</option>
-                ))}
+                {dayOptions.map(day => {
+                  // Calculate date for this day
+                  const today = new Date();
+                  const currentDay = today.getDay();
+                  
+                  let mondayOfWeek = new Date(today);
+                  if (currentDay === 0) {
+                    mondayOfWeek.setDate(today.getDate() + 1);
+                  } else if (currentDay === 1) {
+                    // Already Monday
+                  } else {
+                    mondayOfWeek.setDate(today.getDate() - currentDay + 1);
+                  }
+                  
+                  mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
+                  
+                  const dayOffsets = {
+                    'Monday': 0, 'Tuesday': 1, 'Wednesday': 2,
+                    'Thursday': 3, 'Friday': 4, 'Saturday': 5
+                  };
+                  
+                  const dayDate = new Date(mondayOfWeek);
+                  dayDate.setDate(mondayOfWeek.getDate() + dayOffsets[day]);
+                  
+                  const dateStr = dayDate.toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                  });
+                  
+                  return (
+                    <option key={day} value={day}>{day} ({dateStr})</option>
+                  );
+                })}
               </select>
             </div>
             
@@ -291,10 +372,30 @@ const DailyTasksPage = () => {
             }}>
               📅 {(() => {
                 const today = new Date();
-                const currentDay = today.getDay();
-                const selectedDayIndex = dayOptions.indexOf(selectedDay);
-                const targetDate = new Date(today);
-                targetDate.setDate(today.getDate() - currentDay + selectedDayIndex + (weekOffset * 7));
+                const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+                
+                // Find the Monday of current work week
+                let mondayOfWeek = new Date(today);
+                if (currentDay === 0) { // Sunday - go to next Monday
+                  mondayOfWeek.setDate(today.getDate() + 1);
+                } else if (currentDay === 1) { // Monday - start of work week
+                  // Already Monday
+                } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
+                  mondayOfWeek.setDate(today.getDate() - currentDay + 1);
+                }
+                
+                // Add week offset
+                mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
+                
+                // Calculate target date based on selected day
+                const dayOffsets = {
+                  'Monday': 0, 'Tuesday': 1, 'Wednesday': 2,
+                  'Thursday': 3, 'Friday': 4, 'Saturday': 5
+                };
+                
+                const targetDate = new Date(mondayOfWeek);
+                targetDate.setDate(mondayOfWeek.getDate() + dayOffsets[selectedDay]);
+                
                 return targetDate.toLocaleDateString('en-US', { 
                   weekday: 'long', 
                   year: 'numeric', 
@@ -354,20 +455,38 @@ const DailyTasksPage = () => {
             <h2 style={{ color: '#495057', margin: 0 }}>
               Tasks to Complete ({tasks.length})
             </h2>
-            <button
-              onClick={loadTodayTasks}
-              style={{
-                background: '#17a2b8',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '6px',
-                border: 'none',
-                fontSize: '14px',
-                cursor: 'pointer'
-              }}
-            >
-              🔄 Refresh
-            </button>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={completeAllTasks}
+                disabled={completingAll || tasks.length === 0}
+                style={{
+                  background: completingAll ? '#6c757d' : '#dc3545',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: completingAll || tasks.length === 0 ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {completingAll ? '⏳ Completing All...' : '✅ Complete All Tasks'}
+              </button>
+              <button
+                onClick={loadTodayTasks}
+                style={{
+                  background: '#17a2b8',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '14px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Refresh
+              </button>
+            </div>
           </div>
 
           <div style={{

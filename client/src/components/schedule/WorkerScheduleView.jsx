@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import Modal from '../Modal';
 
-const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate }) => {
+const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate, onCustomerFilter, customerFilter, currentWeekOffset = 0 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
   const [showOverrideMenu, setShowOverrideMenu] = useState(null);
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
   const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
-  const days = ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
@@ -52,7 +53,21 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const handleOverrideClick = (e, appointment) => {
     e.stopPropagation();
     const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
-    setShowOverrideMenu(showOverrideMenu === taskId ? null : taskId);
+    
+    if (showOverrideMenu === taskId) {
+      setShowOverrideMenu(null);
+    } else {
+      const rect = e.target.getBoundingClientRect();
+      const menuWidth = 200; // تقريبي لعرض القائمة
+      
+      // لو القائمة هتطلع برة الشاشة، حطها على الشمال
+      const x = (rect.right + menuWidth > window.innerWidth) 
+        ? rect.left - menuWidth - 10 
+        : rect.right + 10;
+      
+      setMenuPosition({ x, y: rect.top });
+      setShowOverrideMenu(taskId);
+    }
   };
 
   const handleWashTypeChange = async (appointment, newWashType) => {
@@ -185,6 +200,11 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       setDraggedItem(null);
       return;
     }
+    
+    // If dragging to same day/time but different worker, it's a simple worker change
+    if (sourceDay === targetDay && sourceTime === targetTime && sourceWorkerId !== targetWorkerId) {
+      // This is just a worker change, not a slot swap
+    }
 
     // Find the dragged appointment
     const draggedAppointment = assignedSchedule.find(appointment => 
@@ -311,9 +331,49 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       <thead>
         <tr>
           <th rowSpan="2">Time</th>
-          {days.map(day => (
-            <th key={day} colSpan={workers.length}>{day}</th>
-          ))}
+          {days.map(day => {
+            // Calculate actual date for this day based on weekOffset (Saturday = start of work week)
+            const today = new Date();
+            const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            
+            // Find the Monday of current work week (Monday is start of work week)
+            let mondayOfWeek = new Date(today);
+            if (currentDay === 0) { // Sunday - go to next Monday
+              mondayOfWeek.setDate(today.getDate() + 1);
+            } else if (currentDay === 1) { // Monday - start of work week
+              // Already Monday
+            } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
+              mondayOfWeek.setDate(today.getDate() - currentDay + 1);
+            }
+            
+            // Add week offset
+            mondayOfWeek.setDate(mondayOfWeek.getDate() + (currentWeekOffset * 7));
+            
+            const dayOffsets = {
+              'Monday': 0,
+              'Tuesday': 1,
+              'Wednesday': 2, 
+              'Thursday': 3,
+              'Friday': 4,
+              'Saturday': 5
+            };
+            const targetDate = new Date(mondayOfWeek);
+            targetDate.setDate(mondayOfWeek.getDate() + dayOffsets[day]);
+            
+            const displayDate = targetDate.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit'
+            });
+            
+            return (
+              <th key={day} colSpan={workers.length}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{day}</div>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{displayDate}</div>
+                </div>
+              </th>
+            );
+          })}
         </tr>
         <tr>
           {days.map((day, dayIndex) => 
@@ -371,6 +431,15 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                 key={key}
                                 className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''}`}
                                 style={{ position: 'relative' }}
+                                onClick={(e) => {
+                                  // Only filter if not clicking on interactive elements
+                                  if (!e.target.closest('.customer-name, .wash-type, .delete-btn') && !showOverrideMenu) {
+                                    e.stopPropagation();
+                                    if (onCustomerFilter) {
+                                      onCustomerFilter(appointment.customerId);
+                                    }
+                                  }
+                                }}
                               >
                                 <div 
                                   className={`customer-name ${appointment.packageType && appointment.packageType.toLowerCase().includes('bi week') ? 'bi-week-badge' : ''}`}
@@ -407,98 +476,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                   {appointment.washType}
                                 </div>
                                 
-                                {/* Override Menu */}
-                                {showOverrideMenu === `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}` && (
-                                  <div style={{
-                                    position: 'fixed',
-                                    top: '50%',
-                                    left: '50%',
-                                    transform: 'translate(-50%, -50%)',
-                                    backgroundColor: 'white',
-                                    border: '2px solid #28a745',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 8px 25px rgba(0,0,0,0.3)',
-                                    zIndex: 10000,
-                                    minWidth: '200px'
-                                  }}>
-                                    <div style={{
-                                      padding: '12px 15px',
-                                      backgroundColor: '#f8f9fa',
-                                      borderBottom: '1px solid #eee',
-                                      fontSize: '16px',
-                                      fontWeight: 'bold',
-                                      color: '#28a745',
-                                      textAlign: 'center'
-                                    }}>
-                                      Change Wash Type
-                                    </div>
-                                    <button
-                                      style={{
-                                        display: 'block',
-                                        width: '100%',
-                                        padding: '15px 18px',
-                                        border: 'none',
-                                        backgroundColor: 'white',
-                                        cursor: 'pointer',
-                                        fontSize: '16px',
-                                        textAlign: 'center',
-                                        borderBottom: '1px solid #f0f0f0'
-                                      }}
-                                      onClick={() => handleWashTypeChange(appointment, 'EXT')}
-                                    >
-                                      🚗 EXT Only
-                                    </button>
-                                    <button
-                                      style={{
-                                        display: 'block',
-                                        width: '100%',
-                                        padding: '15px 18px',
-                                        border: 'none',
-                                        backgroundColor: 'white',
-                                        cursor: 'pointer',
-                                        fontSize: '16px',
-                                        textAlign: 'center',
-                                        borderBottom: '1px solid #f0f0f0'
-                                      }}
-                                      onClick={() => handleWashTypeChange(appointment, 'INT')}
-                                    >
-                                      🧽 EXT + INT
-                                    </button>
-                                    <button
-                                      style={{
-                                        display: 'block',
-                                        width: '100%',
-                                        padding: '15px 18px',
-                                        border: 'none',
-                                        backgroundColor: '#dc3545',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontSize: '16px',
-                                        textAlign: 'center',
-                                        borderBottom: '1px solid #c82333'
-                                      }}
-                                      onClick={() => handleCancelBooking(appointment)}
-                                    >
-                                      🗑️ Cancel Booking
-                                    </button>
-                                    <button
-                                      style={{
-                                        display: 'block',
-                                        width: '100%',
-                                        padding: '15px 18px',
-                                        border: 'none',
-                                        backgroundColor: '#6c757d',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        fontSize: '16px',
-                                        textAlign: 'center'
-                                      }}
-                                      onClick={() => setShowOverrideMenu(null)}
-                                    >
-                                      ❌ Close
-                                    </button>
-                                  </div>
-                                )}
+
                               </div>
                             );
                           })}
@@ -513,6 +491,103 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         ))}
       </tbody>
     </table>
+    
+    {/* Override Menu - Outside table */}
+    {showOverrideMenu && (() => {
+      const appointment = assignedSchedule.find(apt => 
+        `${apt.customerId}-${apt.day}-${apt.time}-${apt.carPlate}` === showOverrideMenu
+      );
+      return appointment ? (
+        <div style={{
+          position: 'fixed',
+          top: menuPosition.y,
+          left: menuPosition.x,
+          backgroundColor: 'white',
+          border: '2px solid #28a745',
+          borderRadius: '8px',
+          boxShadow: '0 8px 25px rgba(0,0,0,0.3)',
+          zIndex: 99999,
+          minWidth: '180px'
+        }}>
+          <div style={{
+            padding: '12px 15px',
+            backgroundColor: '#f8f9fa',
+            borderBottom: '1px solid #eee',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            color: '#28a745',
+            textAlign: 'center'
+          }}>
+            Change Wash Type
+          </div>
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '15px 18px',
+              border: 'none',
+              backgroundColor: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              textAlign: 'center',
+              borderBottom: '1px solid #f0f0f0'
+            }}
+            onClick={() => handleWashTypeChange(appointment, 'EXT')}
+          >
+            🚗 EXT Only
+          </button>
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '15px 18px',
+              border: 'none',
+              backgroundColor: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              textAlign: 'center',
+              borderBottom: '1px solid #f0f0f0'
+            }}
+            onClick={() => handleWashTypeChange(appointment, 'INT')}
+          >
+            🧽 EXT + INT
+          </button>
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '15px 18px',
+              border: 'none',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              textAlign: 'center',
+              borderBottom: '1px solid #c82333'
+            }}
+            onClick={() => handleCancelBooking(appointment)}
+          >
+            🗑️ Cancel Booking
+          </button>
+          <button
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '15px 18px',
+              border: 'none',
+              backgroundColor: '#6c757d',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              textAlign: 'center'
+            }}
+            onClick={() => setShowOverrideMenu(null)}
+          >
+            ❌ Close
+          </button>
+        </div>
+      ) : null;
+    })()}
     
     <Modal
       isOpen={modal.isOpen}
