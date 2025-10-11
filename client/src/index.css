@@ -2,6 +2,7 @@
 @import './styles/v2-theme.css';
 @import './styles/v2-components.css';
 @import './styles/v2-home.css';
+@import './styles/reports.css';
 
 * {
   box-sizing: border-box;

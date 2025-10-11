@@ -279,9 +279,9 @@ const OperationsReport = ({ onBack }) => {
           
           <div className="stats-grid">
             {operationsData.workers.map(worker => (
-              <div key={worker.id} className="card">
+              <div key={worker.id || worker.name} className="card">
                 <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>
-                  👷 {worker.name} - {worker.area}
+                  👷 {worker.name || 'Unknown'} - {worker.area || 'Unassigned'}
                 </h4>
                 
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
@@ -343,8 +343,8 @@ const OperationsReport = ({ onBack }) => {
             {/* Car Types */}
             <div className="card">
               <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>🚗 Car Types</h4>
-              {operationsData.efficiency.carTypes.map(({ type, count }) => (
-                <div key={type} style={{
+              {operationsData.efficiency.carTypes.map(({ type, count }, index) => (
+                <div key={`${type}-${index}`} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   padding: '0.5rem',

@@ -71,9 +71,11 @@ const Invoice = ({ invoiceData }) => {
       <br />
 
       <div style={styles.dateRefRow}>
-        <div style={styles.dateInfo}>
-          <p>Date: {formattedDate}</p>
-        </div>
+        {date && (
+          <div style={styles.dateInfo}>
+            <p>Date: {formattedDate}</p>
+          </div>
+        )}
         <div style={styles.refInfo}>
           <p>Ref: {ref}</p>
         </div>
@@ -123,7 +125,7 @@ const Invoice = ({ invoiceData }) => {
               {service.packageId !== 'One-Time Service' && (
                 <>
                   <strong>Start:</strong> {service.startDate}<br />
-                  <strong>End:</strong> {service.endDate}
+                  {service.endDate && <><strong>End:</strong> {service.endDate}</>}
                 </>
               )}
               {service.packageId === 'One-Time Service' && (
@@ -247,7 +249,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         addressLine1: clientData.villa || ''
       },
       service: {
-        subject: 'Car Wash',
+        subject: clientData.subject || clientData.serves || clientData.washmanPackage || 'Car Wash',
         packageId: clientData.washmanPackage,
         serves: clientData.serves || clientData.washmanPackage,
         vehicleType: clientData.typeOfCar || '',
@@ -267,12 +269,35 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   };
 
   const handleExportPDF = () => {
-    const fileName = `Invoice_${confirmedRef}_${clientData.villa.replace(/\s+/g, '_')}`;
+    const fileName = `Invoice_${confirmedRef}_${(clientData.villa || 'N_A').replace(/\s+/g, '_')}`;
     const originalTitle = document.title;
     document.title = fileName;
+    
+    // Add print-specific styles for better PDF output
+    const printStyles = document.createElement('style');
+    printStyles.innerHTML = `
+      @media print {
+        @page { 
+          size: A4; 
+          margin: 0.5in; 
+        }
+        body { 
+          -webkit-print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+        .letterhead-page {
+          page-break-inside: avoid !important;
+          break-inside: avoid !important;
+        }
+      }
+    `;
+    document.head.appendChild(printStyles);
+    
     window.print();
+    
     setTimeout(() => {
       document.title = originalTitle;
+      document.head.removeChild(printStyles);
     }, 1000);
   };
 
@@ -337,7 +362,10 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invoiceData)
+        body: JSON.stringify({
+          ...invoiceData,
+          subject: clientData.subject || clientData.serves || clientData.washmanPackage
+        })
       });
       
       if (!response.ok) {
@@ -542,7 +570,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
             🖨️ Print
           </button>
           <button onClick={handleExportPDF} style={styles.exportButton}>
-            📄 Export PDF
+            📄 Save as PDF
           </button>
           <button onClick={onClose} style={styles.closeButton}>
             ✕ Close

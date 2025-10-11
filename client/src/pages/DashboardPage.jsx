@@ -48,7 +48,7 @@ function DashboardPage() {
       icon: <FiBarChart2 />,
       color: '#6f42c1',
       bgColor: '#e2d9f3',
-      link: '#'
+      link: '/reports'
     },
     {
       id: 'operations',

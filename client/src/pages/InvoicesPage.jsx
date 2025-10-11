@@ -237,7 +237,27 @@ const InvoicesPage = () => {
     });
   };
 
-  const handleReprintInvoice = (invoice) => {
+  const handleReprintInvoice = async (invoice) => {
+    try {
+      // Reload invoice data from server to get latest updates
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/all`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success) {
+          // Find the updated invoice
+          const updatedInvoice = data.invoices.find(inv => 
+            inv.InvoiceID === invoice.InvoiceID || inv.Ref === invoice.Ref
+          );
+          
+          if (updatedInvoice) {
+            invoice = updatedInvoice; // Use updated data
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to reload invoice data:', error);
+    }
+    
     // Build serviceDate from Start and End columns
     let serviceDate = null;
     if (invoice.Start && invoice.End) {
@@ -266,6 +286,7 @@ const InvoicesPage = () => {
       serviceDate: serviceDate,
       customerID: invoice.CustomerID,
       existingRef: invoice.Ref || invoice.InvoiceID,
+      subject: invoice.Subject || invoice.Services || '',
       isReprint: true
     };
     
@@ -1049,11 +1070,12 @@ const InvoicesPage = () => {
                             const enrichedInvoice = {
                               ...invoice,
                               Phone: customerData?.Phone || invoice.Phone || '',
-                              ServiceDescription: customerData?.Washman_Package || invoice.ServiceDescription || '',
+                              ServiceDescription: customerData?.Washman_Package || invoice.PackageID || '',
                               Services: customerData?.Serves || invoice.Services || '',
-                              VehicleType: customerData?.CarPlates || invoice.VehicleType || '',
+                              VehicleType: customerData?.CarPlates || invoice.Vehicle || '',
                               NumberOfCars: customerData?.CarPlates ? customerData.CarPlates.split(',').length : 1,
-                              Payment: customerData?.Payment || invoice.Payment || ''
+                              Payment: customerData?.Payment || invoice.Payment || '',
+                              SubTotal: invoice.SubTotal || ''
                             };
                             setEditingInvoice(enrichedInvoice);
                           }}
@@ -1629,6 +1651,34 @@ const InvoicesPage = () => {
               </button>
             </div>
 
+            {/* Original Data Display */}
+            <div style={{
+              backgroundColor: '#e7f3ff',
+              padding: '15px',
+              borderRadius: '8px',
+              border: '1px solid #b3d9ff',
+              marginBottom: '20px'
+            }}>
+              <h4 style={{ color: '#0066cc', margin: '0 0 10px 0' }}>📋 Original Invoice Data</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '14px' }}>
+                <div><strong>Name:</strong> {editingInvoice.CustomerName}</div>
+                <div><strong>Villa:</strong> {editingInvoice.Villa}</div>
+                <div><strong>Amount:</strong> AED {editingInvoice.TotalAmount}</div>
+                <div><strong>Package:</strong> {(() => {
+                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
+                  return customerData?.Washman_Package || editingInvoice.PackageID || 'N/A';
+                })()}</div>
+                <div><strong>Services:</strong> {(() => {
+                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
+                  return customerData?.Serves || editingInvoice.Services || 'N/A';
+                })()}</div>
+                <div><strong>Vehicle:</strong> {(() => {
+                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
+                  return customerData?.CarPlates || editingInvoice.Vehicle || 'N/A';
+                })()}</div>
+              </div>
+            </div>
+
             <div style={{ display: 'grid', gap: '15px' }}>
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Client Name *</label>
@@ -1674,6 +1724,22 @@ const InvoicesPage = () => {
                     }}
                   />
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>SUB (Subject)</label>
+                <input
+                  type="text"
+                  value={editingInvoice.Subject || editingInvoice.Services || ''}
+                  onChange={(e) => setEditingInvoice({...editingInvoice, Subject: e.target.value})}
+                  placeholder="e.g., Car Wash, Interior Cleaning"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd'
+                  }}
+                />
               </div>
 
               <div>
@@ -1758,7 +1824,7 @@ const InvoicesPage = () => {
                 />
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Status</label>
                   <select
@@ -1800,6 +1866,9 @@ const InvoicesPage = () => {
                     <option value="Bank">🏦 Bank Transfer</option>
                   </select>
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Payment</label>
                   <input
@@ -1807,6 +1876,23 @@ const InvoicesPage = () => {
                     value={editingInvoice.Payment || ''}
                     onChange={(e) => setEditingInvoice({...editingInvoice, Payment: e.target.value})}
                     placeholder="paid or amount (e.g., 200)"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Sub Total</label>
+                  <input
+                    type="number"
+                    value={editingInvoice.SubTotal || ''}
+                    onChange={(e) => setEditingInvoice({...editingInvoice, SubTotal: e.target.value})}
+                    placeholder="Sub total amount"
+                    min="0"
+                    step="0.01"
                     style={{
                       width: '100%',
                       padding: '8px 12px',
@@ -1871,7 +1957,14 @@ const InvoicesPage = () => {
                           totalAmount: editingInvoice.TotalAmount,
                           status: editingInvoice.Status,
                           paymentMethod: editingInvoice.Status === 'Pending' ? '' : editingInvoice.PaymentMethod,
-                          notes: editingInvoice.Notes
+                          notes: editingInvoice.Notes,
+                          subTotal: editingInvoice.SubTotal,
+                          services: editingInvoice.Services,
+                          vehicleType: editingInvoice.VehicleType,
+                          serviceDescription: editingInvoice.ServiceDescription,
+                          phone: editingInvoice.Phone,
+                          payment: editingInvoice.Payment,
+                          subject: editingInvoice.Subject
                         })
                       });
                       
@@ -1887,7 +1980,10 @@ const InvoicesPage = () => {
                           serves: editingInvoice.Services || '',
                           payment: editingInvoice.PaymentMethod === 'Cash' ? 'yes/cash' : editingInvoice.PaymentMethod === 'Bank' ? 'yes/bank' : 'pending',
                           customerID: editingInvoice.CustomerID,
-                          existingRef: editingInvoice.Ref || editingInvoice.InvoiceID
+                          existingRef: editingInvoice.Ref || editingInvoice.InvoiceID,
+                          subTotal: editingInvoice.SubTotal,
+                          subject: editingInvoice.Subject,
+                          isEdit: true
                         };
                         
                         setSelectedClientForInvoice(clientDataForPrint);

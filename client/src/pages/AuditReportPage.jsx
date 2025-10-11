@@ -84,18 +84,19 @@ const AuditReportPage = () => {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <button
-          onClick={() => window.location.href = '/'}
-          style={{
-            background: '#28a745',
-            color: 'white',
-            padding: '10px 12px',
-            borderRadius: '8px',
-            border: 'none',
-            fontSize: '16px',
-            cursor: 'pointer'
+          onClick={() => {
+            // Check if we're inside ReportsPage context
+            if (window.location.pathname === '/reports') {
+              // We're in ReportsPage, go back to overview
+              window.history.back();
+            } else {
+              // We're in standalone mode, go to reports
+              window.location.href = '/reports';
+            }
           }}
+          className="btn-back"
         >
-          ←
+          ← Back to Reports
         </button>
         
         <h1 style={{

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FiHome, FiUsers, FiCalendar, FiMenu, FiX, FiCode, FiCheckSquare, FiLogOut, FiSettings } from 'react-icons/fi';
+import { FiHome, FiUsers, FiCalendar, FiMenu, FiX, FiCode, FiCheckSquare, FiLogOut, FiSettings, FiBarChart2 } from 'react-icons/fi';
 import authService from '../../services/authService.js';
 
 function Sidebar({ user, onLogout }) {
@@ -240,6 +240,16 @@ function Sidebar({ user, onLogout }) {
           >
             <FiSettings style={iconStyle} />
             Operations
+          </Link>
+          
+          <Link 
+            to="/reports" 
+            style={linkStyle}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#28a745'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <FiBarChart2 style={iconStyle} />
+            Reports & Analytics
           </Link>
           
           <div

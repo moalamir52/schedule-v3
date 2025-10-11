@@ -407,14 +407,40 @@ async function addInvoiceRecord(invoiceData) {
         );
     }
     
-    const invoiceId = invoiceData.InvoiceID || `INV-${Date.now()}`;
+    // Generate unique Invoice ID
+    let invoiceId = invoiceData.InvoiceID;
+    if (!invoiceId) {
+        const rows = await sheet.getRows();
+        let isUnique = false;
+        let counter = 0;
+        
+        while (!isUnique) {
+            const timestamp = Date.now() + counter;
+            invoiceId = `INV-${timestamp}`;
+            
+            // Check if this ID already exists
+            const exists = rows.find(row => row.get('InvoiceID') === invoiceId);
+            
+            if (!exists) {
+                isUnique = true;
+            } else {
+                counter++;
+            }
+            
+            // Safety check
+            if (counter > 1000) {
+                throw new Error('Unable to generate unique invoice ID');
+            }
+        }
+    }
     
     await sheet.addRow({
         InvoiceID: invoiceId,
-        Ref: refNumber, // حفظ رقم GLOGO في عمود Ref
+        Ref: refNumber,
         CustomerID: invoiceData.CustomerID,
         CustomerName: invoiceData.CustomerName,
         Villa: invoiceData.Villa,
+        InvoiceDate: invoiceData.InvoiceDate || new Date().toISOString().split('T')[0],
         DueDate: invoiceData.DueDate,
         TotalAmount: invoiceData.TotalAmount,
         Status: invoiceData.Status,
@@ -426,7 +452,11 @@ async function addInvoiceRecord(invoiceData) {
         Services: invoiceData.Services,
         Notes: invoiceData.Notes,
         CreatedBy: invoiceData.CreatedBy,
-        CreatedAt: invoiceData.CreatedAt
+        CreatedAt: invoiceData.CreatedAt,
+        SubTotal: invoiceData.SubTotal || '',
+        Phone: invoiceData.Phone || '',
+        Payment: invoiceData.Payment || '',
+        Subject: invoiceData.Subject || invoiceData.Services || ''
     });
     
 
@@ -640,16 +670,19 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const monthKey = `${year}${month}`;
     
-    // Check if customer already has invoice this month
     const rows = await sheet.getRows();
-    const existingInvoice = rows.find(row => 
-        row.get('CustomerID') === customerID && 
-        row.get('Ref') && 
-        row.get('Ref').includes(monthKey)
-    );
     
-    if (existingInvoice) {
-        return existingInvoice.get('Ref');
+    // For regular customers, check if they already have invoice this month
+    if (customerID && customerID !== 'ONE_TIME') {
+        const existingInvoice = rows.find(row => 
+            row.get('CustomerID') === customerID && 
+            row.get('Ref') && 
+            row.get('Ref').includes(monthKey)
+        );
+        
+        if (existingInvoice) {
+            return existingInvoice.get('Ref');
+        }
     }
     
     // Get highest number for this month from both active and deleted invoices
@@ -680,16 +713,28 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
     const activeRefs = monthInvoices.map(row => row.get('Ref')).filter(ref => ref);
     const allRefs = [...activeRefs, ...deletedInvoices];
     
+    // Find next available number (ensuring uniqueness)
     let nextNumber = 1;
-    if (allRefs.length > 0) {
-        const numbers = allRefs.map(ref => {
-            const match = ref.match(/GLOGO-\d{4}(\d{3})/);
-            return match ? parseInt(match[1]) : 0;
-        });
-        nextNumber = Math.max(...numbers) + 1;
-    }
+    let invoiceNumber;
+    let isUnique = false;
     
-    const invoiceNumber = `GLOGO-${monthKey}${nextNumber.toString().padStart(3, '0')}`;
+    while (!isUnique) {
+        invoiceNumber = `GLOGO-${monthKey}${nextNumber.toString().padStart(3, '0')}`;
+        
+        // Check if this number already exists in active or deleted invoices
+        const exists = allRefs.includes(invoiceNumber);
+        
+        if (!exists) {
+            isUnique = true;
+        } else {
+            nextNumber++;
+        }
+        
+        // Safety check to prevent infinite loop
+        if (nextNumber > 999) {
+            throw new Error('Maximum invoice numbers reached for this month');
+        }
+    }
     
     return invoiceNumber;
 }

@@ -18,7 +18,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   React.useEffect(() => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/get-schedule`);
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
         if (response.ok) {
           const data = await response.json();
           if (data.success && data.assignments) {

@@ -16,7 +16,8 @@ const createInvoice = async (req, res) => {
       customerID,
       totalAmount,
       dueDate,
-      notes
+      notes,
+      subject
     } = req.body;
 
     const isRegularInvoice = customerID && customerID !== 'ONE_TIME';
@@ -92,13 +93,13 @@ const createInvoice = async (req, res) => {
     }
     
     const invoiceData = {
-      invoiceId: ref || (isRegularInvoice ? `REG-${Date.now()}` : `OT-${Date.now()}`),
+      invoiceId: null, // سيتم إنشاؤه في addInvoiceRecord
       customerName: isRegularInvoice ? (customerData?.Name || customerData?.name || 'Unknown Customer') : (clientName || 'Walk-in Customer'),
       villa: isRegularInvoice ? (customerData?.Villa || customerData?.villa || 'N/A') : (villa || 'N/A'),
       phone: isRegularInvoice ? (customerData?.Phone || customerData?.phone || 'N/A') : (phone || 'N/A'),
       packageId: isRegularInvoice ? (customerData?.['Washman Package'] || customerData?.Washman_Package || 'Standard Package') : (packageId || 'One-Time Service'),
       vehicleType: isRegularInvoice ? (customerData?.['Car Type'] || customerData?.CarPlates || customerData?.CarType || 'N/A') : (vehicleType || 'N/A'),
-      services: isRegularInvoice ? (customerData?.Serves || customerData?.serves || 'Car wash service') : (serves || 'Car wash service'),
+      services: isRegularInvoice ? (customerData?.Serves || customerData?.serves || '') : (serves || ''),
       totalAmount: isRegularInvoice ? (totalAmount || customerData?.Fee || customerData?.fee) : amount,
       status: isRegularInvoice ? (paymentStatus === 'PAID' ? 'Paid' : 'Pending') : (paymentStatus === 'yes/cash' || paymentStatus === 'yes/bank' ? 'Paid' : 'Pending'),
       paymentMethod: isRegularInvoice ? (paymentStatus === 'PAID' ? (req.body.paymentMethod || 'Cash') : '') : (paymentStatus === 'yes/cash' ? 'Cash' : paymentStatus === 'yes/bank' ? 'Bank' : ''),
@@ -111,7 +112,7 @@ const createInvoice = async (req, res) => {
     console.log('Final invoice data:', invoiceData);
 
     const glogoRef = await addInvoiceRecord({
-      InvoiceID: invoiceData.invoiceId,
+      InvoiceID: null, // سيتم إنشاؤه تلقائياً
       Ref: ref,
       CustomerID: isRegularInvoice ? customerID : 'ONE_TIME',
       CustomerName: invoiceData.customerName,
@@ -126,7 +127,8 @@ const createInvoice = async (req, res) => {
       Vehicle: invoiceData.vehicleType,
       PackageID: invoiceData.packageId,
       Notes: isRegularInvoice ? (notes || `Service Period: ${invoiceData.serviceDate}`) : `Phone: ${invoiceData.phone}, Vehicle: ${invoiceData.vehicleType}, Services: ${invoiceData.services}`,
-      Services: invoiceData.services,
+      Services: invoiceData.services || '',
+      Subject: subject || invoiceData.services || '',
       CreatedBy: 'System',
       CreatedAt: invoiceData.createdAt
     });
@@ -161,7 +163,22 @@ const getAllInvoices = async (req, res) => {
 const updateInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, paymentMethod, customerName, villa, totalAmount, dueDate } = req.body;
+    const { 
+      status, 
+      paymentMethod, 
+      customerName, 
+      villa, 
+      totalAmount, 
+      dueDate,
+      subTotal,
+      services,
+      vehicleType,
+      serviceDescription,
+      phone,
+      payment,
+      notes,
+      subject
+    } = req.body;
     
     if (status && !customerName) {
       await updateInvoiceStatus(id, status, paymentMethod);
@@ -173,7 +190,15 @@ const updateInvoice = async (req, res) => {
         TotalAmount: totalAmount,
         DueDate: dueDate,
         Status: status,
-        PaymentMethod: status === 'Pending' ? '' : paymentMethod
+        PaymentMethod: status === 'Pending' ? '' : paymentMethod,
+        SubTotal: subTotal,
+        Services: services,
+        Vehicle: vehicleType,
+        PackageID: serviceDescription,
+        Phone: phone,
+        Payment: payment,
+        Notes: notes,
+        Subject: subject
       });
     }
     
