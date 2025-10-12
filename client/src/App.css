@@ -167,6 +167,47 @@
   font-weight: bold;
 }
 
+/* Booked Customer Styles */
+.booked-customer {
+  background-color: #fff3cd !important;
+  border: 2px dashed #ffc107 !important;
+  position: relative;
+  opacity: 0.85;
+}
+
+.booked-customer::after {
+  content: "BOOKED";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  background-color: #ffc107;
+  color: #212529;
+  font-size: 8px;
+  font-weight: bold;
+  padding: 1px 3px;
+  border-radius: 0 4px 0 4px;
+  line-height: 1;
+  z-index: 10;
+}
+
+.booked-indicator {
+  margin-right: 2px;
+  font-size: 10px;
+  color: #ffc107;
+  font-weight: bold;
+}
+
+/* Booked appointment item styling */
+.appointment-item .booked-customer {
+  background-color: #fff3cd !important;
+  border: 2px dashed #ffc107 !important;
+}
+
+.appointment-item .booked-customer:hover {
+  background-color: #ffeaa7 !important;
+  border-color: #f39c12 !important;
+}
+
 /* Appointment Card Styles */
 .appointment-item {
   background-color: #FFE5B4; /* مشمشي للإكستيريار */
@@ -180,6 +221,7 @@
   height: 80px;
   overflow: hidden;
   box-sizing: border-box;
+  position: relative;
 }
 
 .appointment-item.int-type {

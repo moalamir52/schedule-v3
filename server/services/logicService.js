@@ -5,7 +5,10 @@ async function buildWeeklySchedule(weekOffset = 0) {
   const allCustomers = await getCustomers();
   const allHistory = await getAllHistory();
   
-  const activeCustomers = allCustomers.filter(customer => customer.Status === 'Active');
+  // Include both Active and Booked customers
+  const activeCustomers = allCustomers.filter(customer => 
+    customer.Status === 'Active' || customer.Status === 'Booked'
+  );
   const schedule = [];
   
   for (const customer of activeCustomers) {
@@ -38,6 +41,7 @@ async function buildWeeklySchedule(weekOffset = 0) {
           washDay: wash.washDay,
           washTime: wash.washTime,
           washType: wash.washType,
+          customerStatus: customer.Status, // Add customer status
           scheduleDate: new Date().toISOString().split('T')[0]
         });
       });
@@ -113,11 +117,8 @@ function generateWashDays(frequency, startDay) {
 function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlate, history, washDay, allHistory, intCarForThisCycle) {
   const packageName = packageInfo.packageStr || '';
   
-  console.log(`[WASH-TYPE] ${currentCarPlate} - Package: ${packageName} - Visit: ${visitIndex + 1}`);
-  
   // Rule 1: 'Ext Only' packages are always EXT
   if (!packageInfo.hasInt) {
-    console.log(`[EXT-ONLY] ${currentCarPlate}: EXT (Ext Only package)`);
     return 'EXT';
   }
   
@@ -128,15 +129,10 @@ function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlat
     if (packageName.toLowerCase().includes('2 ext 1 int')) {
       // 2 EXT 1 INT: EXT, INT, EXT
       washType = (visitIndex === 1) ? 'INT' : 'EXT';
-      console.log(`[2EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
     }
     else if (packageName.toLowerCase().includes('3 ext 1 int')) {
       // 3 EXT 1 INT: EXT, INT, EXT, EXT
       washType = (visitIndex === 1) ? 'INT' : 'EXT';
-      console.log(`[3EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
-    }
-    else {
-      console.log(`[DEFAULT] ${currentCarPlate} - Visit ${visitIndex + 1}: EXT (Unknown package)`);
     }
   } else {
     // Rule 3: Multi-car customers - alternate INT between cars per visit
@@ -160,16 +156,12 @@ function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlat
       // Default multi-car logic
       washType = (currentCarPlate === intCarForThisCycle) ? 'INT' : 'EXT';
     }
-    
-    console.log(`[MULTI-CAR] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType} (INT car: ${intCarForThisCycle})`);
   }
   
   // Rule 4: For bi-week packages, INT only applies on first week of cycle
   if (packageInfo.isBiWeek && washType === 'INT') {
     const isFirstWeekOfCycle = checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, packageInfo.weekOffset || 0);
-    console.log(`[BI-WEEK] ${currentCarPlate}: washType was ${washType}, isFirstWeek: ${isFirstWeekOfCycle}`);
     if (!isFirstWeekOfCycle) {
-      console.log(`[BI-WEEK] ${currentCarPlate}: Converting INT to EXT (second week)`);
       return 'EXT';
     }
   }
@@ -203,7 +195,6 @@ function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0)
   if (customerHistory.length === 0) {
     // No history: week 0 = first week, week 1 = second week, week 2 = first week again
     const isFirstWeek = (weekOffset % 2) === 0;
-    console.log(`[BI-WEEK] No history - Week ${weekOffset}: ${isFirstWeek ? 'First week (INT)' : 'Second week (EXT)'}`);
     return isFirstWeek;
   }
   
@@ -228,14 +219,10 @@ function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0)
   const targetDate = new Date(currentDate.getTime() + (weekOffset * 7 * 24 * 60 * 60 * 1000));
   const daysDiff = Math.floor((targetDate - lastWashDate) / (1000 * 60 * 60 * 1000));
   
-  console.log(`[BI-WEEK] Last wash: ${lastWashDate.toDateString()}, Target date: ${targetDate.toDateString()}, Days diff: ${daysDiff}`);
-  
   // Bi-weekly cycle: 14 days = 2 weeks
   // Calculate which week of the bi-weekly cycle we're in
   const weeksSinceLastWash = Math.floor(daysDiff / 7);
   const isFirstWeek = (weeksSinceLastWash % 2) === 0;
-  
-  console.log(`[BI-WEEK] Weeks since last wash: ${weeksSinceLastWash}, Is first week (INT time): ${isFirstWeek}`);
   
   return isFirstWeek;
 }
@@ -300,8 +287,6 @@ function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex = 0, we
   
   // Alternate based on visit number
   const intCarIndex = (baseCarIndex + visitIndex) % sortedPlates.length;
-  
-  console.log(`[MULTI-CAR] Week ${weekOffset}, Visit ${visitIndex + 1}: Base car index: ${baseCarIndex}, INT car: ${sortedPlates[intCarIndex]}`);
   
   return sortedPlates[intCarIndex];
 }
