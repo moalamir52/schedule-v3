@@ -244,15 +244,15 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       return;
     }
 
-    // Find the dragged appointment
-    const draggedAppointment = assignedSchedule.find(appointment => 
+    // Find ALL appointments for this customer at the source slot
+    const customerAppointments = assignedSchedule.filter(appointment => 
       appointment.customerId === customerId && 
       appointment.day === sourceDay && 
       appointment.time === sourceTime && 
       appointment.workerId === sourceWorkerId
     );
 
-    if (!draggedAppointment) {
+    if (customerAppointments.length === 0) {
       setDraggedItem(null);
       return;
     }
@@ -264,16 +264,15 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       appointment.time === targetTime
     );
 
-    const taskId = `${customerId}-${sourceDay}-${sourceTime}-${draggedAppointment.carPlate}`;
     const targetWorkerName = workers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
     
     // Update UI immediately for better UX
     let updatedSchedule;
     
     if (existingAppointments.length > 0) {
-      // Handle swap
+      // Handle swap - move ALL customer cars and ALL existing appointments
       updatedSchedule = assignedSchedule.map(appointment => {
-        // Move dragged appointment to target
+        // Move ALL customer appointments to target
         if (appointment.customerId === customerId && 
             appointment.day === sourceDay && 
             appointment.time === sourceTime && 
@@ -304,7 +303,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         return appointment;
       });
     } else {
-      // Handle simple move
+      // Handle simple move - move ALL customer appointments
       updatedSchedule = assignedSchedule.map(appointment => {
         if (appointment.customerId === customerId && 
             appointment.day === sourceDay && 
@@ -329,35 +328,39 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     
     setDraggedItem(null);
 
-    // Send update to server in background
+    // Send update to server for ALL customer appointments
     try {
-      let requestBody = { 
-        taskId, 
-        newWorkerName: targetWorkerName,
-        sourceDay,
-        sourceTime,
-        targetDay,
-        targetTime
-      };
-      
-      // If there are existing appointments, we're doing a slot swap
-      if (existingAppointments.length > 0) {
-        requestBody.isSlotSwap = true;
-      }
-      
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
-          'X-User-Name': localStorage.getItem('userName') || 'Web User'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update task assignment');
+      for (const appointment of customerAppointments) {
+        const taskId = `${customerId}-${sourceDay}-${sourceTime}-${appointment.carPlate}`;
+        
+        let requestBody = { 
+          taskId, 
+          newWorkerName: targetWorkerName,
+          sourceDay,
+          sourceTime,
+          targetDay,
+          targetTime
+        };
+        
+        // If there are existing appointments, we're doing a slot swap
+        if (existingAppointments.length > 0) {
+          requestBody.isSlotSwap = true;
+        }
+        
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+            'X-User-Name': localStorage.getItem('userName') || 'Web User'
+          },
+          body: JSON.stringify(requestBody)
+        });
+        
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Failed to update task assignment');
+        }
       }
       
       // Mark update time for sync
