@@ -1,9 +1,34 @@
 const { getCustomers, getAllHistory } = require('./googleSheetsService');
 
+// Cache for frequently used data
+let dataCache = {
+  customers: null,
+  history: null,
+  lastUpdate: 0,
+  packageCache: new Map(),
+  dateCache: new Map()
+};
+
+const CACHE_DURATION = 30000; // 30 seconds
+
 async function buildWeeklySchedule(weekOffset = 0) {
-  // Get all data in just two API calls
-  const allCustomers = await getCustomers();
-  const allHistory = await getAllHistory();
+  // Use cached data if available and fresh
+  const now = Date.now();
+  let allCustomers, allHistory;
+  
+  if (dataCache.customers && dataCache.history && (now - dataCache.lastUpdate) < CACHE_DURATION) {
+    allCustomers = dataCache.customers;
+    allHistory = dataCache.history;
+  } else {
+    // Fetch fresh data
+    allCustomers = await getCustomers();
+    allHistory = await getAllHistory();
+    
+    // Update cache
+    dataCache.customers = allCustomers;
+    dataCache.history = allHistory;
+    dataCache.lastUpdate = now;
+  }
   
   // Include both Active and Booked customers
   const activeCustomers = allCustomers.filter(customer => 
@@ -11,44 +36,63 @@ async function buildWeeklySchedule(weekOffset = 0) {
   );
   const schedule = [];
   
-  for (const customer of activeCustomers) {
-    // Safety check for invalid package name
-    if (!customer.Washman_Package || customer.Washman_Package.trim() === '') {
-      console.warn(`Skipping customer '${customer.Name}' due to invalid package name.`);
-      continue;
-    }
+  // Process customers in batches for better performance
+  const BATCH_SIZE = 20;
+  const batches = [];
+  
+  for (let i = 0; i < activeCustomers.length; i += BATCH_SIZE) {
+    batches.push(activeCustomers.slice(i, i + BATCH_SIZE));
+  }
+  
+  for (const batch of batches) {
+    const batchPromises = batch.map(customer => processCustomer(customer, allHistory, weekOffset));
+    const batchResults = await Promise.all(batchPromises);
     
-    // Parse car plates into array
-    const carPlates = customer.CarPlates.split(',').map(plate => plate.trim());
-    
-
-    
-    for (const carPlate of carPlates) {
-      // Filter history locally instead of API call
-      const history = allHistory
-        .filter(record => record.CarPlate === carPlate)
-        .sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
-      
-      // Determine wash schedule based on package
-      const washSchedule = calculateWashSchedule(customer, carPlate, carPlates, history, allHistory, weekOffset);
-      
-      // Add to schedule array
-      washSchedule.forEach(wash => {
-        schedule.push({
-          customerName: customer.CustomerName,
-          villa: customer.Villa,
-          carPlate: wash.carPlate,
-          washDay: wash.washDay,
-          washTime: wash.washTime,
-          washType: wash.washType,
-          customerStatus: customer.Status, // Add customer status
-          scheduleDate: new Date().toISOString().split('T')[0]
-        });
-      });
-    }
+    batchResults.forEach(customerSchedule => {
+      if (customerSchedule) {
+        schedule.push(...customerSchedule);
+      }
+    });
   }
   
   return schedule;
+}
+
+function processCustomer(customer, allHistory, weekOffset) {
+  // Safety check for invalid package name
+  if (!customer.Washman_Package || customer.Washman_Package.trim() === '') {
+    return null;
+  }
+  
+  // Parse car plates into array
+  const carPlates = customer.CarPlates.split(',').map(plate => plate.trim());
+  const customerSchedule = [];
+  
+  for (const carPlate of carPlates) {
+    // Filter history locally instead of API call
+    const history = allHistory
+      .filter(record => record.CarPlate === carPlate)
+      .sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
+    
+    // Determine wash schedule based on package
+    const washSchedule = calculateWashSchedule(customer, carPlate, carPlates, history, allHistory, weekOffset);
+    
+    // Add to schedule array
+    washSchedule.forEach(wash => {
+      customerSchedule.push({
+        customerName: customer.CustomerName,
+        villa: customer.Villa,
+        carPlate: wash.carPlate,
+        washDay: wash.washDay,
+        washTime: wash.washTime,
+        washType: wash.washType,
+        customerStatus: customer.Status,
+        scheduleDate: new Date().toISOString().split('T')[0]
+      });
+    });
+  }
+  
+  return customerSchedule;
 }
 
 function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHistory, weekOffset = 0) {
@@ -92,12 +136,20 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
 }
 
 function parsePackage(packageStr) {
+  // Use cache for package parsing
+  if (dataCache.packageCache.has(packageStr)) {
+    return dataCache.packageCache.get(packageStr);
+  }
+  
   const parts = packageStr.split(' ');
   const frequency = parseInt(parts[0]);
   const hasInt = packageStr.includes('INT');
   const isBiWeek = packageStr.includes('bi week');
   
-  return { frequency, hasInt, isBiWeek, packageStr };
+  const result = { frequency, hasInt, isBiWeek, packageStr };
+  dataCache.packageCache.set(packageStr, result);
+  
+  return result;
 }
 
 function generateWashDays(frequency, startDay) {
@@ -170,35 +222,42 @@ function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlat
 }
 
 function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0) {
-  // Get all wash history for this customer's cars
   const customerHistory = allHistory.filter(record => 
     allCarPlates.includes(record.CarPlate)
   ).sort((a, b) => {
-    // Parse dates in DD-MMM-YYYY format (e.g., 8-Oct-2025)
     const parseCustomDate = (dateStr) => {
       if (!dateStr) return new Date(0);
+      
+      if (dataCache.dateCache.has(dateStr)) {
+        return dataCache.dateCache.get(dateStr);
+      }
+      
       const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
                      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
       const parts = dateStr.split('-');
+      let result;
+      
       if (parts.length === 3) {
         const day = parseInt(parts[0]);
         const month = months[parts[1]];
         const year = parseInt(parts[2]);
-        return new Date(year, month, day);
+        result = new Date(year, month, day);
+      } else {
+        result = new Date(dateStr);
       }
-      return new Date(dateStr); // Fallback to default parsing
+      
+      dataCache.dateCache.set(dateStr, result);
+      return result;
     };
     
     return parseCustomDate(b.WashDate) - parseCustomDate(a.WashDate);
   });
   
   if (customerHistory.length === 0) {
-    // No history: week 0 = first week, week 1 = second week, week 2 = first week again
     const isFirstWeek = (weekOffset % 2) === 0;
     return isFirstWeek;
   }
   
-  // Parse the custom date format
   const parseCustomDate = (dateStr) => {
     if (!dateStr) return new Date(0);
     const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
@@ -210,17 +269,14 @@ function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0)
       const year = parseInt(parts[2]);
       return new Date(year, month, day);
     }
-    return new Date(dateStr); // Fallback to default parsing
+    return new Date(dateStr);
   };
   
   const lastWashDate = parseCustomDate(customerHistory[0].WashDate);
   const currentDate = new Date();
-  // Add weekOffset to current date for future/past weeks
   const targetDate = new Date(currentDate.getTime() + (weekOffset * 7 * 24 * 60 * 60 * 1000));
   const daysDiff = Math.floor((targetDate - lastWashDate) / (1000 * 60 * 60 * 1000));
   
-  // Bi-weekly cycle: 14 days = 2 weeks
-  // Calculate which week of the bi-weekly cycle we're in
   const weeksSinceLastWash = Math.floor(daysDiff / 7);
   const isFirstWeek = (weeksSinceLastWash % 2) === 0;
   
@@ -291,9 +347,19 @@ function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex = 0, we
   return sortedPlates[intCarIndex];
 }
 
+// Function to clear cache when needed
+function clearCache() {
+  dataCache.customers = null;
+  dataCache.history = null;
+  dataCache.lastUpdate = 0;
+  dataCache.packageCache.clear();
+  dataCache.dateCache.clear();
+}
+
 module.exports = {
   buildWeeklySchedule,
   determineIntCarForCustomer,
-  checkIfFirstWeekOfBiWeekCycle
+  checkIfFirstWeekOfBiWeekCycle,
+  clearCache
 };
 

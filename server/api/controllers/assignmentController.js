@@ -6,8 +6,6 @@ const autoAssignSchedule = async (req, res) => {
   const showAllSlots = req.body.showAllSlots === true;
   
   const today = new Date();
-  console.log(`\n🚀 [SCHEDULE DEBUG] Starting schedule generation for weekOffset: ${weekOffset}`);
-  console.log(`[DEBUG] showAllSlots parameter: ${showAllSlots}`);
   
   try {
     // 1. Fetch All Data
@@ -23,25 +21,11 @@ const autoAssignSchedule = async (req, res) => {
     if (showAllSlots === true || showAllSlots === 'true') {
       // Show all active and booked customers for capacity planning
       activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
-      console.log(`📊 CAPACITY MODE: Showing all ${activeCustomers.length} active/booked customers`);
+
     } else {
-      // Normal mode: filter out completed tasks
-      const completedTasksThisWeek = getCompletedTasksForWeek(allHistory, weekOffset);
-      console.log(`📋 NORMAL MODE: Found ${completedTasksThisWeek.length} completed tasks for this week`);
-      
-      // Special tracking for CUST-009
-      const cust009History = completedTasksThisWeek.filter(task => task.CustomerID === 'CUST-009');
-      console.log(`[CUST-009 DEBUG] Found ${cust009History.length} completed tasks:`);
-      cust009History.forEach(task => {
-        console.log(`[CUST-009] ${task.CarPlate} - ${task.WashDate} - ${task.WashType}`);
-      });
-      
-      activeCustomers = filterActiveCustomers(customers, completedTasksThisWeek, weekOffset);
-      console.log(`📊 NORMAL MODE: ${activeCustomers.length} customers after filtering completed tasks`);
-      
-      // Check if CUST-009 is still in active customers
-      const cust009Still = activeCustomers.find(c => c.CustomerID === 'CUST-009');
-      console.log(`[CUST-009 DEBUG] Still in active customers: ${cust009Still ? 'YES' : 'NO'}`);
+      // Normal mode: include Active and Booked customers, filter out completed tasks
+      activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
+
     }
     
     const activeWorkers = workers.filter(worker => worker.Status === 'Active');
@@ -62,7 +46,7 @@ const autoAssignSchedule = async (req, res) => {
       );
       
       if (isCompleted) {
-        console.log(`[CLEANUP] Removing completed task: ${task.CustomerName} - ${task.CarPlate} on ${task.AppointmentDate}`);
+
         return false;
       }
       return true;
@@ -86,7 +70,7 @@ const autoAssignSchedule = async (req, res) => {
         scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
       }));
       await clearAndWriteSheet('ScheduledTasks', cleanedTasks);
-      console.log(`[CLEANUP] Removed ${existingSchedule.length - cleanedSchedule.length} completed tasks from ScheduledTasks`);
+
     }
     
     // 4. Identify Locked Tasks
@@ -134,8 +118,7 @@ const autoAssignSchedule = async (req, res) => {
     await clearAndWriteSheet('ScheduledTasks', finalSchedule);
     
     const endTime = new Date();
-    console.log(`✅ Schedule generation completed at: ${endTime.toTimeString().split(' ')[0]}`);
-    console.log(`📊 Final stats: ${finalSchedule.length} total appointments, ${lockedTasks.length} locked, ${assignedUnlockedTasks.length} new\n`);
+
     
     let message = showAllSlots 
       ? `Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments`
@@ -175,9 +158,7 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
     const customerStartDate = customer['start date'] ? parseCustomerStartDate(customer['start date']) : null;
     
     // Debug for specific customers
-    if (customer.CustomerID === 'CUST-041' && customerStartDate) {
-      console.log(`[CUST-041 DEBUG] Start date: ${customer['start date']} -> ${customerStartDate.toDateString()}`);
-    }
+
     
     const timeField = customer.Time || '';
     const daysField = customer.Days || '';
@@ -247,18 +228,12 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
               const washType = calculateHistoryBasedWashType(customer, matchingCarPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit, showAllSlots);
               
               if (washType === 'SKIP') {
-                console.log(`[BI-WEEK-SKIP] Skipping ${customer.CustomerID} - not their bi-weekly week`);
                 return;
-              }
-              
-              if (washType === '?') {
-                console.log(`[BI-WEEK-UNKNOWN] ${customer.CustomerID} (${customer.Name}) - ${matchingCarPlate} insufficient data for ${day} ${carTime.time}`);
               }
               
               // Check if appointment date is on or after customer start date
               const appointmentDate = getAppointmentDate(day, weekOffset);
               if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
-                console.log(`[START-DATE] Skipping ${customer.CustomerID} on ${day} - appointment ${appointmentDate.toDateString()} before start date ${customerStartDate.toDateString()}`);
                 return;
               }
               
@@ -294,18 +269,12 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
             const washType = calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit, showAllSlots);
             
             if (washType === 'SKIP') {
-              console.log(`[BI-WEEK-SKIP] Skipping ${customer.CustomerID} - not their bi-weekly week`);
-              return; // Skip this customer this week
-            }
-            
-            if (washType === '?') {
-              console.log(`[BI-WEEK-UNKNOWN] ${customer.CustomerID} (${customer.Name}) - ${carPlate} insufficient data for ${dayTime.day} ${dayTime.time}`);
+              return;
             }
             
             // Check if appointment date is on or after customer start date
             const appointmentDate = getAppointmentDate(dayTime.day, weekOffset);
             if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
-              console.log(`[START-DATE] Skipping ${customer.CustomerID} on ${dayTime.day} - appointment ${appointmentDate.toDateString()} before start date ${customerStartDate.toDateString()}`);
               return;
             }
             
@@ -347,18 +316,12 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
                   const washType = calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit, showAllSlots);
                   
                   if (washType === 'SKIP') {
-                    console.log(`[BI-WEEK-SKIP] Skipping ${customer.CustomerID} - not their bi-weekly week`);
-                    return; // Skip this customer this week
-                  }
-                  
-                  if (washType === '?') {
-                    console.log(`[BI-WEEK-UNKNOWN] ${customer.CustomerID} (${customer.Name}) - ${carPlate} insufficient data for ${day} ${time}`);
+                    return;
                   }
                   
                   // Check if appointment date is on or after customer start date
                   const appointmentDate = getAppointmentDate(day, weekOffset);
                   if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
-                    console.log(`[START-DATE] Skipping ${customer.CustomerID} on ${day} - appointment ${appointmentDate.toDateString()} before start date ${customerStartDate.toDateString()}`);
                     return;
                   }
                   
@@ -398,18 +361,12 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
           const washType = calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset, intCarForThisVisit, showAllSlots);
           
           if (washType === 'SKIP') {
-            console.log(`[BI-WEEK-SKIP] Skipping ${customer.CustomerID} - not their bi-weekly week`);
-            return; // Skip this customer this week
-          }
-          
-          if (washType === '?') {
-            console.log(`[BI-WEEK-UNKNOWN] ${customer.CustomerID} (${customer.Name}) - ${carPlate} insufficient data for ${appointment.day} ${appointment.time}`);
+            return;
           }
           
           // Check if appointment date is on or after customer start date
           const appointmentDate = getAppointmentDate(appointment.day, weekOffset);
           if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
-            console.log(`[START-DATE] Skipping ${customer.CustomerID} on ${appointment.day} - appointment ${appointmentDate.toDateString()} before start date ${customerStartDate.toDateString()}`);
             return;
           }
           
@@ -458,7 +415,6 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
 }
 
 function filterUnlockedAppointments(potentialAppointments, lockedTasks, completedTasks = []) {
-  console.log(`[FILTER-APPOINTMENTS] Processing ${potentialAppointments.length} appointments against ${completedTasks.length} completed tasks`);
   
   return potentialAppointments.filter(appointment => {
     // Check if this appointment is already covered by a locked task
@@ -470,7 +426,6 @@ function filterUnlockedAppointments(potentialAppointments, lockedTasks, complete
     );
     
     if (isLocked) {
-      console.log(`[LOCKED] ${appointment.customerName} - ${appointment.day} ${appointment.time} - ${appointment.carPlate} - EXCLUDED (locked)`);
       return false;
     }
     
@@ -480,7 +435,6 @@ function filterUnlockedAppointments(potentialAppointments, lockedTasks, complete
       const matchesCar = completedTask.CarPlate === appointment.carPlate;
       
       if (!appointment.actualDate) {
-        console.log(`[NO-DATE] ${appointment.customerName} - ${appointment.carPlate} - ${appointment.day} has no actualDate`);
         return false;
       }
       
@@ -488,23 +442,16 @@ function filterUnlockedAppointments(potentialAppointments, lockedTasks, complete
       const appointmentDate = new Date(appointment.actualDate);
       const matchesDate = completedDate.toDateString() === appointmentDate.toDateString();
       
-      // Debug for CUST-005 and CUST-021
-      if (appointment.customerId === 'CUST-005' || appointment.customerId === 'CUST-021') {
-        console.log(`[DEBUG-${appointment.customerId}] Appointment: ${appointment.day} ${appointment.actualDate}, Completed: ${completedTask.WashDate} (${completedDate.toDateString()}), Match: ${matchesDate}`);
-      }
+
       
       if (matchesCustomer && matchesCar && matchesDate) {
-        console.log(`[EXCLUDED] ${appointment.customerName} - ${appointment.carPlate} on ${appointment.day} (${appointment.actualDate}) - already completed on ${completedTask.WashDate}`);
         return true;
       }
       
       return false;
     });
     
-    // Debug for CUST-005 and CUST-021
-    if (appointment.customerId === 'CUST-005' || appointment.customerId === 'CUST-021') {
-      console.log(`[DEBUG-${appointment.customerId}] Final result for ${appointment.day} ${appointment.actualDate}: ${isCompleted ? 'EXCLUDED' : 'INCLUDED'}`);
-    }
+
     
     return !isCompleted;
   });
@@ -598,7 +545,8 @@ function formatLockedTask(lockedTask) {
     packageType: lockedTask.PackageType || '',
     isLocked: 'TRUE',
     scheduleDate: lockedTask.ScheduleDate || new Date().toISOString().split('T')[0],
-    isBiWeekly: lockedTask.PackageType?.includes('bi week') || false
+    isBiWeekly: lockedTask.PackageType?.includes('bi week') || false,
+    customerStatus: lockedTask.customerStatus || 'Active'
   };
 }
 
@@ -723,7 +671,7 @@ const addManualAppointment = async (req, res) => {
     await addRowToSheet('ScheduledTasks', [newAppointment]);
     
     // Log the manual appointment (disabled temporarily)
-    console.log(`[AUDIT] Manual appointment added: ${newAppointment.customerName} - ${newAppointment.workerName}`);
+
     
     res.json({
       success: true,
@@ -738,18 +686,9 @@ const addManualAppointment = async (req, res) => {
 
 const updateTaskAssignment = async (req, res) => {
   try {
-    const { taskId, newWorkerName, newWashType, isSlotSwap, sourceDay, sourceTime, targetDay, targetTime } = req.body;
+    const { taskId, newWorkerName, newWashType, isSlotSwap, sourceDay, sourceTime, targetDay, targetTime, isWashTypeOnly } = req.body;
     
-    console.log('\n🔄 [DRAG-DROP-SERVER] Task assignment update started');
-    console.log('📋 [REQUEST-DATA]', {
-      taskId,
-      newWorkerName,
-      newWashType,
-      isSlotSwap: !!isSlotSwap,
-      source: sourceDay && sourceTime ? `${sourceDay} ${sourceTime}` : 'N/A',
-      target: targetDay && targetTime ? `${targetDay} ${targetTime}` : 'N/A',
-      timestamp: new Date().toLocaleTimeString()
-    });
+
     
     if (!taskId || !newWorkerName) {
       return res.status(400).json({ 
@@ -771,7 +710,7 @@ const updateTaskAssignment = async (req, res) => {
     const existingTasks = await getScheduledTasks();
     
     if (isSlotSwap && sourceDay && sourceTime && targetDay && targetTime) {
-      console.log('🔄 [SLOT-SWAP-MODE] Processing slot swap operation');
+
       // Handle slot swap - swap all tasks between two time slots
       // Parse taskId to get components for slot swap
       const taskIdParts = taskId.split('-');
@@ -779,12 +718,7 @@ const updateTaskAssignment = async (req, res) => {
       const day = taskIdParts[2];
       const carPlate = taskIdParts.slice(4).join('-') || '';
       
-      console.log('🔍 [TASK-PARSING]', {
-        taskId,
-        parsedCustomerId: customerId,
-        parsedDay: day,
-        parsedCarPlate: carPlate
-      });
+
       
       const sourceWorkerName = existingTasks.find(t => 
         (t.CustomerID || t.customerId) === customerId &&
@@ -798,11 +732,7 @@ const updateTaskAssignment = async (req, res) => {
       
       const sourceWorker = workers.find(w => w.Name === sourceWorkerName);
       
-      console.log('👥 [WORKER-SWAP]', {
-        sourceWorker: sourceWorkerName,
-        targetWorker: newWorkerName,
-        sourceWorkerId: sourceWorker?.WorkerID || 'Not found'
-      });
+
       
       // Update tasks in existingTasks array directly
       let sourceTasksUpdated = 0;
@@ -827,11 +757,7 @@ const updateTaskAssignment = async (req, res) => {
             task.isLocked = 'TRUE';
           }
           sourceTasksUpdated++;
-          console.log('➡️ [SOURCE-TO-TARGET]', {
-            customer: task.CustomerName || task.customerName,
-            carPlate: task.CarPlate || task.carPlate,
-            newWorker: newWorkerName
-          });
+
         }
         // Swap target slot tasks to source worker
         else if (taskWorkerName === newWorkerName && 
@@ -847,27 +773,19 @@ const updateTaskAssignment = async (req, res) => {
             task.isLocked = 'TRUE';
           }
           targetTasksUpdated++;
-          console.log('⬅️ [TARGET-TO-SOURCE]', {
-            customer: task.CustomerName || task.customerName,
-            carPlate: task.CarPlate || task.carPlate,
-            newWorker: sourceWorkerName
-          });
+
         }
       });
       
-      console.log('📊 [SWAP-SUMMARY]', {
-        sourceTasksUpdated,
-        targetTasksUpdated,
-        totalUpdated: sourceTasksUpdated + targetTasksUpdated
-      });
+
       
     } else {
-      console.log('📝 [SINGLE-TASK-MODE] Processing single task update');
+
       // Handle single task update - parse taskId to get components
       // Format: CUST-001-Saturday-6:00 AM-Ford Ranger
       const taskIdParts = taskId.split('-');
       if (taskIdParts.length < 4) {
-        console.log('❌ [PARSE-ERROR] Invalid task ID format:', taskId);
+
         return res.status(400).json({ 
           success: false, 
           error: 'Invalid task ID format' 
@@ -880,12 +798,7 @@ const updateTaskAssignment = async (req, res) => {
       // Car plate is everything after the time (skip CUST-001-Saturday-6:00 AM)
       const carPlate = taskIdParts.slice(4).join('-') || '';
       
-      console.log('🔍 [TASK-SEARCH]', {
-        customerId,
-        day,
-        carPlate,
-        searchingIn: existingTasks.length + ' tasks'
-      });
+
       
       // Find task by CustomerID, Day, and CarPlate (ignore time for updates)
       const taskIndex = existingTasks.findIndex(task => 
@@ -895,39 +808,37 @@ const updateTaskAssignment = async (req, res) => {
       );
       
       if (taskIndex === -1) {
-        console.log('❌ [TASK-NOT-FOUND]', {
-          searchedFor: `${customerId}-${day}-${carPlate}`,
-          availableTasks: existingTasks.slice(0, 5).map(t => `${t.CustomerID || t.customerId}-${t.Day || t.day}-${(t.CarPlate || t.carPlate) || 'NOPLATE'}`)
-        });
+
         return res.status(404).json({ 
           success: false, 
           error: 'Task not found' 
         });
       }
       
-      console.log('✅ [TASK-FOUND]', {
-        taskIndex,
-        customer: existingTasks[taskIndex].CustomerName || existingTasks[taskIndex].customerName,
-        currentWorker: existingTasks[taskIndex].WorkerName || existingTasks[taskIndex].workerName
-      });
+
       
       const task = existingTasks[taskIndex];
       
-      // Always lock ALL customer tasks at same day/time when any task is modified
-      const customerTasks = existingTasks.filter(t => 
-        t.CustomerID === task.CustomerID && 
-        t.Day === task.Day && 
-        t.Time === task.Time
-      );
-      
-      console.log('🚗 [MULTI-CAR-UPDATE]', {
-        customerId: task.CustomerID,
-        totalCars: customerTasks.length,
-        cars: customerTasks.map(t => t.CarPlate)
-      });
-      
-      if (customerTasks.length > 1) {
-        // Multi-car customer: update ALL cars to same worker
+      // Check if this is wash type only edit or drag and drop
+      if (isWashTypeOnly) {
+        // Only update wash type for this specific car
+        const oldWashType = existingTasks[taskIndex].WashType;
+        
+        if (newWashType) {
+          existingTasks[taskIndex].WashType = newWashType;
+        }
+        
+
+      } else {
+        // Drag and drop: update all customer cars to same worker
+        const customerTasks = existingTasks.filter(t => 
+          t.CustomerID === task.CustomerID && 
+          t.Day === task.Day && 
+          t.Time === task.Time
+        );
+        
+
+        
         customerTasks.forEach(customerTask => {
           const customerTaskIndex = existingTasks.findIndex(t => 
             t.CustomerID === customerTask.CustomerID && 
@@ -939,44 +850,18 @@ const updateTaskAssignment = async (req, res) => {
           if (customerTaskIndex !== -1) {
             const oldWorker = existingTasks[customerTaskIndex].WorkerName;
             
-            // Update ALL customer cars to same worker
             existingTasks[customerTaskIndex].WorkerName = newWorkerName;
             existingTasks[customerTaskIndex].WorkerID = newWorker.WorkerID;
             existingTasks[customerTaskIndex].isLocked = 'TRUE';
             
-            if (newWashType) {
-              existingTasks[customerTaskIndex].WashType = newWashType;
-            }
-            
-            console.log('🔄 [CAR-UPDATED]', {
-              carPlate: customerTask.CarPlate,
-              oldWorker,
-              newWorker: newWorkerName
-            });
+
           }
-        });
-      } else {
-        // Single car customer
-        const oldWorker = existingTasks[taskIndex].WorkerName;
-        
-        existingTasks[taskIndex].WorkerName = newWorkerName;
-        existingTasks[taskIndex].WorkerID = newWorker.WorkerID;
-        existingTasks[taskIndex].isLocked = 'TRUE';
-        
-        if (newWashType) {
-          existingTasks[taskIndex].WashType = newWashType;
-        }
-        
-        console.log('🔄 [SINGLE-CAR-UPDATED]', {
-          carPlate: task.CarPlate,
-          oldWorker,
-          newWorker: newWorkerName
         });
       }
     }
     
     // Always use full rewrite to ensure all customer cars are updated together
-    console.log('💾 [FULL-REWRITE] Saving all changes to ensure consistency');
+
     const uniqueTasks = [];
     const seen = new Set();
     existingTasks.forEach(task => {
@@ -1000,14 +885,15 @@ const updateTaskAssignment = async (req, res) => {
       workerId: (task.WorkerID || task.workerId) || '',
       packageType: (task.PackageType || task.packageType) || '',
       isLocked: task.isLocked || 'FALSE',
-      scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0]
+      scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0],
+      customerStatus: task.customerStatus || 'Active'
     }));
     
     await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
     
 
     
-    console.log('✨ [DRAG-DROP-SUCCESS] Task assignment completed successfully\n');
+
     
     res.json({
       success: true,
@@ -1015,11 +901,7 @@ const updateTaskAssignment = async (req, res) => {
     });
     
   } catch (error) {
-    console.log('🚫 [DRAG-DROP-ERROR]', {
-      error: error.message,
-      stack: error.stack?.split('\n')[0],
-      timestamp: new Date().toLocaleTimeString()
-    });
+
     res.status(500).json({ success: false, error: error.message, stack: error.stack });
   }
 };
@@ -1128,8 +1010,6 @@ function determineIntCarForVisit(allCarPlates, allHistory, visitNumber) {
   // Alternate based on visit number
   const intCarIndex = (baseCarIndex + visitNumber - 1) % sortedPlates.length;
   
-  console.log(`[MULTI-CAR] Visit ${visitNumber}: Base car index: ${baseCarIndex}, INT car: ${sortedPlates[intCarIndex]}`);
-  
   return sortedPlates[intCarIndex];
 }
 
@@ -1160,7 +1040,6 @@ function checkIfFirstWeekOfBiWeekCycleFromHistory(allCarPlates, allHistory, week
   
   // Check if we have enough history (at least 1 wash)
   if (customerHistory.length === 0) {
-    console.log(`[BI-WEEK] ${customer?.CustomerID || 'Unknown'} - No history - UNKNOWN WASH TYPE`);
     return 'UNKNOWN';
   }
   
@@ -1182,29 +1061,25 @@ function checkIfFirstWeekOfBiWeekCycleFromHistory(allCarPlates, allHistory, week
   const daysSinceLastWash = Math.floor((targetDate - lastWashDate) / (24 * 60 * 60 * 1000));
   
   // Check data quality for wash type determination
-  if (daysSinceLastWash > 21) { // More than 3 weeks = insufficient data
-    console.log(`[BI-WEEK] ${customer?.CustomerID || 'Unknown'} - Last wash too old (${daysSinceLastWash} days) - UNKNOWN WASH TYPE`);
+  if (daysSinceLastWash > 21) {
     return 'UNKNOWN';
   }
   
   // Calculate bi-weekly cycle based on actual wash dates
   const weeksSinceLastWash = Math.floor(daysSinceLastWash / 7);
   
-  console.log(`[BI-WEEK] ${customer?.CustomerID || 'Unknown'} - Days since last wash: ${daysSinceLastWash}, Weeks: ${weeksSinceLastWash}`);
+
   
   // Bi-weekly customers appear every week, but wash type depends on cycle
   
   // For bi-weekly customers, need at least 2 weeks of data to determine pattern
   if (daysSinceLastWash < 14) {
-    console.log(`[BI-WEEK] ${customer?.CustomerID || 'Unknown'} - Insufficient time since last wash (${daysSinceLastWash} days) - UNKNOWN`);
     return 'UNKNOWN';
   }
   
   // Determine wash type based on last wash type
   const lastWashType = customerHistory[0].WashType;
   const shouldBeInt = (lastWashType === 'EXT');
-  
-  console.log(`[BI-WEEK] ${customer?.CustomerID || 'Unknown'} - Last wash: ${lastWashDate.toDateString()} (${lastWashType}), This week: ${shouldBeInt ? 'INT' : 'EXT'}`);
   
   return shouldBeInt;
 }
@@ -1244,18 +1119,16 @@ function getCompletedTasksForWeek(allHistory, weekOffset) {
   endOfWeek.setDate(mondayOfWeek.getDate() + 5); // Saturday + include Saturday
   endOfWeek.setHours(23, 59, 59, 999);
   
-  console.log(`[COMPLETED-FILTER] Week ${weekOffset}: ${mondayOfWeek.toDateString()} to ${endOfWeek.toDateString()}`);
+
   
   const completedTasks = allHistory.filter(record => {
     const washDate = parseHistoryDate(record.WashDate);
     const isInRange = washDate >= mondayOfWeek && washDate <= endOfWeek;
-    if (isInRange) {
-      console.log(`[COMPLETED-FILTER] Found completed task: ${record.CustomerID} - ${record.CarPlate} on ${record.WashDate} (parsed: ${washDate.toDateString()})`);
-    }
+
     return isInRange;
   });
   
-  console.log(`[COMPLETED-FILTER] Total completed tasks found: ${completedTasks.length}`);
+
   
   return completedTasks;
 }
@@ -1355,12 +1228,7 @@ function parseCustomerStartDate(dateStr) {
     const result = new Date(year, month, day);
     
     // Debug for specific dates
-    if (dateStr === '11-Oct-25') {
-      console.log(`[DATE-PARSE] Input: '${dateStr}'`);
-      console.log(`[DATE-PARSE] Parts: [${parts.join(', ')}]`);
-      console.log(`[DATE-PARSE] Day: ${day}, Month: ${month}, Year: ${year}`);
-      console.log(`[DATE-PARSE] Result: ${result.toDateString()} (${result.getTime()})`);
-    }
+
     
     return result;
   }
@@ -1386,10 +1254,7 @@ function getCurrentWeekStart(weekOffset) {
   mondayOfWeek.setHours(0, 0, 0, 0);
   
   // Debug for week offset 0
-  if (weekOffset === 0) {
-    console.log(`[WEEK-START] Today: ${today.toDateString()}, Current day: ${currentDay}`);
-    console.log(`[WEEK-START] Week start (offset ${weekOffset}): ${mondayOfWeek.toDateString()} (${mondayOfWeek.getTime()})`);
-  }
+
   
   return mondayOfWeek;
 }

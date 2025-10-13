@@ -39,7 +39,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       } catch (error) {
         // Silently fail - don't disturb user experience
       }
-    }, 30000); // Check every 30 seconds (reduced frequency)
+    }, 5000); // Check every 5 seconds
     
     return () => clearInterval(interval);
   }, [assignedSchedule, onScheduleUpdate, draggedItem]);
@@ -135,7 +135,8 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         body: JSON.stringify({ 
           taskId, 
           newWorkerName: appointment.workerName,
-          newWashType
+          newWashType,
+          isWashTypeOnly: true
         })
       });
       
@@ -144,8 +145,23 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         throw new Error(data.error || 'Failed to update wash type');
       }
       
-      // Mark update time for sync
+      // Mark update time for sync and trigger immediate refresh
       setLastUpdateTime(Date.now());
+      
+      // Trigger immediate schedule refresh
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.assignments && onScheduleUpdate) {
+              onScheduleUpdate(data.assignments);
+            }
+          }
+        } catch (error) {
+          // Silent fail
+        }
+      }, 1000); // Refresh after 1 second
       
     } catch (error) {
       // Revert UI change if server update failed
@@ -464,8 +480,24 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         timestamp: new Date().toLocaleTimeString()
       });
       
-      // Mark update time for sync
+      // Mark update time for sync and trigger immediate refresh
       setLastUpdateTime(Date.now());
+      
+      // Trigger immediate schedule refresh
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.assignments && onScheduleUpdate) {
+              onScheduleUpdate(data.assignments);
+            }
+          }
+        } catch (error) {
+          // Silent fail
+        }
+      }, 1000); // Refresh after 1 second
+      
       console.log('✨ [DROP-COMPLETE] All updates successful');
       
     } catch (error) {
@@ -605,7 +637,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                     handleCustomerNameClick(appointment.customerId);
                                   }}
                                 >
-                                  {appointment.customerStatus === 'Booked' && <span className="booked-indicator">📋</span>}
                                   {appointment.customerName}
 
                                   {appointment.customerId && appointment.customerId.startsWith('MANUAL_') && (
@@ -631,7 +662,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                   style={{ cursor: 'pointer', fontWeight: 'bold' }}
                                   title="Click to change wash type"
                                 >
-                                  {appointment.washType}
+                                  {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : appointment.washType}
                                 </div>
                                 
 
