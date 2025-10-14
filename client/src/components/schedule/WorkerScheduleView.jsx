@@ -14,7 +14,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
   ];
   
-  // Auto-refresh to sync changes from other users (disabled during drag operations)
+  // Smart auto-refresh that only updates changed items
   React.useEffect(() => {
     const interval = setInterval(async () => {
       // Skip sync if user is dragging
@@ -24,12 +24,65 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
         if (response.ok) {
           const data = await response.json();
-          if (data.success && data.assignments) {
-            // Only update if there are actual changes
-            const currentScheduleStr = JSON.stringify(assignedSchedule.sort((a, b) => a.customerId.localeCompare(b.customerId)));
-            const newScheduleStr = JSON.stringify(data.assignments.sort((a, b) => a.customerId.localeCompare(b.customerId)));
+          if (data.success && data.assignments && data.assignments.length > 0) {
             
-            if (currentScheduleStr !== newScheduleStr) {
+            if (assignedSchedule.length > 0) {
+              // Smart merge: only update items that actually changed
+              const updatedSchedule = [...assignedSchedule];
+              let hasChanges = false;
+              
+              // Check for new or updated items
+              data.assignments.forEach(newItem => {
+                const existingIndex = updatedSchedule.findIndex(existing => 
+                  existing.customerId === newItem.customerId &&
+                  existing.day === newItem.day &&
+                  existing.time === newItem.time &&
+                  existing.carPlate === newItem.carPlate
+                );
+                
+                if (existingIndex >= 0) {
+                  // Item exists, check if it changed
+                  const existing = updatedSchedule[existingIndex];
+                  if (existing.workerId !== newItem.workerId || 
+                      existing.workerName !== newItem.workerName ||
+                      existing.washType !== newItem.washType ||
+                      existing.isLocked !== newItem.isLocked) {
+                    updatedSchedule[existingIndex] = newItem;
+                    hasChanges = true;
+                  }
+                } else {
+                  // New item
+                  updatedSchedule.push(newItem);
+                  hasChanges = true;
+                }
+              });
+              
+              // Check for removed items
+              const itemsToRemove = [];
+              updatedSchedule.forEach((existing, index) => {
+                const stillExists = data.assignments.find(newItem => 
+                  newItem.customerId === existing.customerId &&
+                  newItem.day === existing.day &&
+                  newItem.time === existing.time &&
+                  newItem.carPlate === existing.carPlate
+                );
+                if (!stillExists) {
+                  itemsToRemove.push(index);
+                  hasChanges = true;
+                }
+              });
+              
+              // Remove items that no longer exist
+              itemsToRemove.reverse().forEach(index => {
+                updatedSchedule.splice(index, 1);
+              });
+              
+              // Only update if there are actual changes
+              if (hasChanges && onScheduleUpdate) {
+                onScheduleUpdate(updatedSchedule);
+              }
+            } else {
+              // If we have no data but server has data, update
               if (onScheduleUpdate) {
                 onScheduleUpdate(data.assignments);
               }
@@ -148,20 +201,20 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       // Mark update time for sync and trigger immediate refresh
       setLastUpdateTime(Date.now());
       
-      // Trigger immediate schedule refresh
+      // Trigger immediate schedule refresh with safety check
       setTimeout(async () => {
         try {
           const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
           if (response.ok) {
             const data = await response.json();
-            if (data.success && data.assignments && onScheduleUpdate) {
+            if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
               onScheduleUpdate(data.assignments);
             }
           }
         } catch (error) {
           // Silent fail
         }
-      }, 1000); // Refresh after 1 second
+      }, 2000); // Refresh after 2 seconds
       
     } catch (error) {
       // Revert UI change if server update failed
@@ -483,20 +536,20 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       // Mark update time for sync and trigger immediate refresh
       setLastUpdateTime(Date.now());
       
-      // Trigger immediate schedule refresh
+      // Trigger immediate schedule refresh with safety check
       setTimeout(async () => {
         try {
           const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
           if (response.ok) {
             const data = await response.json();
-            if (data.success && data.assignments && onScheduleUpdate) {
+            if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
               onScheduleUpdate(data.assignments);
             }
           }
         } catch (error) {
           // Silent fail
         }
-      }, 1000); // Refresh after 1 second
+      }, 2000); // Refresh after 2 seconds
       
       console.log('✨ [DROP-COMPLETE] All updates successful');
       
