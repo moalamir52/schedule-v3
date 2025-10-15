@@ -16,6 +16,7 @@ const servicesRoutes = require('./api/routes/servicesRoutes');
 const userRoutes = require('./api/routes/userRoutes');
 const auditRoutes = require('./api/routes/auditRoutes');
 const aiRoutes = require('./api/routes/aiRoutes');
+const debugRoutes = require('./api/routes/debugRoutes');
 
 const app = express();
 const PORT = 5000;
@@ -50,6 +51,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/customers', clientRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
+app.use('/api/debug', debugRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 
 app.listen(PORT, () => {

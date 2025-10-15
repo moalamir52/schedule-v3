@@ -135,13 +135,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
 
   const handleDragStart = (e, customerId, day, time, workerId) => {
     const dragData = { customerId, day, time, workerId };
-    console.log('🔥 [DRAG-START]', {
-      customerId,
-      day,
-      time,
-      workerId,
-      timestamp: new Date().toLocaleTimeString()
-    });
     setDraggedItem(dragData);
     e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
   };
@@ -284,28 +277,13 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const handleDrop = async (e, targetDay, targetTime, targetWorkerId) => {
     e.preventDefault();
     
-    console.log('🎯 [DROP-START]', {
-      targetDay,
-      targetTime,
-      targetWorkerId,
-      draggedItem,
-      timestamp: new Date().toLocaleTimeString()
-    });
-    
     if (!draggedItem) {
-      console.log('❌ [DROP-ERROR] No dragged item found');
       return;
     }
     
     const { customerId, day: sourceDay, time: sourceTime, workerId: sourceWorkerId } = draggedItem;
     
-    console.log('🔄 [DROP-DETAILS]', {
-      source: { customerId, day: sourceDay, time: sourceTime, workerId: sourceWorkerId },
-      target: { day: targetDay, time: targetTime, workerId: targetWorkerId }
-    });
-    
     if (sourceDay === targetDay && sourceTime === targetTime && sourceWorkerId === targetWorkerId) {
-      console.log('ℹ️ [DROP-SKIP] Same position - no action needed');
       setDraggedItem(null);
       return;
     }
@@ -318,18 +296,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       appointment.workerId === sourceWorkerId
     );
 
-    console.log('👥 [CUSTOMER-APPOINTMENTS]', {
-      customerId,
-      foundAppointments: customerAppointments.length,
-      appointments: customerAppointments.map(apt => ({
-        carPlate: apt.carPlate,
-        washType: apt.washType,
-        customerName: apt.customerName
-      }))
-    });
-
     if (customerAppointments.length === 0) {
-      console.log('❌ [DROP-ERROR] No customer appointments found at source');
       setDraggedItem(null);
       return;
     }
@@ -341,29 +308,12 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       appointment.time === targetTime
     );
 
-    console.log('🔄 [EXISTING-APPOINTMENTS]', {
-      targetSlot: { day: targetDay, time: targetTime, workerId: targetWorkerId },
-      existingCount: existingAppointments.length,
-      existing: existingAppointments.map(apt => ({
-        customerId: apt.customerId,
-        customerName: apt.customerName,
-        carPlate: apt.carPlate
-      }))
-    });
-
     const targetWorkerName = workers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
-    
-    console.log('👷 [WORKER-INFO]', {
-      targetWorkerId,
-      targetWorkerName,
-      isSwap: existingAppointments.length > 0
-    });
     
     // Update UI immediately for better UX
     let updatedSchedule;
     
     if (existingAppointments.length > 0) {
-      console.log('🔄 [SWAP-MODE] Performing slot swap');
       // Handle swap - move ALL customer cars and ALL existing appointments
       updatedSchedule = assignedSchedule.map(appointment => {
         // Move ALL customer appointments to target
@@ -371,12 +321,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
             appointment.day === sourceDay && 
             appointment.time === sourceTime && 
             appointment.workerId === sourceWorkerId) {
-          console.log('➡️ [SWAP-MOVE-TO-TARGET]', {
-            customer: appointment.customerName,
-            carPlate: appointment.carPlate,
-            from: `${sourceDay} ${sourceTime}`,
-            to: `${targetDay} ${targetTime}`
-          });
           return {
             ...appointment,
             day: targetDay,
@@ -391,12 +335,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
             appointment.day === targetDay && 
             appointment.time === targetTime) {
           const sourceWorkerName = workers.find(w => (w.WorkerID || w.Name) === sourceWorkerId)?.Name || sourceWorkerId;
-          console.log('⬅️ [SWAP-MOVE-TO-SOURCE]', {
-            customer: appointment.customerName,
-            carPlate: appointment.carPlate,
-            from: `${targetDay} ${targetTime}`,
-            to: `${sourceDay} ${sourceTime}`
-          });
           return {
             ...appointment,
             day: sourceDay,
@@ -409,19 +347,12 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         return appointment;
       });
     } else {
-      console.log('📝 [MOVE-MODE] Performing simple move');
       // Handle simple move - move ALL customer appointments
       updatedSchedule = assignedSchedule.map(appointment => {
         if (appointment.customerId === customerId && 
             appointment.day === sourceDay && 
             appointment.time === sourceTime && 
             appointment.workerId === sourceWorkerId) {
-          console.log('➡️ [SIMPLE-MOVE]', {
-            customer: appointment.customerName,
-            carPlate: appointment.carPlate,
-            from: `${sourceDay} ${sourceTime}`,
-            to: `${targetDay} ${targetTime}`
-          });
           return {
             ...appointment,
             day: targetDay,
@@ -435,7 +366,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       });
     }
 
-    console.log('📊 [UI-UPDATE] Updating local schedule');
+
     if (onScheduleUpdate) {
       onScheduleUpdate(updatedSchedule);
     }
@@ -464,7 +395,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       return [...filtered, changeData];
     });
     
-    console.log('✨ [DROP-COMPLETE] Change added to pending list');
+
 
   };
 

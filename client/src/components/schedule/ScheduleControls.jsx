@@ -306,6 +306,57 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
               ⏰ Schedule Settings
             </div>
             <div 
+              style={dropdownItemStyle}
+              onClick={async () => {
+                // Show debug info modal
+                try {
+                  // Fetch real debug info from server
+                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/debug/info`);
+                  let debugInfo;
+                  
+                  if (response.ok) {
+                    debugInfo = await response.json();
+                  } else {
+                    // Fallback debug info
+                    debugInfo = {
+                      availablePackages: [
+                        "2 Ext 1 INT week",
+                        "2 Ext 1 INT bi week", 
+                        "3 Ext 1 INT bi week",
+                        "3 Ext 1 INT week",
+                        "2 Ext",
+                        "3 Ext 1 INT bi week "
+                      ],
+                      systemStatus: "Running (Offline Mode)",
+                      serverConnection: "Disconnected",
+                      error: "Could not fetch from server"
+                    };
+                  }
+                  
+                  const packagesList = debugInfo.availablePackages ? 
+                    debugInfo.availablePackages.map(p => `• ${p}`).join('\n') : 
+                    '• No packages found';
+                  
+                  const errorInfo = debugInfo.error ? `\n\n⚠️ Error: ${debugInfo.error}` : '';
+                  
+                  alert(`🔍 SYSTEM DEBUG INFO\n\n📦 Available Packages (${debugInfo.availablePackages?.length || 0}):\n${packagesList}\n\n⚡ System Status: ${debugInfo.systemStatus || 'Unknown'}\n🔄 Last Check: ${new Date().toLocaleString()}\n🌐 Server: ${debugInfo.serverConnection || 'Unknown'}${errorInfo}\n\n📝 Use this info to diagnose scheduling issues`);
+                } catch (error) {
+                  alert(`🔍 DEBUG INFO (Error)\n\n❌ Failed to fetch debug info\nError: ${error.message}\n\n📦 Fallback Packages:\n• 2 Ext 1 INT week\n• 2 Ext 1 INT bi week\n• 3 Ext 1 INT bi week\n• 3 Ext 1 INT week\n• 2 Ext\n• 3 Ext 1 INT bi week`);
+                }
+                setShowDropdown(false);
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#fff3e0';
+                e.currentTarget.style.color = '#f57c00';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#495057';
+              }}
+            >
+              🔍 Debug Info
+            </div>
+            <div 
               style={{ ...dropdownItemStyle, borderBottom: 'none' }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#ffebee';
