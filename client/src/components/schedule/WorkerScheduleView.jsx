@@ -8,94 +8,103 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
   const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
+  const [pendingChanges, setPendingChanges] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
   ];
   
-  // Smart auto-refresh that only updates changed items
-  React.useEffect(() => {
-    const interval = setInterval(async () => {
-      // Skip sync if user is dragging
-      if (draggedItem) return;
-      
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.assignments && data.assignments.length > 0) {
-            
-            if (assignedSchedule.length > 0) {
-              // Smart merge: only update items that actually changed
-              const updatedSchedule = [...assignedSchedule];
-              let hasChanges = false;
-              
-              // Check for new or updated items
-              data.assignments.forEach(newItem => {
-                const existingIndex = updatedSchedule.findIndex(existing => 
-                  existing.customerId === newItem.customerId &&
-                  existing.day === newItem.day &&
-                  existing.time === newItem.time &&
-                  existing.carPlate === newItem.carPlate
-                );
-                
-                if (existingIndex >= 0) {
-                  // Item exists, check if it changed
-                  const existing = updatedSchedule[existingIndex];
-                  if (existing.workerId !== newItem.workerId || 
-                      existing.workerName !== newItem.workerName ||
-                      existing.washType !== newItem.washType ||
-                      existing.isLocked !== newItem.isLocked) {
-                    updatedSchedule[existingIndex] = newItem;
-                    hasChanges = true;
-                  }
-                } else {
-                  // New item
-                  updatedSchedule.push(newItem);
-                  hasChanges = true;
-                }
-              });
-              
-              // Check for removed items
-              const itemsToRemove = [];
-              updatedSchedule.forEach((existing, index) => {
-                const stillExists = data.assignments.find(newItem => 
-                  newItem.customerId === existing.customerId &&
-                  newItem.day === existing.day &&
-                  newItem.time === existing.time &&
-                  newItem.carPlate === existing.carPlate
-                );
-                if (!stillExists) {
-                  itemsToRemove.push(index);
-                  hasChanges = true;
-                }
-              });
-              
-              // Remove items that no longer exist
-              itemsToRemove.reverse().forEach(index => {
-                updatedSchedule.splice(index, 1);
-              });
-              
-              // Only update if there are actual changes
-              if (hasChanges && onScheduleUpdate) {
-                onScheduleUpdate(updatedSchedule);
-              }
-            } else {
-              // If we have no data but server has data, update
-              if (onScheduleUpdate) {
-                onScheduleUpdate(data.assignments);
-              }
-            }
-          }
-        }
-      } catch (error) {
-        // Silently fail - don't disturb user experience
-      }
-    }, 5000); // Check every 5 seconds
+  // Save all pending changes to server
+  const saveToServer = async () => {
+    if (pendingChanges.length === 0) {
+      alert('No changes to save!');
+      return;
+    }
     
-    return () => clearInterval(interval);
-  }, [assignedSchedule, onScheduleUpdate, draggedItem]);
+    setIsSaving(true);
+    
+    try {
+      // Send all changes in one batch
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+          'X-User-Name': localStorage.getItem('userName') || 'Web User'
+        },
+        body: JSON.stringify({ changes: pendingChanges })
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to save changes');
+      }
+      
+      // Clear pending changes
+      setPendingChanges([]);
+      
+      setModal({
+        isOpen: true,
+        type: 'success',
+        title: 'Success',
+        message: `Successfully saved ${pendingChanges.length} changes to server!`
+      });
+      
+    } catch (error) {
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: `Error saving changes: ${error.message}`
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  
+  // Refresh data from server
+  const refreshFromServer = async () => {
+    setIsRefreshing(true);
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
+          onScheduleUpdate(data.assignments);
+          setModal({
+            isOpen: true,
+            type: 'success',
+            title: 'Refreshed',
+            message: `Successfully loaded ${data.assignments.length} tasks from server!`
+          });
+        } else {
+          setModal({
+            isOpen: true,
+            type: 'info',
+            title: 'No Data',
+            message: 'No schedule data found on server.'
+          });
+        }
+      } else {
+        throw new Error('Failed to fetch data from server');
+      }
+    } catch (error) {
+      setModal({
+        isOpen: true,
+        type: 'error',
+        title: 'Error',
+        message: `Error refreshing from server: ${error.message}`
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+  
+  // Auto-refresh disabled for better performance - use manual refresh button instead
   
   // Close override menu when clicking outside
   React.useEffect(() => {
@@ -164,7 +173,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const handleWashTypeChange = async (appointment, newWashType) => {
     const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
     
-    // Update UI immediately for better UX
+    // Update UI immediately
     if (onScheduleUpdate) {
       const updatedSchedule = assignedSchedule.map(task => 
         `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
@@ -174,60 +183,22 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       onScheduleUpdate(updatedSchedule);
     }
     
-    setShowOverrideMenu(null);
+    // Add to pending changes
+    const changeData = {
+      type: 'washType',
+      taskId,
+      newWashType,
+      workerName: appointment.workerName,
+      timestamp: Date.now()
+    };
     
-    // Send update to server in background
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
-          'X-User-Name': localStorage.getItem('userName') || 'Web User'
-        },
-        body: JSON.stringify({ 
-          taskId, 
-          newWorkerName: appointment.workerName,
-          newWashType,
-          isWashTypeOnly: true
-        })
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to update wash type');
-      }
-      
-      // Mark update time for sync and trigger immediate refresh
-      setLastUpdateTime(Date.now());
-      
-      // Trigger immediate schedule refresh with safety check
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
-              onScheduleUpdate(data.assignments);
-            }
-          }
-        } catch (error) {
-          // Silent fail
-        }
-      }, 2000); // Refresh after 2 seconds
-      
-    } catch (error) {
-      // Revert UI change if server update failed
-      if (onScheduleUpdate) {
-        const revertedSchedule = assignedSchedule.map(task => 
-          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
-            ? { ...task, washType: appointment.washType, isLocked: appointment.isLocked }
-            : task
-        );
-        onScheduleUpdate(revertedSchedule);
-      }
-      alert(`Error updating wash type: ${error.message}`);
-    }
+    setPendingChanges(prev => {
+      // Remove any existing change for this task
+      const filtered = prev.filter(change => change.taskId !== taskId);
+      return [...filtered, changeData];
+    });
+    
+    setShowOverrideMenu(null);
   };
 
   const handleCustomerNameClick = async (customerId) => {
@@ -471,103 +442,117 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     
     setDraggedItem(null);
 
-    // Send update to server for ALL customer appointments
-    console.log('🚀 [SERVER-UPDATE] Starting server updates for', customerAppointments.length, 'appointments');
+    // Add drag & drop change to pending changes
+    const firstAppointment = customerAppointments[0];
+    const taskId = `${customerId}-${sourceDay}-${sourceTime}-${firstAppointment.carPlate}`;
     
-    // Create a single request for all appointments to avoid duplicates
-    const allTaskIds = customerAppointments.map(appointment => 
-      `${customerId}-${sourceDay}-${sourceTime}-${appointment.carPlate}`
-    );
+    const changeData = {
+      type: 'dragDrop',
+      taskId,
+      newWorkerName: targetWorkerName,
+      sourceDay,
+      sourceTime,
+      targetDay,
+      targetTime,
+      isSlotSwap: existingAppointments.length > 0,
+      timestamp: Date.now()
+    };
     
-    try {
-      // Send one request for the first appointment (represents the whole customer move)
-      const firstAppointment = customerAppointments[0];
-      const taskId = `${customerId}-${sourceDay}-${sourceTime}-${firstAppointment.carPlate}`;
-      
-      let requestBody = { 
-        taskId, 
-        newWorkerName: targetWorkerName,
-        sourceDay,
-        sourceTime,
-        targetDay,
-        targetTime
-      };
-      
-      // If there are existing appointments, we're doing a slot swap
-      if (existingAppointments.length > 0) {
-        requestBody.isSlotSwap = true;
-      }
-      
-      console.log('📤 [API-REQUEST]', {
-        taskId,
-        allTaskIds,
-        requestBody,
-        timestamp: new Date().toLocaleTimeString()
-      });
-      
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
-          'X-User-Name': localStorage.getItem('userName') || 'Web User'
-        },
-        body: JSON.stringify(requestBody)
-      });
-      
-      if (!response.ok) {
-        const data = await response.json();
-        console.log('❌ [API-ERROR]', {
-          taskId,
-          status: response.status,
-          error: data.error,
-          timestamp: new Date().toLocaleTimeString()
-        });
-        throw new Error(data.error || 'Failed to update task assignment');
-      }
-      
-      console.log('✅ [API-SUCCESS]', {
-        taskId,
-        allTasksUpdated: allTaskIds,
-        status: response.status,
-        timestamp: new Date().toLocaleTimeString()
-      });
-      
-      // Mark update time for sync and trigger immediate refresh
-      setLastUpdateTime(Date.now());
-      
-      // Trigger immediate schedule refresh with safety check
-      setTimeout(async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-          if (response.ok) {
-            const data = await response.json();
-            if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
-              onScheduleUpdate(data.assignments);
-            }
-          }
-        } catch (error) {
-          // Silent fail
-        }
-      }, 2000); // Refresh after 2 seconds
-      
-      console.log('✨ [DROP-COMPLETE] All updates successful');
-      
-    } catch (error) {
-      console.log('🚫 [DROP-FAILED]', {
-        error: error.message,
-        timestamp: new Date().toLocaleTimeString()
-      });
-      // Revert UI changes if server update failed
-      if (onScheduleUpdate) {
-        onScheduleUpdate(assignedSchedule);
-      }
-      alert(`Error updating assignment: ${error.message}`);
-    }
+    setPendingChanges(prev => {
+      // Remove any existing change for this task
+      const filtered = prev.filter(change => change.taskId !== taskId);
+      return [...filtered, changeData];
+    });
+    
+    console.log('✨ [DROP-COMPLETE] Change added to pending list');
+
   };
 
   return (
     <>
+    {/* Control Buttons */}
+    <div style={{
+      position: 'fixed',
+      top: '20px',
+      right: '20px',
+      zIndex: 1000,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px'
+    }}>
+      {/* Save to Server Button */}
+      {pendingChanges.length > 0 && (
+        <div style={{
+          background: '#28a745',
+          color: 'white',
+          padding: '15px 25px',
+          borderRadius: '10px',
+          boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
+          cursor: 'pointer',
+          fontSize: '16px',
+          fontWeight: 'bold',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}
+        onClick={saveToServer}
+        >
+          {isSaving ? (
+            <>
+              <div style={{
+                width: '20px',
+                height: '20px',
+                border: '2px solid white',
+                borderTop: '2px solid transparent',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }}></div>
+              Saving...
+            </>
+          ) : (
+            <>
+              💾 Save to Server ({pendingChanges.length})
+            </>
+          )}
+        </div>
+      )}
+      
+      {/* Refresh from Server Button */}
+      <div style={{
+        background: '#007bff',
+        color: 'white',
+        padding: '15px 25px',
+        borderRadius: '10px',
+        boxShadow: '0 4px 15px rgba(0, 123, 255, 0.3)',
+        cursor: 'pointer',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}
+      onClick={refreshFromServer}
+      >
+        {isRefreshing ? (
+          <>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              border: '2px solid white',
+              borderTop: '2px solid transparent',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            Refreshing...
+          </>
+        ) : (
+          <>
+            🔄 Refresh from Server
+          </>
+        )}
+      </div>
+    </div>
+    
     <table className="timetable">
       <thead>
         <tr>

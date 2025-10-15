@@ -1340,11 +1340,170 @@ const cancelBooking = async (req, res) => {
   }
 };
 
+const batchUpdateTasks = async (req, res) => {
+  try {
+    const { changes } = req.body;
+    
+    if (!changes || !Array.isArray(changes) || changes.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Changes array is required and must not be empty' 
+      });
+    }
+    
+    const existingTasks = await getScheduledTasks();
+    let updatedTasks = [...existingTasks];
+    let processedChanges = 0;
+    
+    // Process each change
+    for (const change of changes) {
+      const { type, taskId, newWashType, newWorkerName, sourceDay, sourceTime, targetDay, targetTime, isSlotSwap } = change;
+      
+      if (type === 'washType') {
+        // Handle wash type change
+        const taskIdParts = taskId.split('-');
+        const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
+        const day = taskIdParts[2];
+        const carPlate = taskIdParts.slice(4).join('-') || '';
+        
+        const taskIndex = updatedTasks.findIndex(task => 
+          (task.CustomerID || task.customerId) === customerId &&
+          (task.Day || task.day) === day &&
+          ((task.CarPlate || task.carPlate) || 'NOPLATE') === (carPlate === 'NOPLATE' ? '' : carPlate)
+        );
+        
+        if (taskIndex !== -1) {
+          if (updatedTasks[taskIndex].WashType !== undefined) {
+            updatedTasks[taskIndex].WashType = newWashType;
+            updatedTasks[taskIndex].isLocked = 'TRUE';
+          } else {
+            updatedTasks[taskIndex].washType = newWashType;
+            updatedTasks[taskIndex].isLocked = 'TRUE';
+          }
+          processedChanges++;
+        }
+      } 
+      else if (type === 'dragDrop') {
+        // Handle drag and drop change
+        const workers = await getWorkers();
+        const newWorker = workers.find(w => w.Name === newWorkerName && w.Status === 'Active');
+        
+        if (!newWorker) continue;
+        
+        const taskIdParts = taskId.split('-');
+        const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
+        
+        if (isSlotSwap && sourceDay && sourceTime && targetDay && targetTime) {
+          // Handle slot swap
+          const sourceWorkerName = updatedTasks.find(t => 
+            (t.CustomerID || t.customerId) === customerId &&
+            (t.Day || t.day) === sourceDay &&
+            (t.Time || t.time) === sourceTime
+          )?.WorkerName || updatedTasks.find(t => 
+            (t.CustomerID || t.customerId) === customerId &&
+            (t.Day || t.day) === sourceDay &&
+            (t.Time || t.time) === sourceTime
+          )?.workerName;
+          
+          const sourceWorker = workers.find(w => w.Name === sourceWorkerName);
+          
+          updatedTasks.forEach(task => {
+            const taskWorkerName = task.WorkerName || task.workerName;
+            const taskDay = task.Day || task.day;
+            const taskTime = task.Time || task.time;
+            
+            // Swap source slot tasks to target worker
+            if (taskWorkerName === sourceWorkerName && 
+                taskDay === sourceDay && 
+                taskTime === sourceTime) {
+              if (task.WorkerName !== undefined) {
+                task.WorkerName = newWorkerName;
+                task.WorkerID = newWorker.WorkerID;
+                task.isLocked = 'TRUE';
+              } else {
+                task.workerName = newWorkerName;
+                task.workerId = newWorker.WorkerID;
+                task.isLocked = 'TRUE';
+              }
+            }
+            // Swap target slot tasks to source worker
+            else if (taskWorkerName === newWorkerName && 
+                     taskDay === targetDay && 
+                     taskTime === targetTime) {
+              if (task.WorkerName !== undefined) {
+                task.WorkerName = sourceWorkerName;
+                task.WorkerID = sourceWorker?.WorkerID || '';
+                task.isLocked = 'TRUE';
+              } else {
+                task.workerName = sourceWorkerName;
+                task.workerId = sourceWorker?.WorkerID || '';
+                task.isLocked = 'TRUE';
+              }
+            }
+          });
+        } else {
+          // Handle simple drag and drop
+          const day = taskIdParts[2];
+          const time = taskIdParts[3];
+          
+          // Update all customer tasks at this time slot
+          updatedTasks.forEach(task => {
+            if ((task.CustomerID || task.customerId) === customerId &&
+                (task.Day || task.day) === day &&
+                (task.Time || task.time) === time) {
+              if (task.WorkerName !== undefined) {
+                task.WorkerName = newWorkerName;
+                task.WorkerID = newWorker.WorkerID;
+                task.isLocked = 'TRUE';
+              } else {
+                task.workerName = newWorkerName;
+                task.workerId = newWorker.WorkerID;
+                task.isLocked = 'TRUE';
+              }
+            }
+          });
+        }
+        processedChanges++;
+      }
+    }
+    
+    // Save all changes to Google Sheets
+    const formattedTasks = updatedTasks.map(task => ({
+      day: task.Day || task.day,
+      appointmentDate: task.AppointmentDate || task.appointmentDate || '',
+      time: task.Time || task.time,
+      customerId: task.CustomerID || task.customerId,
+      customerName: task.CustomerName || task.customerName,
+      villa: task.Villa || task.villa,
+      carPlate: (task.CarPlate || task.carPlate) || '',
+      washType: (task.WashType || task.washType) || 'EXT',
+      workerName: (task.WorkerName || task.workerName) || '',
+      workerId: (task.WorkerID || task.workerId) || '',
+      packageType: (task.PackageType || task.packageType) || '',
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0],
+      customerStatus: task.customerStatus || 'Active'
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', formattedTasks);
+    
+    res.json({
+      success: true,
+      message: `Successfully processed ${processedChanges} changes and saved to server`,
+      processedChanges
+    });
+    
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = { 
   autoAssignSchedule, 
   getSchedule,
   addManualAppointment,
   getAvailableWorkers,
   updateTaskAssignment,
-  cancelBooking
+  cancelBooking,
+  batchUpdateTasks
 };

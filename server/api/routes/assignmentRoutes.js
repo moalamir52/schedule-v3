@@ -1,5 +1,5 @@
 const express = require('express');
-const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, updateTaskAssignment, cancelBooking } = require('../controllers/assignmentController');
+const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, updateTaskAssignment, cancelBooking, batchUpdateTasks } = require('../controllers/assignmentController');
 
 const router = express.Router();
 
@@ -17,5 +17,6 @@ router.post('/update-task', (req, res, next) => {
   next();
 }, updateTaskAssignment);
 router.post('/cancel-booking', cancelBooking);
+router.put('/batch-update', batchUpdateTasks);
 
 module.exports = router;
