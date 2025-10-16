@@ -86,7 +86,7 @@ const autoAssignSchedule = async (req, res) => {
     
 
     
-    // 4. Filter Out Appointments Already Covered by Locked Tasks or Completed
+    // 4. Filter Out Appointments Already Covered by Locked Tasks or Completed/Cancelled
     const completedTasksThisWeek = showAllSlots ? [] : getCompletedTasksForWeek(allHistory, weekOffset);
     const unlockedAppointments = filterUnlockedAppointments(appointmentsWithDates, lockedTasks, completedTasksThisWeek);
     
@@ -1119,16 +1119,16 @@ function getCompletedTasksForWeek(allHistory, weekOffset) {
   endOfWeek.setDate(mondayOfWeek.getDate() + 5); // Saturday + include Saturday
   endOfWeek.setHours(23, 59, 59, 999);
   
-
-  
+  // Filter for completed AND cancelled tasks (both should prevent auto-scheduling)
   const completedTasks = allHistory.filter(record => {
     const washDate = parseHistoryDate(record.WashDate);
     const isInRange = washDate >= mondayOfWeek && washDate <= endOfWeek;
-
-    return isInRange;
+    
+    // Include both 'Completed' and 'Cancelled' status
+    const isCompletedOrCancelled = record.Status === 'Completed' || record.Status === 'Cancelled';
+    
+    return isInRange && isCompletedOrCancelled;
   });
-  
-
   
   return completedTasks;
 }

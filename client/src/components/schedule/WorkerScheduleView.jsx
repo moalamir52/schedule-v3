@@ -234,7 +234,9 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     try {
       const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/cancel-booking`, {
+      console.log('[CANCEL] Attempting to cancel task:', taskId);
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/cancel`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -243,6 +245,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       });
       
       const data = await response.json();
+      console.log('[CANCEL] Response:', data);
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to cancel booking');
@@ -254,6 +257,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
         );
         onScheduleUpdate(updatedSchedule);
+        console.log('[CANCEL] Updated schedule, removed task');
       }
       
       setShowOverrideMenu(null);
@@ -261,10 +265,11 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         isOpen: true,
         type: 'success',
         title: 'Success',
-        message: 'Booking cancelled successfully!'
+        message: `Task cancelled successfully!\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nCar: ${appointment.carPlate}`
       });
       
     } catch (error) {
+      console.error('[CANCEL] Error:', error);
       setModal({
         isOpen: true,
         type: 'error',

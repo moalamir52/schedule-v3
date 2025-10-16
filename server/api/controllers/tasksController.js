@@ -184,7 +184,112 @@ const completeTask = async (req, res) => {
   }
 };
 
-
+// NEW: Cancel/Delete Task Function
+const cancelTask = async (req, res) => {
+  try {
+    const { taskId } = req.body;
+    
+    if (!taskId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required field: taskId' 
+      });
+    }
+    
+    console.log(`[CANCEL] Attempting to cancel task: ${taskId}`);
+    
+    // Get current scheduled tasks
+    const existingTasks = await getScheduledTasks();
+    
+    // Find the task to cancel
+    const taskToCancel = existingTasks.find(task => 
+      `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}` === taskId
+    );
+    
+    if (!taskToCancel) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Task not found' 
+      });
+    }
+    
+    // Calculate the actual date for this cancelled task
+    const today = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = today.getDay();
+    const targetDayIndex = dayNames.indexOf(taskToCancel.Day);
+    
+    // Calculate target date (assuming current week)
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() - currentDay + targetDayIndex);
+    const cancelledDate = formatDateForHistory(targetDate.toISOString().split('T')[0]);
+    
+    // Add cancellation record to history (so auto-schedule won't regenerate it)
+    const now = new Date();
+    const cancellationRecord = {
+      WashID: `CANCELLED-${taskToCancel.CustomerID}-${taskToCancel.CarPlate}-${now.getTime()}`,
+      CustomerID: taskToCancel.CustomerID,
+      CarPlate: taskToCancel.CarPlate || '',
+      WashDate: cancelledDate,
+      PackageType: taskToCancel.PackageType || '',
+      Villa: taskToCancel.Villa || '',
+      WashTypePerformed: taskToCancel.WashType,
+      VisitNumberInWeek: 1,
+      WeekInCycle: 1,
+      Status: 'Cancelled',
+      WorkerName: taskToCancel.WorkerName || ''
+    };
+    
+    // Save cancellation to wash_history sheet
+    await addHistoryRecord(cancellationRecord);
+    console.log(`[CANCEL] Added cancellation record to history: ${cancelledDate}`);
+    
+    // Remove the cancelled task from scheduled tasks
+    const remainingTasks = existingTasks.filter(task => 
+      `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}` !== taskId
+    );
+    
+    console.log(`[CANCEL] Removing task: ${taskToCancel.CustomerName} - Villa ${taskToCancel.Villa} - ${taskToCancel.CarPlate}`);
+    
+    // Update scheduled tasks sheet (remove the cancelled task)
+    const updatedSchedule = remainingTasks.map(task => ({
+      day: task.Day,
+      appointmentDate: task.AppointmentDate || '',
+      time: task.Time,
+      customerId: task.CustomerID,
+      customerName: task.CustomerName,
+      villa: task.Villa,
+      carPlate: task.CarPlate,
+      washType: task.WashType,
+      workerName: task.WorkerName,
+      workerId: task.WorkerID,
+      packageType: task.PackageType || '',
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+    
+    console.log(`[CANCEL] Task cancelled successfully: ${taskId}`);
+    
+    res.json({
+      success: true,
+      message: 'Task cancelled and recorded in history',
+      cancelledTask: {
+        customerName: taskToCancel.CustomerName,
+        villa: taskToCancel.Villa,
+        carPlate: taskToCancel.CarPlate,
+        day: taskToCancel.Day,
+        time: taskToCancel.Time,
+        cancelledDate: cancelledDate
+      }
+    });
+    
+  } catch (error) {
+    console.error('[CANCEL] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
 
 const completeAllTasks = async (req, res) => {
   try {
@@ -295,4 +400,4 @@ function formatDateForHistory(dateStr) {
   return `${day}-${month}-${year}`;
 }
 
-module.exports = { getTodayTasks, completeTask, getAllTasks, completeAllTasks };
+module.exports = { getTodayTasks, completeTask, cancelTask, getAllTasks, completeAllTasks };

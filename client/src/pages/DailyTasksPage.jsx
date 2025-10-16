@@ -157,6 +157,47 @@ const DailyTasksPage = () => {
     }
   };
 
+  const cancelTask = async (task) => {
+    if (completingTasks.has(task.id)) return;
+    
+    const confirmed = window.confirm(`Are you sure you want to cancel this task?\n\nCustomer: ${task.customerName}\nVilla: ${task.villa}\nCar: ${task.carPlate || 'N/A'}\nTime: ${task.time}`);
+    if (!confirmed) return;
+    
+    try {
+      setCompletingTasks(prev => new Set([...prev, task.id]));
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          taskId: task.id
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to cancel task');
+      }
+      
+      // Remove cancelled task from list
+      setTasks(prev => prev.filter(t => t.id !== task.id));
+      
+      alert(`Task cancelled successfully: ${task.customerName} - Villa ${task.villa}`);
+      
+    } catch (err) {
+      alert(`Error cancelling task: ${err.message}`);
+    } finally {
+      setCompletingTasks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(task.id);
+        return newSet;
+      });
+    }
+  };
+
   const completeAllTasks = async () => {
     if (completingAll || tasks.length === 0) return;
     
@@ -643,34 +684,64 @@ const DailyTasksPage = () => {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => completeTask(task)}
-                    disabled={completingTasks.has(task.id)}
-                    style={{
-                      width: '100%',
-                      background: completingTasks.has(task.id) ? '#6c757d' : '#28a745',
-                      color: 'white',
-                      padding: '12px',
-                      borderRadius: '8px',
-                      border: 'none',
-                      fontSize: '1rem',
-                      fontWeight: '600',
-                      cursor: completingTasks.has(task.id) ? 'not-allowed' : 'pointer',
-                      transition: 'all 0.2s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!completingTasks.has(task.id)) {
-                        e.target.style.background = '#218838';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!completingTasks.has(task.id)) {
-                        e.target.style.background = '#28a745';
-                      }
-                    }}
-                  >
-                    {completingTasks.has(task.id) ? '⏳ Completing...' : '✅ Complete Task'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      onClick={() => completeTask(task)}
+                      disabled={completingTasks.has(task.id)}
+                      style={{
+                        flex: 1,
+                        background: completingTasks.has(task.id) ? '#6c757d' : '#28a745',
+                        color: 'white',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        cursor: completingTasks.has(task.id) ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!completingTasks.has(task.id)) {
+                          e.target.style.background = '#218838';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!completingTasks.has(task.id)) {
+                          e.target.style.background = '#28a745';
+                        }
+                      }}
+                    >
+                      {completingTasks.has(task.id) ? '⏳ Completing...' : '✅ Complete'}
+                    </button>
+                    <button
+                      onClick={() => cancelTask(task)}
+                      disabled={completingTasks.has(task.id)}
+                      style={{
+                        flex: 1,
+                        background: completingTasks.has(task.id) ? '#6c757d' : '#dc3545',
+                        color: 'white',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        fontSize: '1rem',
+                        fontWeight: '600',
+                        cursor: completingTasks.has(task.id) ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!completingTasks.has(task.id)) {
+                          e.target.style.background = '#c82333';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!completingTasks.has(task.id)) {
+                          e.target.style.background = '#dc3545';
+                        }
+                      }}
+                    >
+                      ❌ Cancel
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
