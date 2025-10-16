@@ -589,11 +589,28 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                         >
                           {customerAppointments.map((appointment, index) => {
                             const key = `${groupKey}-${index}`;
+                            // Debug only CUST-040 to reduce noise
+                            if (appointment.customerId === 'CUST-040') {
+                              console.log('[DEBUG] CUST-040 task:', {
+                                customerId: appointment.customerId,
+                                washType: appointment.washType,
+                                status: appointment.status,
+                                originalWashType: appointment.originalWashType,
+                                isCancelled: appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled'
+                              });
+                              
+                              // Check className
+                              const className = `appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''}`;
+                              console.log('[DEBUG] CUST-040 className:', className);
+                            }
+                            
                             return (
                               <div 
                                 key={key}
-                                className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''}`}
-                                style={{ position: 'relative' }}
+                                className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''}`}
+                                style={{ 
+                                  position: 'relative'
+                                }}
                                 onClick={(e) => {
                                   // Only filter if not clicking on interactive elements
                                   if (!e.target.closest('.customer-name, .wash-type, .delete-btn') && !showOverrideMenu) {
@@ -632,11 +649,24 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                 <div className="car-plate">{appointment.carPlate}</div>
                                 <div 
                                   className="wash-type"
-                                  onClick={(e) => handleOverrideClick(e, appointment)}
-                                  style={{ cursor: 'pointer', fontWeight: 'bold' }}
-                                  title="Click to change wash type"
+                                  onClick={(e) => {
+                                    // Don't allow editing completed/cancelled tasks
+                                    if (appointment.washType === 'CANCELLED' || appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.isCompleted) {
+                                      e.stopPropagation();
+                                      return;
+                                    }
+                                    handleOverrideClick(e, appointment);
+                                  }}
+                                  style={{ 
+                                    cursor: (appointment.washType === 'CANCELLED' || appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.isCompleted) ? 'default' : 'pointer', 
+                                    fontWeight: 'bold'
+                                  }}
+                                  title={(appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled') ? 'Task was cancelled' : 
+                                         (appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted) ? 'Task completed' : 
+                                         'Click to change wash type'}
                                 >
-                                  {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : appointment.washType}
+                                  {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : 
+                                   appointment.originalWashType || appointment.washType}
                                 </div>
                                 
 

@@ -222,10 +222,59 @@
   overflow: hidden;
   box-sizing: border-box;
   position: relative;
+  transition: all 0.3s ease;
 }
 
 .appointment-item.int-type {
   background-color: #ADD8E6; /* بيبي بلو للإنتيريار */
+}
+
+/* Cancelled Task Styles */
+.appointment-item.cancelled-task {
+  background-color: #ffebee !important;
+  border: 2px solid #f44336 !important;
+  opacity: 0.7;
+  position: relative;
+}
+
+.appointment-item.cancelled-task::before {
+  content: "❌";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 12px;
+  z-index: 10;
+}
+
+.appointment-item.cancelled-task .customer-name,
+.appointment-item.cancelled-task .villa,
+.appointment-item.cancelled-task .car-plate {
+  text-decoration: line-through;
+  color: #666 !important;
+}
+
+/* Completed Task Styles */
+.appointment-item.completed-task {
+  background-color: #e8f5e9 !important;
+  border: 2px solid #4caf50 !important;
+  opacity: 0.8;
+  position: relative;
+}
+
+.appointment-item.completed-task::before {
+  content: "✅";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 12px;
+  z-index: 10;
+}
+
+.appointment-item.completed-task .customer-name,
+.appointment-item.completed-task .villa,
+.appointment-item.completed-task .car-plate {
+  color: #2e7d32 !important;
+  font-weight: 600;
 }
 
 .appointment-item .customer-name {

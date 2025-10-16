@@ -86,19 +86,69 @@ const autoAssignSchedule = async (req, res) => {
     
 
     
-    // 4. Filter Out Appointments Already Covered by Locked Tasks or Completed/Cancelled
-    const completedTasksThisWeek = showAllSlots ? [] : getCompletedTasksForWeek(allHistory, weekOffset);
-    const unlockedAppointments = filterUnlockedAppointments(appointmentsWithDates, lockedTasks, completedTasksThisWeek);
+    // 4. Get completed tasks for this week
+    const completedTasksThisWeek = getCompletedTasksForWeek(allHistory, weekOffset);
+    
+    // Debug completed tasks
+    console.log(`[DEBUG] Found ${completedTasksThisWeek.length} completed/cancelled tasks for week ${weekOffset}:`);
+    completedTasksThisWeek.forEach(task => {
+      console.log(`  - ${task.CustomerID} (${task.Status}): ${task.WashDate}`);
+    });
+    
+    // 5. Filter appointments based on mode
+    let unlockedAppointments;
+    if (showAllSlots) {
+      // Show All Slots: Don't filter out completed tasks, show everything
+      unlockedAppointments = filterUnlockedAppointments(appointmentsWithDates, lockedTasks, []);
+    } else {
+      // Normal mode: Filter out completed/cancelled tasks
+      unlockedAppointments = filterUnlockedAppointments(appointmentsWithDates, lockedTasks, completedTasksThisWeek);
+    }
     
 
     
-    // 5. Assign Workers to Unlocked Tasks (Respecting Locked Worker Schedules)
+    // 6. Assign Workers to Unlocked Tasks (Respecting Locked Worker Schedules)
     const assignedUnlockedTasks = assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks);
     
-
+    // 7. Add completed tasks to schedule if Show All Slots is enabled
+    let completedTasksForDisplay = [];
+    if (showAllSlots) {
+      completedTasksForDisplay = completedTasksThisWeek.map(completedTask => ({
+        day: getDayFromDate(completedTask.WashDate, weekOffset),
+        appointmentDate: completedTask.WashDate,
+        time: getOriginalTimeFromHistory(completedTask) || '6:00 AM', // Use original time or default
+        customerId: completedTask.CustomerID,
+        customerName: completedTask.CustomerID, // Will be resolved from customers list
+        villa: completedTask.Villa || 'N/A',
+        carPlate: completedTask.CarPlate || '',
+        washType: completedTask.Status === 'Cancelled' ? 'CANCELLED' : (completedTask.WashTypePerformed || completedTask.WashType || 'EXT'),
+        originalWashType: completedTask.WashTypePerformed || completedTask.WashType || 'EXT', // Store original wash type
+        workerName: completedTask.WorkerName || 'N/A',
+        workerId: 'COMPLETED',
+        packageType: completedTask.PackageType || '',
+        isLocked: 'TRUE',
+        scheduleDate: new Date().toISOString().split('T')[0],
+        isCompleted: true,
+        status: completedTask.Status // 'Completed' or 'Cancelled'
+      })).filter(task => task.day); // Only include tasks with valid days
+    }
     
-    // 6. Combine Locked and Newly Assigned Tasks
-    const combinedSchedule = [...lockedTasks.map(formatLockedTask), ...assignedUnlockedTasks];
+    // 8. Combine Locked, Newly Assigned, and Completed Tasks
+    const combinedSchedule = [
+      ...lockedTasks.map(formatLockedTask), 
+      ...assignedUnlockedTasks,
+      ...completedTasksForDisplay
+    ];
+    
+    // Debug completed tasks
+    if (showAllSlots && completedTasksForDisplay.length > 0) {
+      console.log('[DEBUG] Completed tasks for display:', completedTasksForDisplay.map(t => ({
+        customerId: t.customerId,
+        status: t.status,
+        washType: t.washType,
+        originalWashType: t.originalWashType
+      })));
+    }
     
     // 7. Remove Duplicates
     const finalSchedule = [];
@@ -115,18 +165,57 @@ const autoAssignSchedule = async (req, res) => {
     
     // 8. Save Complete Schedule
     // Only save pending/future tasks, completed tasks should only be in wash_history
-    await clearAndWriteSheet('ScheduledTasks', finalSchedule);
+    const scheduleForSaving = finalSchedule.map(task => ({
+      day: task.day,
+      appointmentDate: task.appointmentDate || '',
+      time: task.time,
+      customerId: task.customerId,
+      customerName: task.customerName,
+      villa: task.villa,
+      carPlate: task.carPlate || '',
+      washType: task.washType || 'EXT',
+      workerName: task.workerName || '',
+      workerId: task.workerId || '',
+      packageType: task.packageType || '',
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0],
+      customerStatus: task.customerStatus || 'Active',
+      status: task.status, // Save status field
+      originalWashType: task.originalWashType // Save originalWashType field
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', scheduleForSaving);
+    
+    // Debug final schedule
+    console.log(`[DEBUG] Final schedule contains ${finalSchedule.length} tasks`);
+    const cancelledInFinal = finalSchedule.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
+    console.log(`[DEBUG] Cancelled tasks in final schedule: ${cancelledInFinal.length}`);
+    if (cancelledInFinal.length > 0) {
+      console.log('[DEBUG] Cancelled tasks:', cancelledInFinal.map(t => ({
+        customerId: t.customerId,
+        washType: t.washType,
+        status: t.status,
+        originalWashType: t.originalWashType
+      })));
+    }
     
     const endTime = new Date();
 
     
     let message = showAllSlots 
-      ? `Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments`
+      ? `Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments, ${completedTasksForDisplay.length} completed/cancelled tasks`
       : `Schedule updated successfully. ${assignedUnlockedTasks.length} new appointments added, ${lockedTasks.length} locked tasks preserved, ${completedTasksThisWeek?.length || 0} completed tasks excluded.`;
     
     if (manualInputCustomers.length > 0) {
       message += ` Note: ${manualInputCustomers.length} customers require manual wash type input due to incomplete bi-weekly cycle data.`;
     }
+    
+    // Debug response data
+    const cancelledInResponse = finalSchedule.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
+    console.log(`[DEBUG] Sending ${cancelledInResponse.length} cancelled tasks to frontend:`);
+    cancelledInResponse.forEach(t => {
+      console.log(`  - ${t.customerId}: washType=${t.washType}, status=${t.status}, originalWashType=${t.originalWashType}`);
+    });
     
     res.json({
       success: true,
@@ -134,7 +223,7 @@ const autoAssignSchedule = async (req, res) => {
       totalAppointments: finalSchedule.length,
       lockedTasks: lockedTasks.length,
       newAssignments: assignedUnlockedTasks.length,
-      completedTasks: showAllSlots ? 0 : (completedTasksThisWeek?.length || 0),
+      completedTasks: showAllSlots ? completedTasksForDisplay.length : (completedTasksThisWeek?.length || 0),
       showAllSlots,
       manualInputRequired: manualInputCustomers,
       assignments: finalSchedule
@@ -568,8 +657,17 @@ const getSchedule = async (req, res) => {
       workerId: task.WorkerID,
       packageType: task.PackageType || '',
       isLocked: task.isLocked || 'FALSE',
-      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
+      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0],
+      status: task.Status, // Add status field
+      originalWashType: task.OriginalWashType // Add originalWashType field
     }));
+    
+    // Debug cancelled tasks in getSchedule
+    const cancelledTasks = assignments.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
+    console.log(`[DEBUG] getSchedule found ${cancelledTasks.length} cancelled tasks:`);
+    cancelledTasks.forEach(t => {
+      console.log(`  - ${t.customerId}: washType=${t.washType}, status=${t.status}, originalWashType=${t.originalWashType}`);
+    });
     
     res.json({
       success: true,
@@ -1283,6 +1381,34 @@ function getAppointmentDate(dayName, weekOffset) {
   appointmentDate.setDate(weekStart.getDate() + dayOffsets[dayName]);
   
   return appointmentDate;
+}
+
+function getDayFromDate(dateStr, weekOffset) {
+  const date = parseHistoryDate(dateStr);
+  const weekStart = getCurrentWeekStart(weekOffset);
+  const weekEnd = getCurrentWeekEnd(weekOffset);
+  
+  // Check if date is within the current week
+  if (date < weekStart || date > weekEnd) {
+    return null; // Date is not in this week
+  }
+  
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const dayIndex = date.getDay();
+  const dayName = dayNames[dayIndex];
+  
+  // Only return work days (Monday-Saturday)
+  if (dayName === 'Sunday') {
+    return null;
+  }
+  
+  return dayName;
+}
+
+function getOriginalTimeFromHistory(completedTask) {
+  // Try to extract original time from history record
+  // This could be stored in a separate field or parsed from notes
+  return completedTask.OriginalTime || completedTask.Time || '6:00 AM';
 }
 
 const cancelBooking = async (req, res) => {
