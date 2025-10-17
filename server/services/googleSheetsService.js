@@ -272,28 +272,34 @@ async function addRowsToSheet(sheetName, data) {
 
 async function getScheduledTasks() {
   try {
-    await loadSheet();
+    // Force reload document info to get latest data
+    await doc.loadInfo();
     const sheet = doc.sheetsByTitle['ScheduledTasks'];
     if (!sheet) {
+      console.log('[SHEETS] ScheduledTasks sheet not found');
       return [];
     }
     
-    // Force reload sheet info
+    // Force reload sheet cells to get latest data
     await sheet.loadCells();
     
     // Check if sheet is empty
     if (sheet.rowCount <= 1) {
+      console.log('[SHEETS] ScheduledTasks sheet is empty');
       return [];
     }
     
     // Set headers manually if needed
     const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
     
-    // Get all rows as raw data
+    // Get all rows as raw data with fresh reload
     const rows = await sheet.getRows();
     if (!rows || rows.length === 0) {
+      console.log('[SHEETS] No rows found in ScheduledTasks');
       return [];
     }
+    
+    console.log(`[SHEETS] Found ${rows.length} rows in ScheduledTasks`);
     
     // Map rows manually using headers
     const allTasks = rows.map(row => {
@@ -304,6 +310,7 @@ async function getScheduledTasks() {
       return task;
     });
     
+    console.log(`[SHEETS] Retrieved ${allTasks.length} tasks from ScheduledTasks`);
     return allTasks;
   } catch (error) {
     console.error('[SHEETS] Error:', error.message);
@@ -347,6 +354,7 @@ async function addRowToSheet(sheetName, data) {
 }
 
 async function clearAndWriteSheet(sheetName, data) {
+  console.log(`[SHEETS] clearAndWriteSheet called for ${sheetName} with ${data.length} items`);
   await loadSheet();
   const sheet = doc.sheetsByTitle[sheetName];
   if (!sheet) {
@@ -354,17 +362,20 @@ async function clearAndWriteSheet(sheetName, data) {
   }
   
   try {
+    console.log(`[SHEETS] Clearing sheet ${sheetName}...`);
     // Clear all content including headers
     await sheet.clear();
     
     // Always set headers first
     const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
     await sheet.setHeaderRow(headers);
+    console.log(`[SHEETS] Headers set for ${sheetName}`);
     
     // Wait for headers to be set properly
     await new Promise(resolve => setTimeout(resolve, 200));
     
     if (data.length > 0) {
+      console.log(`[SHEETS] Adding ${data.length} rows to ${sheetName}...`);
       // Add all rows at once
       const rowsData = data.map(item => ({
         Day: item.day,
@@ -383,6 +394,9 @@ async function clearAndWriteSheet(sheetName, data) {
       }));
       
       await sheet.addRows(rowsData);
+      console.log(`[SHEETS] Successfully added ${rowsData.length} rows to ${sheetName}`);
+    } else {
+      console.log(`[SHEETS] No data to add to ${sheetName}`);
     }
   } catch (error) {
     console.error(`[SHEETS] Error in clearAndWriteSheet: ${error.message}`);

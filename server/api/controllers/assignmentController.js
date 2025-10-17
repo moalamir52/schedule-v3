@@ -1514,7 +1514,9 @@ const batchUpdateTasks = async (req, res) => {
         const workers = await getWorkers();
         const newWorker = workers.find(w => w.Name === newWorkerName && w.Status === 'Active');
         
-        if (!newWorker) continue;
+        if (!newWorker) {
+          continue;
+        }
         
         const taskIdParts = taskId.split('-');
         const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
@@ -1573,17 +1575,20 @@ const batchUpdateTasks = async (req, res) => {
           const time = taskIdParts[3];
           
           // Update all customer tasks at this time slot
-          updatedTasks.forEach(task => {
+          updatedTasks.forEach((task, index) => {
             if ((task.CustomerID || task.customerId) === customerId &&
                 (task.Day || task.day) === day &&
                 (task.Time || task.time) === time) {
+              
               if (task.WorkerName !== undefined) {
                 task.WorkerName = newWorkerName;
                 task.WorkerID = newWorker.WorkerID;
+                task.Time = targetTime;
                 task.isLocked = 'TRUE';
               } else {
                 task.workerName = newWorkerName;
                 task.workerId = newWorker.WorkerID;
+                task.time = targetTime;
                 task.isLocked = 'TRUE';
               }
             }
@@ -1613,6 +1618,9 @@ const batchUpdateTasks = async (req, res) => {
     
     await clearAndWriteSheet('ScheduledTasks', formattedTasks);
     
+    // Add small delay to ensure Google Sheets is updated
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
     res.json({
       success: true,
       message: `Successfully processed ${processedChanges} changes and saved to server`,
@@ -1620,7 +1628,8 @@ const batchUpdateTasks = async (req, res) => {
     });
     
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[BATCH-UPDATE] Error:', error);
+    res.status(500).json({ success: false, error: error.message, stack: error.stack });
   }
 };
 

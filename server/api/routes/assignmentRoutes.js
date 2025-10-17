@@ -17,6 +17,15 @@ router.post('/update-task', (req, res, next) => {
   next();
 }, updateTaskAssignment);
 router.post('/cancel-booking', cancelBooking);
-router.put('/batch-update', batchUpdateTasks);
+router.put('/batch-update', (req, res, next) => {
+  console.log('[ROUTE] PUT /batch-update called with body:', req.body);
+  next();
+}, batchUpdateTasks);
+router.put('/batch-update-tasks', batchUpdateTasks); // Alternative endpoint name
+
+// Test endpoint
+router.get('/test', (req, res) => {
+  res.json({ success: true, message: 'Assignment routes working!' });
+});
 
 module.exports = router;

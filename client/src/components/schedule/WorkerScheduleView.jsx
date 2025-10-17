@@ -24,6 +24,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       return;
     }
     
+    console.log('[FRONTEND] Saving changes to server:', pendingChanges);
     setIsSaving(true);
     
     try {
@@ -38,10 +39,16 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         body: JSON.stringify({ changes: pendingChanges })
       });
       
+      console.log('[FRONTEND] Response status:', response.status);
+      
       if (!response.ok) {
         const data = await response.json();
+        console.error('[FRONTEND] Save failed:', data);
         throw new Error(data.error || 'Failed to save changes');
       }
+      
+      const responseData = await response.json();
+      console.log('[FRONTEND] Save successful:', responseData);
       
       // Clear pending changes
       setPendingChanges([]);
@@ -188,7 +195,10 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     setPendingChanges(prev => {
       // Remove any existing change for this task
       const filtered = prev.filter(change => change.taskId !== taskId);
-      return [...filtered, changeData];
+      const newChanges = [...filtered, changeData];
+      console.log('[FRONTEND] Added wash type change to pending:', changeData);
+      console.log('[FRONTEND] Total pending changes:', newChanges.length);
+      return newChanges;
     });
     
     setShowOverrideMenu(null);
@@ -397,7 +407,10 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     setPendingChanges(prev => {
       // Remove any existing change for this task
       const filtered = prev.filter(change => change.taskId !== taskId);
-      return [...filtered, changeData];
+      const newChanges = [...filtered, changeData];
+      console.log('[FRONTEND] Added drag & drop change to pending:', changeData);
+      console.log('[FRONTEND] Total pending changes:', newChanges.length);
+      return newChanges;
     });
     
 
@@ -487,6 +500,8 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           </>
         )}
       </div>
+      
+
     </div>
     
     <table className="timetable">
