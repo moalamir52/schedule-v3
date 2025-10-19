@@ -400,4 +400,207 @@ function formatDateForHistory(dateStr) {
   return `${day}-${month}-${year}`;
 }
 
-module.exports = { getTodayTasks, completeTask, cancelTask, getAllTasks, completeAllTasks };
+const getDebugStatus = async (req, res) => {
+  try {
+    const [scheduledTasks, allHistory] = await Promise.all([
+      getScheduledTasks(),
+      getAllHistory()
+    ]);
+    
+    // Get day name and week offset from query parameters
+    const requestedDay = req.query.day;
+    const weekOffset = parseInt(req.query.weekOffset) || 0;
+    const today = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const todayName = requestedDay || dayNames[today.getDay()];
+    
+    // Calculate the actual date for the requested day and week
+    const targetDate = new Date(today);
+    const currentDay = today.getDay();
+    const selectedDayIndex = dayNames.indexOf(todayName);
+    targetDate.setDate(today.getDate() - currentDay + selectedDayIndex + (weekOffset * 7));
+    const targetDateString = targetDate.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    
+    const targetDateFormatted = formatDateForHistory(targetDate.toISOString().split('T')[0]);
+    
+    // Filter tasks for the requested day
+    const dayTasks = scheduledTasks.filter(task => task.Day === todayName);
+    
+    // Check history for this date
+    const historyForDate = allHistory.filter(record => record.WashDate === targetDateFormatted);
+    const completedTasks = historyForDate.filter(record => record.Status === 'Completed');
+    const cancelledTasks = historyForDate.filter(record => record.Status === 'Cancelled');
+    
+    // Find remaining tasks (still in schedule - these should be removed)
+    // If tasks are completed but still in schedule, they are "stuck"
+    const remainingTasks = dayTasks; // All scheduled tasks are potentially stuck if they should have been removed
+    
+    // Check which ones are actually completed/cancelled in history
+    const tasksWithStatus = dayTasks.map(task => {
+      const historyRecord = historyForDate.find(record => 
+        record.CustomerID === task.CustomerID &&
+        record.CarPlate === (task.CarPlate || '')
+      );
+      return {
+        ...task,
+        isInHistory: !!historyRecord,
+        historyStatus: historyRecord?.Status || null
+      };
+    });
+    
+    // Tasks that are in history but still in schedule are "stuck"
+    const stuckTasks = tasksWithStatus.filter(task => task.isInHistory);
+    const trulyRemainingTasks = tasksWithStatus.filter(task => !task.isInHistory);
+    
+    // Create detailed breakdown
+    const details = [
+      '📋 Scheduled Tasks for ' + todayName + ' (' + dayTasks.length + ' total):',
+      ...dayTasks.map(task => {
+        const historyRecord = historyForDate.find(record => 
+          record.CustomerID === task.CustomerID &&
+          record.CarPlate === (task.CarPlate || '')
+        );
+        const status = historyRecord ? `[${historyRecord.Status}]` : '[NOT IN HISTORY]';
+        return `  • ${task.CustomerName} (Villa ${task.Villa}) - ${task.CarPlate || 'No plate'} - ${task.Time} ${status}`;
+      }),
+      '',
+      '⚠️ STUCK TASKS (Completed but still in schedule):',
+      ...stuckTasks.map(task => `  • ${task.CustomerName} (Villa ${task.Villa}) - ${task.CarPlate || 'No plate'} - ${task.Time} [${task.historyStatus}]`),
+      '',
+      '⏳ NOT YET COMPLETED:',
+      ...trulyRemainingTasks.map(task => `  • ${task.CustomerName} (Villa ${task.Villa}) - ${task.CarPlate || 'No plate'} - ${task.Time}`),
+      '',
+      '📊 SUMMARY:',
+      `  • Total in Schedule: ${dayTasks.length}`,
+      `  • Completed in History: ${completedTasks.length}`,
+      `  • Cancelled in History: ${cancelledTasks.length}`,
+      `  • Stuck (need cleanup): ${stuckTasks.length}`,
+      `  • Truly Remaining: ${trulyRemainingTasks.length}`
+    ].join('\n');
+    
+    res.json({
+      success: true,
+      day: todayName,
+      weekOffset: weekOffset,
+      targetDate: targetDateString,
+      targetDateFormatted: targetDateFormatted,
+      scheduledCount: dayTasks.length,
+      completedCount: completedTasks.length,
+      cancelledCount: cancelledTasks.length,
+      remainingCount: trulyRemainingTasks.length,
+      stuckCount: stuckTasks.length,
+      totalInSchedule: dayTasks.length,
+      details: details,
+      scheduledTasks: dayTasks,
+      historyRecords: historyForDate,
+      remainingTasks: trulyRemainingTasks,
+      stuckTasks: stuckTasks,
+      tasksWithStatus: tasksWithStatus
+    });
+    
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const forceCleanup = async (req, res) => {
+  try {
+    const { day, weekOffset } = req.body;
+    
+    if (!day) {
+      return res.status(400).json({ success: false, error: 'Day is required' });
+    }
+    
+    const [scheduledTasks, allHistory] = await Promise.all([
+      getScheduledTasks(),
+      getAllHistory()
+    ]);
+    
+    // Calculate target date
+    const today = new Date();
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDay = today.getDay();
+    const selectedDayIndex = dayNames.indexOf(day);
+    const targetDate = new Date(today);
+    targetDate.setDate(today.getDate() - currentDay + selectedDayIndex + ((weekOffset || 0) * 7));
+    const targetDateFormatted = formatDateForHistory(targetDate.toISOString().split('T')[0]);
+    
+    // Find tasks for the specified day
+    const dayTasks = scheduledTasks.filter(task => task.Day === day);
+    
+    // Find tasks that are in history but still in schedule (these are the stuck ones)
+    const historyForDate = allHistory.filter(record => record.WashDate === targetDateFormatted);
+    const stuckTasks = dayTasks.filter(task => {
+      const isInHistory = historyForDate.some(record => 
+        record.CustomerID === task.CustomerID &&
+        record.CarPlate === (task.CarPlate || '')
+      );
+      return isInHistory; // These are completed but still in schedule = stuck
+    });
+    
+    console.log(`[FORCE-CLEANUP] Found ${stuckTasks.length} stuck tasks for ${day} (${targetDateFormatted})`);
+    
+    let cleanedCount = 0;
+    const now = new Date();
+    
+    // Remove stuck tasks from schedule (they're already in history)
+    console.log(`[FORCE-CLEANUP] Found ${stuckTasks.length} stuck tasks (completed but still in schedule)`);
+    
+    if (stuckTasks.length > 0) {
+      cleanedCount = stuckTasks.length;
+      
+      // Remove the stuck tasks from scheduled tasks
+      const stuckTaskIds = stuckTasks.map(task => `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}`);
+      const remainingTasks = scheduledTasks.filter(task => 
+        !stuckTaskIds.includes(`${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}`)
+      );
+      
+      // Update scheduled tasks sheet
+      const updatedSchedule = remainingTasks.map(task => ({
+        day: task.Day,
+        appointmentDate: task.AppointmentDate || '',
+        time: task.Time,
+        customerId: task.CustomerID,
+        customerName: task.CustomerName,
+        villa: task.Villa,
+        carPlate: task.CarPlate,
+        washType: task.WashType,
+        workerName: task.WorkerName,
+        workerId: task.WorkerID,
+        packageType: task.PackageType || '',
+        isLocked: task.isLocked || 'FALSE',
+        scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
+      }));
+      
+      await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+      
+      console.log(`[FORCE-CLEANUP] Removed ${cleanedCount} stuck tasks from schedule`);
+    }
+    
+
+    
+    console.log(`[FORCE-CLEANUP] Completed cleanup: ${cleanedCount} tasks cleaned`);
+    
+    res.json({
+      success: true,
+      message: `Force cleanup completed for ${day} (${targetDateFormatted})`,
+      day: day,
+      targetDate: targetDateFormatted,
+      cleanedCount: cleanedCount,
+      skippedCount: dayTasks.length - cleanedCount,
+      totalTasksForDay: dayTasks.length,
+      stuckTasks: stuckTasks.map(task => `${task.CustomerName} - ${task.CarPlate || 'No plate'}`)
+    });
+    
+  } catch (error) {
+    console.error('[FORCE-CLEANUP] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+module.exports = { getTodayTasks, completeTask, cancelTask, getAllTasks, completeAllTasks, getDebugStatus, forceCleanup };

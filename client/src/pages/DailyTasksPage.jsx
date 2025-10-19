@@ -143,11 +143,24 @@ const DailyTasksPage = () => {
         throw new Error(data.error || 'Failed to complete task');
       }
       
-      // Remove completed task from list
-      setTasks(prev => prev.filter(t => t.id !== task.id));
+      // تأكد من نجاح العملية قبل حذف المهمة من الـ UI
+      if (data.success) {
+        // Remove completed task from list
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+        
+        // إظهار رسالة نجاح
+        alert(`✅ Task completed successfully: ${task.customerName} - Villa ${task.villa}`);
+      } else {
+        throw new Error(data.error || 'Task completion was not confirmed');
+      }
       
     } catch (err) {
-      alert(`Error completing task: ${err.message}`);
+      alert(`❌ Error completing task: ${err.message}\n\nPlease try again or check if the task was actually completed.`);
+      
+      // إعادة تحميل المهام للتأكد من الحالة الحقيقية
+      setTimeout(() => {
+        loadTodayTasks(selectedDay, weekOffset);
+      }, 1000);
     } finally {
       setCompletingTasks(prev => {
         const newSet = new Set(prev);
@@ -182,13 +195,23 @@ const DailyTasksPage = () => {
         throw new Error(data.error || 'Failed to cancel task');
       }
       
-      // Remove cancelled task from list
-      setTasks(prev => prev.filter(t => t.id !== task.id));
-      
-      alert(`Task cancelled successfully: ${task.customerName} - Villa ${task.villa}`);
+      // تأكد من نجاح العملية قبل حذف المهمة من الـ UI
+      if (data.success) {
+        // Remove cancelled task from list
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+        
+        alert(`✅ Task cancelled successfully: ${task.customerName} - Villa ${task.villa}`);
+      } else {
+        throw new Error(data.error || 'Task cancellation was not confirmed');
+      }
       
     } catch (err) {
-      alert(`Error cancelling task: ${err.message}`);
+      alert(`❌ Error cancelling task: ${err.message}\n\nPlease try again or refresh to check current status.`);
+      
+      // إعادة تحميل المهام للتأكد من الحالة الحقيقية
+      setTimeout(() => {
+        loadTodayTasks(selectedDay, weekOffset);
+      }, 1000);
     } finally {
       setCompletingTasks(prev => {
         const newSet = new Set(prev);
@@ -221,12 +244,27 @@ const DailyTasksPage = () => {
         throw new Error(data.error || 'Failed to complete all tasks');
       }
       
-      // Clear all tasks
-      setTasks([]);
-      alert(`Successfully completed ${data.completedCount} tasks!`);
+      // تأكد من نجاح العملية قبل حذف المهام من الـ UI
+      if (data.success) {
+        // Clear all tasks
+        setTasks([]);
+        
+        const message = data.skippedCount > 0 
+          ? `✅ Successfully completed ${data.completedCount} tasks!\n⚠️ Skipped ${data.skippedCount} already completed tasks.`
+          : `✅ Successfully completed ${data.completedCount} tasks!`;
+        
+        alert(message);
+      } else {
+        throw new Error(data.error || 'Task completion was not confirmed');
+      }
       
     } catch (err) {
-      alert(`Error completing all tasks: ${err.message}`);
+      alert(`❌ Error completing all tasks: ${err.message}\n\nPlease refresh and check which tasks were actually completed.`);
+      
+      // إعادة تحميل المهام للتأكد من الحالة الحقيقية
+      setTimeout(() => {
+        loadTodayTasks(selectedDay, weekOffset);
+      }, 1000);
     } finally {
       setCompletingAll(false);
     }
@@ -526,6 +564,93 @@ const DailyTasksPage = () => {
                 }}
               >
                 🔄 Refresh
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/debug-status?day=${selectedDay}&weekOffset=${weekOffset}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                      const message = `🔍 Debug Info for ${selectedDay}:\n\n` +
+                        `📋 Scheduled Tasks: ${data.scheduledCount}\n` +
+                        `✅ Completed in History: ${data.completedCount}\n` +
+                        `❌ Cancelled in History: ${data.cancelledCount}\n` +
+                        `⏳ Remaining Tasks: ${data.remainingCount}\n\n` +
+                        `📅 Target Date: ${data.targetDate}\n\n` +
+                        `${data.details || ''}`;
+                      
+                      alert(message);
+                    } else {
+                      alert('❌ Failed to get debug info: ' + data.error);
+                    }
+                  } catch (err) {
+                    alert('❌ Error getting debug info: ' + err.message);
+                  }
+                }}
+                style={{
+                  background: '#ffc107',
+                  color: '#212529',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                🔍 Debug Status
+              </button>
+              <button
+                onClick={async () => {
+                  const confirmed = window.confirm(
+                    `⚠️ FORCE CLEANUP for ${selectedDay}\n\n` +
+                    `This will:\n` +
+                    `1. Check all scheduled tasks for ${selectedDay}\n` +
+                    `2. Mark any remaining tasks as completed in history\n` +
+                    `3. Remove them from scheduled tasks\n\n` +
+                    `Use this ONLY if tasks are stuck after completion.\n\n` +
+                    `Continue?`
+                  );
+                  
+                  if (!confirmed) return;
+                  
+                  try {
+                    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/force-cleanup`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ day: selectedDay, weekOffset: weekOffset })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                      alert(`✅ Force cleanup completed!\n\n` +
+                        `🧹 Cleaned up: ${data.cleanedCount} tasks\n` +
+                        `⏭️ Skipped: ${data.skippedCount} tasks\n\n` +
+                        `${data.message || ''}`);
+                      
+                      // Refresh tasks after cleanup
+                      loadTodayTasks(selectedDay, weekOffset);
+                    } else {
+                      alert('❌ Force cleanup failed: ' + data.error);
+                    }
+                  } catch (err) {
+                    alert('❌ Error during force cleanup: ' + err.message);
+                  }
+                }}
+                style={{
+                  background: '#dc3545',
+                  color: 'white',
+                  padding: '8px 16px',
+                  borderRadius: '6px',
+                  border: 'none',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                🧹 Force Cleanup
               </button>
             </div>
           </div>

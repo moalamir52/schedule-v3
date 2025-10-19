@@ -1170,14 +1170,18 @@ function checkIfFirstWeekOfBiWeekCycleFromHistory(allCarPlates, allHistory, week
   
   // Bi-weekly customers appear every week, but wash type depends on cycle
   
-  // For bi-weekly customers, need at least 2 weeks of data to determine pattern
-  if (daysSinceLastWash < 14) {
+  // Simplified bi-weekly logic: just alternate based on last wash type
+  const lastWashType = customerHistory[0].WashType || customerHistory[0].WashTypePerformed;
+  
+  if (!lastWashType) {
+    console.log(`[BI-WEEKLY] No wash type in history for customer ${customer?.CustomerID}`);
     return 'UNKNOWN';
   }
   
-  // Determine wash type based on last wash type
-  const lastWashType = customerHistory[0].WashType;
+  // For bi-weekly customers: alternate EXT/INT every week
   const shouldBeInt = (lastWashType === 'EXT');
+  
+  console.log(`[BI-WEEKLY] Customer ${customer?.CustomerID}: Last wash ${customerHistory[0].WashDate} (${lastWashType}), should be INT: ${shouldBeInt}`);
   
   return shouldBeInt;
 }

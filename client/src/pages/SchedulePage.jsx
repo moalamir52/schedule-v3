@@ -27,6 +27,15 @@ const SchedulePage = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
+        // Check if new week needs to be generated
+        try {
+          const autoCheckResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/auto-schedule/check-new-week`);
+          const autoCheckData = await autoCheckResponse.json();
+          console.log('[AUTO-CHECK] New week check:', autoCheckData.message);
+        } catch (autoErr) {
+          console.warn('[AUTO-CHECK] Failed to check new week:', autoErr.message);
+        }
+        
         // Fetch overview data
         const overviewResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`);
         const overviewData = await overviewResponse.json();

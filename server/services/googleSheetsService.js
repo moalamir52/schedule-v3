@@ -605,14 +605,26 @@ async function deleteInvoiceRecord(invoiceId) {
 }
 
 async function addWorkerToSheet(workerData) {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['Workers'];
-  if (!sheet) {
-    throw new Error("Sheet 'Workers' not found.");
+  try {
+    console.log('[WORKERS] Adding worker to sheet:', workerData);
+    await loadSheet();
+    const sheet = doc.sheetsByTitle['Workers'];
+    if (!sheet) {
+      console.error('[WORKERS] Workers sheet not found!');
+      throw new Error("Sheet 'Workers' not found.");
+    }
+    
+    console.log('[WORKERS] Sheet found, adding row...');
+    await sheet.addRow(workerData);
+    console.log('[WORKERS] Worker added successfully to sheet');
+    
+    // Wait a moment for the sheet to update
+    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('[WORKERS] Sheet update completed');
+  } catch (error) {
+    console.error('[WORKERS] Error in addWorkerToSheet:', error);
+    throw error;
   }
-  
-  await sheet.addRow(workerData);
-
 }
 
 async function deleteWorkerFromSheet(workerName) {

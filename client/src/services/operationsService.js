@@ -456,12 +456,21 @@ class OperationsService {
   
   async addWorker(workerName, job, status) {
     try {
+      console.log('Sending request to add worker:', { name: workerName, job, status });
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: workerName, job, status })
       });
-      return await response.json();
+      
+      const result = await response.json();
+      console.log('Add worker response:', result);
+      
+      if (!response.ok) {
+        throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return result;
     } catch (error) {
       console.error('Error adding worker:', error);
       throw error;

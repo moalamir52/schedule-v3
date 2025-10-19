@@ -10,6 +10,7 @@ import OperationsPage from './pages/OperationsPage.jsx';
 import UsersPage from './pages/UsersPage.jsx';
 import AuditReportPage from './pages/AuditReportPage.jsx';
 import ReportsPage from './pages/ReportsPage.jsx';
+import CleanupPage from './pages/CleanupPage.jsx';
 import authService from './services/authService.js';
 import './App.css';
 
@@ -111,6 +112,7 @@ function App() {
             <Route path="/users" element={<UsersPage />} />
             <Route path="/audit-report" element={<AuditReportPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/cleanup" element={<CleanupPage />} />
           </Routes>
         </main>
       </div>

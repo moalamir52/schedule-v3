@@ -32,8 +32,17 @@ const OperationsPage = () => {
 
   const loadWorkers = async () => {
     try {
+      console.log('Loading workers...');
       const workersData = await operationsService.getWorkers();
-      setWorkers(workersData.map(w => typeof w === 'string' ? w : w.Name || w.WorkerName || 'Unknown'));
+      console.log('Workers data received:', workersData);
+      
+      const workerNames = workersData.map(w => {
+        if (typeof w === 'string') return w;
+        return w.Name || w.WorkerName || 'Unknown';
+      }).filter(name => name && name !== 'Unknown');
+      
+      console.log('Processed worker names:', workerNames);
+      setWorkers(workerNames.length > 0 ? workerNames : ['Raqib', 'Rahman']);
     } catch (error) {
       console.error('Failed to load workers:', error);
       setWorkers(['Raqib', 'Rahman']); // Default workers
@@ -215,39 +224,20 @@ const OperationsPage = () => {
       return;
     }
 
-    setModal({
-      isOpen: true,
-      type: 'input',
-      title: 'Worker Job',
-      message: 'What is the worker job?',
-      showInput: true,
-      inputValue: 'Car Washer',
-      inputPlaceholder: 'Enter job title',
-      onConfirm: (job) => {
-        if (!job) return;
-        setModal({
-          isOpen: true,
-          type: 'input',
-          title: 'Worker Status',
-          message: 'What is the worker status?',
-          showInput: true,
-          inputValue: 'Active',
-          inputPlaceholder: 'Active/Inactive',
-          onConfirm: async (status) => {
-            if (!status) return;
-            try {
-              await operationsService.addWorker(newWorkerName.trim(), job, status);
-              setWorkers([...workers, newWorkerName.trim()]);
-              setNewWorkerName('');
-              setShowAddForm(false);
-              setModal({ isOpen: true, type: 'success', title: 'Success', message: `Worker "${newWorkerName.trim()}" added successfully!`, onConfirm: null });
-            } catch (error) {
-              setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add worker', onConfirm: null });
-            }
-          }
-        });
-      }
-    });
+    try {
+      console.log('Adding worker:', newWorkerName.trim());
+      await operationsService.addWorker(newWorkerName.trim(), 'Car Washer', 'Active');
+      
+      // Reload workers to get updated list
+      await loadWorkers();
+      
+      setNewWorkerName('');
+      setShowAddForm(false);
+      setModal({ isOpen: true, type: 'success', title: 'Success', message: `Worker "${newWorkerName.trim()}" added successfully!`, onConfirm: null });
+    } catch (error) {
+      console.error('Error adding worker:', error);
+      setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add worker: ' + error.message, onConfirm: null });
+    }
   };
 
   const handleDeleteWorker = async (workerName) => {

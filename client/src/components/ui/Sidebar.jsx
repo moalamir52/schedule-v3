@@ -252,6 +252,16 @@ function Sidebar({ user, onLogout }) {
             Reports & Analytics
           </Link>
           
+          <Link 
+            to="/cleanup" 
+            style={linkStyle}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#dc3545'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+          >
+            <span style={{...iconStyle, fontSize: '16px'}}>🧹</span>
+            System Cleanup
+          </Link>
+          
           <div
             style={{
               ...linkStyle,
