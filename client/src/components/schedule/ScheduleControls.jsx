@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiChevronLeft, FiChevronRight, FiSettings, FiEye, FiBarChart, FiZap, FiPlus, FiDownload, FiAlertTriangle } from 'react-icons/fi';
 
-function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
+function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -193,18 +193,38 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
           <div style={dropdownStyle}>
             <div 
               style={dropdownItemStyle}
-              onClick={() => onAutoAssign(false)}
+              onClick={() => {
+                onSyncNewCustomers();
+                setShowDropdown(false);
+              }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#fff3e0';
-                e.currentTarget.style.color = '#f57c00';
+                e.currentTarget.style.backgroundColor = '#e8f5e8';
+                e.currentTarget.style.color = '#2e7d32';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = 'white';
                 e.currentTarget.style.color = '#495057';
               }}
             >
-              <FiZap style={{ color: '#ff9800' }} />
-              Auto (Smart)
+              🔄 Add New Customers
+            </div>
+            
+            <div 
+              style={dropdownItemStyle}
+              onClick={() => {
+                onGenerateNew();
+                setShowDropdown(false);
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#ffebee';
+                e.currentTarget.style.color = '#c62828';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#495057';
+              }}
+            >
+              ⚡ Generate New Schedule
             </div>
 
             <div 
@@ -222,36 +242,7 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
               <FiAlertTriangle style={{ color: '#f44336' }} />
               Clear Schedule
             </div>
-            <div 
-              style={dropdownItemStyle}
-              onClick={() => onViewChange('weekly')}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#e3f2fd';
-                e.currentTarget.style.color = '#1976d2';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#495057';
-              }}
-            >
-              <FiEye style={{ color: '#2196f3' }} />
-              Weekly View
-            </div>
-            <div 
-              style={dropdownItemStyle}
-              onClick={() => onViewChange('overview')}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#f3e5f5';
-                e.currentTarget.style.color = '#7b1fa2';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#495057';
-              }}
-            >
-              <FiBarChart style={{ color: '#9c27b0' }} />
-              Overview
-            </div>
+            
             <div 
               style={dropdownItemStyle}
               onClick={() => {
@@ -268,8 +259,9 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
               }}
             >
               <FiPlus style={{ color: '#4caf50' }} />
-              Add
+              Add Manual Appointment
             </div>
+            
             <div 
               style={dropdownItemStyle}
               onClick={() => {
@@ -289,7 +281,7 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
               Export
             </div>
             <div 
-              style={dropdownItemStyle}
+              style={{ ...dropdownItemStyle, borderBottom: 'none' }}
               onClick={() => {
                 onCronSettings();
                 setShowDropdown(false);
@@ -305,71 +297,7 @@ function ScheduleControls({ onAutoAssign, onToggleShowAllSlots, showAllSlots, on
             >
               ⏰ Schedule Settings
             </div>
-            <div 
-              style={dropdownItemStyle}
-              onClick={async () => {
-                // Show debug info modal
-                try {
-                  // Fetch real debug info from server
-                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/debug/info`);
-                  let debugInfo;
-                  
-                  if (response.ok) {
-                    debugInfo = await response.json();
-                  } else {
-                    // Fallback debug info
-                    debugInfo = {
-                      availablePackages: [
-                        "2 Ext 1 INT week",
-                        "2 Ext 1 INT bi week", 
-                        "3 Ext 1 INT bi week",
-                        "3 Ext 1 INT week",
-                        "2 Ext",
-                        "3 Ext 1 INT bi week "
-                      ],
-                      systemStatus: "Running (Offline Mode)",
-                      serverConnection: "Disconnected",
-                      error: "Could not fetch from server"
-                    };
-                  }
-                  
-                  const packagesList = debugInfo.availablePackages ? 
-                    debugInfo.availablePackages.map(p => `• ${p}`).join('\n') : 
-                    '• No packages found';
-                  
-                  const errorInfo = debugInfo.error ? `\n\n⚠️ Error: ${debugInfo.error}` : '';
-                  
-                  alert(`🔍 SYSTEM DEBUG INFO\n\n📦 Available Packages (${debugInfo.availablePackages?.length || 0}):\n${packagesList}\n\n⚡ System Status: ${debugInfo.systemStatus || 'Unknown'}\n🔄 Last Check: ${new Date().toLocaleString()}\n🌐 Server: ${debugInfo.serverConnection || 'Unknown'}${errorInfo}\n\n📝 Use this info to diagnose scheduling issues`);
-                } catch (error) {
-                  alert(`🔍 DEBUG INFO (Error)\n\n❌ Failed to fetch debug info\nError: ${error.message}\n\n📦 Fallback Packages:\n• 2 Ext 1 INT week\n• 2 Ext 1 INT bi week\n• 3 Ext 1 INT bi week\n• 3 Ext 1 INT week\n• 2 Ext\n• 3 Ext 1 INT bi week`);
-                }
-                setShowDropdown(false);
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#fff3e0';
-                e.currentTarget.style.color = '#f57c00';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#495057';
-              }}
-            >
-              🔍 Debug Info
-            </div>
-            <div 
-              style={{ ...dropdownItemStyle, borderBottom: 'none' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#ffebee';
-                e.currentTarget.style.color = '#c62828';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = 'white';
-                e.currentTarget.style.color = '#495057';
-              }}
-            >
-              <FiAlertTriangle style={{ color: '#f44336' }} />
-              Conflicts
-            </div>
+
           </div>
         )}
       </div>

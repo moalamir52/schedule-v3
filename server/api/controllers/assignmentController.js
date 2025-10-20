@@ -21,11 +21,9 @@ const autoAssignSchedule = async (req, res) => {
     if (showAllSlots === true || showAllSlots === 'true') {
       // Show all active and booked customers for capacity planning
       activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
-
     } else {
       // Normal mode: include Active and Booked customers, filter out completed tasks
       activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
-
     }
     
     const activeWorkers = workers.filter(worker => worker.Status === 'Active');
@@ -89,11 +87,7 @@ const autoAssignSchedule = async (req, res) => {
     // 4. Get completed tasks for this week
     const completedTasksThisWeek = getCompletedTasksForWeek(allHistory, weekOffset);
     
-    // Debug completed tasks
-    console.log(`[DEBUG] Found ${completedTasksThisWeek.length} completed/cancelled tasks for week ${weekOffset}:`);
-    completedTasksThisWeek.forEach(task => {
-      console.log(`  - ${task.CustomerID} (${task.Status}): ${task.WashDate}`);
-    });
+
     
     // 5. Filter appointments based on mode
     let unlockedAppointments;
@@ -140,26 +134,38 @@ const autoAssignSchedule = async (req, res) => {
       ...completedTasksForDisplay
     ];
     
-    // Debug completed tasks
-    if (showAllSlots && completedTasksForDisplay.length > 0) {
-      console.log('[DEBUG] Completed tasks for display:', completedTasksForDisplay.map(t => ({
-        customerId: t.customerId,
-        status: t.status,
-        washType: t.washType,
-        originalWashType: t.originalWashType
-      })));
-    }
+
     
-    // 7. Remove Duplicates
+    // 7. Remove Duplicates - Enhanced logic to prevent customer duplication
     const finalSchedule = [];
     const seen = new Set();
+    const tasksByKey = new Map();
+    
+    // First pass: collect all tasks by key and prioritize locked tasks
     combinedSchedule.forEach(task => {
       const key = `${task.customerId}-${task.day}-${task.time}-${task.carPlate || 'NOPLATE'}`;
+      
+      if (!tasksByKey.has(key)) {
+        tasksByKey.set(key, task);
+      } else {
+        // If duplicate found, prioritize locked tasks over unlocked ones
+        const existingTask = tasksByKey.get(key);
+        if (task.isLocked === 'TRUE' && existingTask.isLocked !== 'TRUE') {
+          tasksByKey.set(key, task);
+        }
+        // If both are locked or both are unlocked, keep the first one
+      }
+    });
+    
+    // Second pass: add unique tasks to final schedule
+    tasksByKey.forEach((task, key) => {
       if (!seen.has(key)) {
         seen.add(key);
         finalSchedule.push(task);
       }
     });
+    
+
     
 
     
@@ -186,18 +192,10 @@ const autoAssignSchedule = async (req, res) => {
     
     await clearAndWriteSheet('ScheduledTasks', scheduleForSaving);
     
-    // Debug final schedule
-    console.log(`[DEBUG] Final schedule contains ${finalSchedule.length} tasks`);
-    const cancelledInFinal = finalSchedule.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
-    console.log(`[DEBUG] Cancelled tasks in final schedule: ${cancelledInFinal.length}`);
-    if (cancelledInFinal.length > 0) {
-      console.log('[DEBUG] Cancelled tasks:', cancelledInFinal.map(t => ({
-        customerId: t.customerId,
-        washType: t.washType,
-        status: t.status,
-        originalWashType: t.originalWashType
-      })));
-    }
+    // Clear cache after update
+    clearScheduleCache();
+    
+
     
     const endTime = new Date();
 
@@ -210,12 +208,7 @@ const autoAssignSchedule = async (req, res) => {
       message += ` Note: ${manualInputCustomers.length} customers require manual wash type input due to incomplete bi-weekly cycle data.`;
     }
     
-    // Debug response data
-    const cancelledInResponse = finalSchedule.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
-    console.log(`[DEBUG] Sending ${cancelledInResponse.length} cancelled tasks to frontend:`);
-    cancelledInResponse.forEach(t => {
-      console.log(`  - ${t.customerId}: washType=${t.washType}, status=${t.status}, originalWashType=${t.originalWashType}`);
-    });
+
     
     res.json({
       success: true,
@@ -245,9 +238,6 @@ function generateAllAppointments(customers, allHistory, weekOffset, showAllSlots
     
     // Store start date for later filtering per appointment
     const customerStartDate = customer['start date'] ? parseCustomerStartDate(customer['start date']) : null;
-    
-    // Debug for specific customers
-
     
     const timeField = customer.Time || '';
     const daysField = customer.Days || '';
@@ -640,8 +630,23 @@ function formatLockedTask(lockedTask) {
 }
 
 // Keep existing functions for other endpoints
+// Simple cache for schedule data
+let scheduleCache = {
+  data: null,
+  timestamp: 0,
+  ttl: 30000 // 30 seconds
+};
+
 const getSchedule = async (req, res) => {
   try {
+    const now = Date.now();
+    
+    // Check cache first
+    if (scheduleCache.data && (now - scheduleCache.timestamp) < scheduleCache.ttl) {
+      console.log('[CACHE] Returning cached schedule data');
+      return res.json(scheduleCache.data);
+    }
+    
     const scheduledTasks = await getScheduledTasks();
     
     const assignments = scheduledTasks.map(task => ({
@@ -658,27 +663,35 @@ const getSchedule = async (req, res) => {
       packageType: task.PackageType || '',
       isLocked: task.isLocked || 'FALSE',
       scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0],
-      status: task.Status, // Add status field
-      originalWashType: task.OriginalWashType // Add originalWashType field
+      status: task.Status,
+      originalWashType: task.OriginalWashType
     }));
     
-    // Debug cancelled tasks in getSchedule
-    const cancelledTasks = assignments.filter(t => t.washType === 'CANCELLED' || t.status === 'Cancelled');
-    console.log(`[DEBUG] getSchedule found ${cancelledTasks.length} cancelled tasks:`);
-    cancelledTasks.forEach(t => {
-      console.log(`  - ${t.customerId}: washType=${t.washType}, status=${t.status}, originalWashType=${t.originalWashType}`);
-    });
-    
-    res.json({
+    const response = {
       success: true,
-      message: 'Schedule loaded successfully',
+      message: assignments.length > 0 ? 'Schedule loaded successfully' : 'No schedule data found',
       totalAppointments: assignments.length,
       assignments
-    });
+    };
+    
+    // Update cache
+    scheduleCache = {
+      data: response,
+      timestamp: now,
+      ttl: 30000
+    };
+    
+    res.json(response);
     
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
+};
+
+// Clear cache when schedule is updated
+const clearScheduleCache = () => {
+  scheduleCache.data = null;
+  scheduleCache.timestamp = 0;
 };
 
 const getAvailableWorkers = async (req, res) => {
@@ -959,16 +972,35 @@ const updateTaskAssignment = async (req, res) => {
     }
     
     // Always use full rewrite to ensure all customer cars are updated together
-
-    const uniqueTasks = [];
+    // Enhanced duplicate removal with priority for locked tasks
+    const tasksByKey = new Map();
     const seen = new Set();
+    
+    // First pass: collect tasks by key, prioritizing locked tasks
     existingTasks.forEach(task => {
       const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
+      
+      if (!tasksByKey.has(key)) {
+        tasksByKey.set(key, task);
+      } else {
+        // If duplicate found, prioritize locked tasks
+        const existingTask = tasksByKey.get(key);
+        if (task.isLocked === 'TRUE' && existingTask.isLocked !== 'TRUE') {
+          tasksByKey.set(key, task);
+        }
+      }
+    });
+    
+    // Second pass: create unique tasks array
+    const uniqueTasks = [];
+    tasksByKey.forEach((task, key) => {
       if (!seen.has(key)) {
         seen.add(key);
         uniqueTasks.push(task);
       }
     });
+    
+    console.log(`[UPDATE-TASK] Removed ${existingTasks.length - uniqueTasks.length} duplicate tasks`);
     
     const updatedSchedule = uniqueTasks.map(task => ({
       day: task.Day || task.day,
@@ -1169,19 +1201,15 @@ function checkIfFirstWeekOfBiWeekCycleFromHistory(allCarPlates, allHistory, week
 
   
   // Bi-weekly customers appear every week, but wash type depends on cycle
-  
   // Simplified bi-weekly logic: just alternate based on last wash type
   const lastWashType = customerHistory[0].WashType || customerHistory[0].WashTypePerformed;
   
   if (!lastWashType) {
-    console.log(`[BI-WEEKLY] No wash type in history for customer ${customer?.CustomerID}`);
     return 'UNKNOWN';
   }
   
   // For bi-weekly customers: alternate EXT/INT every week
   const shouldBeInt = (lastWashType === 'EXT');
-  
-  console.log(`[BI-WEEKLY] Customer ${customer?.CustomerID}: Last wash ${customerHistory[0].WashDate} (${lastWashType}), should be INT: ${shouldBeInt}`);
   
   return shouldBeInt;
 }
@@ -1329,9 +1357,6 @@ function parseCustomerStartDate(dateStr) {
     
     const result = new Date(year, month, day);
     
-    // Debug for specific dates
-
-    
     return result;
   }
   
@@ -1354,9 +1379,6 @@ function getCurrentWeekStart(weekOffset) {
   
   mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
   mondayOfWeek.setHours(0, 0, 0, 0);
-  
-  // Debug for week offset 0
-
   
   return mondayOfWeek;
 }
@@ -1470,6 +1492,124 @@ const cancelBooking = async (req, res) => {
   }
 };
 
+const syncNewCustomers = async (req, res) => {
+  try {
+    const { weekOffset = 0 } = req.body;
+    
+    // Get existing schedule
+    const existingTasks = await getScheduledTasks();
+    const existingCustomerIds = new Set(existingTasks.map(task => task.CustomerID));
+    
+    console.log(`[SYNC-NEW] Existing customer IDs in schedule: ${Array.from(existingCustomerIds).join(', ')}`);
+    
+    // Get all customers from database
+    const [customers, workers, allHistory] = await Promise.all([
+      getCustomers(),
+      getWorkers(),
+      getAllHistory()
+    ]);
+    
+    console.log(`[SYNC-NEW] Total customers in database: ${customers.length}`);
+    const activeCustomers = customers.filter(customer => customer.Status === 'Active' || customer.Status === 'Booked');
+    console.log(`[SYNC-NEW] Active/Booked customers: ${activeCustomers.length}`);
+    console.log(`[SYNC-NEW] Active customer IDs: ${activeCustomers.map(c => c.CustomerID).join(', ')}`);
+    
+    // Find new customers not in existing schedule
+    const newCustomers = customers.filter(customer => 
+      (customer.Status === 'Active' || customer.Status === 'Booked') &&
+      !existingCustomerIds.has(customer.CustomerID)
+    );
+    
+    console.log(`[SYNC-NEW] New customers found: ${newCustomers.length}`);
+    if (newCustomers.length > 0) {
+      console.log(`[SYNC-NEW] New customer IDs: ${newCustomers.map(c => c.CustomerID).join(', ')}`);
+    }
+    
+    if (newCustomers.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No new customers found',
+        newCustomersCount: 0,
+        assignments: existingTasks.map(formatExistingTask)
+      });
+    }
+    
+    // Generate appointments for new customers only
+    const newAppointmentsResult = generateAllAppointments(newCustomers, allHistory, weekOffset, false);
+    const newAppointments = newAppointmentsResult.appointments || newAppointmentsResult;
+    
+    // Add dates to new appointments
+    const newAppointmentsWithDates = addActualDatesToAppointments(newAppointments, weekOffset);
+    
+    // Assign workers to new appointments
+    const activeWorkers = workers.filter(worker => worker.Status === 'Active');
+    const assignedNewTasks = assignWorkersToTasks(newAppointmentsWithDates, activeWorkers, existingTasks);
+    
+    // Combine existing and new tasks
+    const combinedTasks = [
+      ...existingTasks.map(formatExistingTask),
+      ...assignedNewTasks
+    ];
+    
+    // Save updated schedule
+    const scheduleForSaving = combinedTasks.map(task => ({
+      day: task.day,
+      appointmentDate: task.appointmentDate || '',
+      time: task.time,
+      customerId: task.customerId,
+      customerName: task.customerName,
+      villa: task.villa,
+      carPlate: task.carPlate || '',
+      washType: task.washType || 'EXT',
+      workerName: task.workerName || '',
+      workerId: task.workerId || '',
+      packageType: task.packageType || '',
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0],
+      customerStatus: task.customerStatus || 'Active'
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', scheduleForSaving);
+    clearScheduleCache();
+    
+    // Count actual new customers added (from original newCustomers list)
+    const actualNewCustomersAdded = newCustomers.length;
+    
+    res.json({
+      success: true,
+      message: `Successfully added ${actualNewCustomersAdded} new customers`,
+      newCustomersCount: actualNewCustomersAdded,
+      totalAppointments: combinedTasks.length,
+      assignments: combinedTasks
+    });
+    
+  } catch (error) {
+    console.error('[SYNC-NEW] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+function formatExistingTask(task) {
+  return {
+    day: task.Day,
+    appointmentDate: task.AppointmentDate || '',
+    time: task.Time,
+    customerId: task.CustomerID,
+    customerName: task.CustomerName,
+    villa: task.Villa,
+    carPlate: task.CarPlate || '',
+    washType: task.WashType || 'EXT',
+    workerName: task.WorkerName,
+    workerId: task.WorkerID,
+    packageType: task.PackageType || '',
+    isLocked: task.isLocked || 'FALSE',
+    scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0],
+    customerStatus: task.customerStatus || 'Active',
+    status: task.Status,
+    originalWashType: task.OriginalWashType
+  };
+}
+
 const batchUpdateTasks = async (req, res) => {
   try {
     const { changes } = req.body;
@@ -1578,32 +1718,75 @@ const batchUpdateTasks = async (req, res) => {
           const day = taskIdParts[2];
           const time = taskIdParts[3];
           
-          // Update all customer tasks at this time slot
-          updatedTasks.forEach((task, index) => {
-            if ((task.CustomerID || task.customerId) === customerId &&
-                (task.Day || task.day) === day &&
-                (task.Time || task.time) === time) {
-              
-              if (task.WorkerName !== undefined) {
-                task.WorkerName = newWorkerName;
-                task.WorkerID = newWorker.WorkerID;
-                task.Time = targetTime;
-                task.isLocked = 'TRUE';
-              } else {
-                task.workerName = newWorkerName;
-                task.workerId = newWorker.WorkerID;
-                task.time = targetTime;
-                task.isLocked = 'TRUE';
+          console.log(`[BATCH-UPDATE] Moving ${customerId} from ${day} ${time} to ${targetDay} ${targetTime}`);
+          
+          // Only update if actually moving to different time/day
+          if (day !== targetDay || time !== targetTime) {
+            // Find and update all customer tasks at the source time slot
+            let tasksUpdated = 0;
+            updatedTasks.forEach((task, index) => {
+              if ((task.CustomerID || task.customerId) === customerId &&
+                  (task.Day || task.day) === day &&
+                  (task.Time || task.time) === time) {
+                
+                console.log(`[BATCH-UPDATE] Updating task for car: ${task.CarPlate || task.carPlate}`);
+                
+                if (task.WorkerName !== undefined) {
+                  task.WorkerName = newWorkerName;
+                  task.WorkerID = newWorker.WorkerID;
+                  task.Day = targetDay;
+                  task.Time = targetTime;
+                  task.isLocked = 'TRUE';
+                } else {
+                  task.workerName = newWorkerName;
+                  task.workerId = newWorker.WorkerID;
+                  task.day = targetDay;
+                  task.time = targetTime;
+                  task.isLocked = 'TRUE';
+                }
+                tasksUpdated++;
               }
-            }
-          });
+            });
+            
+            console.log(`[BATCH-UPDATE] Updated ${tasksUpdated} tasks for ${customerId}`);
+          } else {
+            // Just update worker if same time/day
+            updatedTasks.forEach((task, index) => {
+              if ((task.CustomerID || task.customerId) === customerId &&
+                  (task.Day || task.day) === day &&
+                  (task.Time || task.time) === time) {
+                
+                if (task.WorkerName !== undefined) {
+                  task.WorkerName = newWorkerName;
+                  task.WorkerID = newWorker.WorkerID;
+                  task.isLocked = 'TRUE';
+                } else {
+                  task.workerName = newWorkerName;
+                  task.workerId = newWorker.WorkerID;
+                  task.isLocked = 'TRUE';
+                }
+              }
+            });
+            console.log(`[BATCH-UPDATE] Updated worker only for ${customerId} (same time slot)`);
+          }
         }
         processedChanges++;
       }
     }
     
+    // Remove duplicates before saving
+    const uniqueTasks = [];
+    const seenKeys = new Set();
+    updatedTasks.forEach(task => {
+      const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
+      if (!seenKeys.has(key)) {
+        seenKeys.add(key);
+        uniqueTasks.push(task);
+      }
+    });
+    
     // Save all changes to Google Sheets
-    const formattedTasks = updatedTasks.map(task => ({
+    const formattedTasks = uniqueTasks.map(task => ({
       day: task.Day || task.day,
       appointmentDate: task.AppointmentDate || task.appointmentDate || '',
       time: task.Time || task.time,
@@ -1620,7 +1803,12 @@ const batchUpdateTasks = async (req, res) => {
       customerStatus: task.customerStatus || 'Active'
     }));
     
+    console.log(`[BATCH-UPDATE] Removed ${updatedTasks.length - uniqueTasks.length} duplicate tasks before saving`);
+    
     await clearAndWriteSheet('ScheduledTasks', formattedTasks);
+    
+    // Clear cache after update
+    clearScheduleCache();
     
     // Add small delay to ensure Google Sheets is updated
     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1644,5 +1832,7 @@ module.exports = {
   getAvailableWorkers,
   updateTaskAssignment,
   cancelBooking,
-  batchUpdateTasks
+  batchUpdateTasks,
+  syncNewCustomers,
+  clearScheduleCache
 };

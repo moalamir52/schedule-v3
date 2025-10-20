@@ -10,7 +10,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [pendingChanges, setPendingChanges] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -24,7 +24,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       return;
     }
     
-    console.log('[FRONTEND] Saving changes to server:', pendingChanges);
+
     setIsSaving(true);
     
     try {
@@ -39,16 +39,16 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         body: JSON.stringify({ changes: pendingChanges })
       });
       
-      console.log('[FRONTEND] Response status:', response.status);
+
       
       if (!response.ok) {
         const data = await response.json();
-        console.error('[FRONTEND] Save failed:', data);
+
         throw new Error(data.error || 'Failed to save changes');
       }
       
       const responseData = await response.json();
-      console.log('[FRONTEND] Save successful:', responseData);
+
       
       // Clear pending changes
       setPendingChanges([]);
@@ -72,44 +72,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     }
   };
   
-  // Refresh data from server
-  const refreshFromServer = async () => {
-    setIsRefreshing(true);
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.assignments && data.assignments.length > 0 && onScheduleUpdate) {
-          onScheduleUpdate(data.assignments);
-          setModal({
-            isOpen: true,
-            type: 'success',
-            title: 'Refreshed',
-            message: `Successfully loaded ${data.assignments.length} tasks from server!`
-          });
-        } else {
-          setModal({
-            isOpen: true,
-            type: 'info',
-            title: 'No Data',
-            message: 'No schedule data found on server.'
-          });
-        }
-      } else {
-        throw new Error('Failed to fetch data from server');
-      }
-    } catch (error) {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Error',
-        message: `Error refreshing from server: ${error.message}`
-      });
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
+
   
   // Auto-refresh disabled for better performance - use manual refresh button instead
   
@@ -125,8 +88,17 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     }
   }, [showOverrideMenu]);
   
-  if (!workers || workers.length === 0 || !assignedSchedule || assignedSchedule.length === 0) {
-    return <div className="text-center">Press 'Auto' to generate the schedule.</div>;
+  if (!workers || workers.length === 0) {
+    return <div className="text-center" style={{ padding: '2rem', color: '#666' }}>Loading workers...</div>;
+  }
+  
+  if (!assignedSchedule || assignedSchedule.length === 0) {
+    return (
+      <div className="text-center" style={{ padding: '3rem', color: '#666' }}>
+        <div style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>📅 No schedule data found</div>
+        <div>Press 'Auto' button to generate the schedule</div>
+      </div>
+    );
   }
 
   const getAppointmentsForWorkerDayTime = (workerId, day, time) => {
@@ -196,8 +168,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       // Remove any existing change for this task
       const filtered = prev.filter(change => change.taskId !== taskId);
       const newChanges = [...filtered, changeData];
-      console.log('[FRONTEND] Added wash type change to pending:', changeData);
-      console.log('[FRONTEND] Total pending changes:', newChanges.length);
+
       return newChanges;
     });
     
@@ -244,7 +215,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     try {
       const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
       
-      console.log('[CANCEL] Attempting to cancel task:', taskId);
+
       
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/cancel`, {
         method: 'POST',
@@ -255,7 +226,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       });
       
       const data = await response.json();
-      console.log('[CANCEL] Response:', data);
+
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to cancel booking');
@@ -267,7 +238,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
         );
         onScheduleUpdate(updatedSchedule);
-        console.log('[CANCEL] Updated schedule, removed task');
+
       }
       
       setShowOverrideMenu(null);
@@ -279,7 +250,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       });
       
     } catch (error) {
-      console.error('[CANCEL] Error:', error);
+
       setModal({
         isOpen: true,
         type: 'error',
@@ -408,8 +379,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       // Remove any existing change for this task
       const filtered = prev.filter(change => change.taskId !== taskId);
       const newChanges = [...filtered, changeData];
-      console.log('[FRONTEND] Added drag & drop change to pending:', changeData);
-      console.log('[FRONTEND] Total pending changes:', newChanges.length);
+
       return newChanges;
     });
     
@@ -466,40 +436,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         </div>
       )}
       
-      {/* Refresh from Server Button */}
-      <div style={{
-        background: '#007bff',
-        color: 'white',
-        padding: '15px 25px',
-        borderRadius: '10px',
-        boxShadow: '0 4px 15px rgba(0, 123, 255, 0.3)',
-        cursor: 'pointer',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px'
-      }}
-      onClick={refreshFromServer}
-      >
-        {isRefreshing ? (
-          <>
-            <div style={{
-              width: '20px',
-              height: '20px',
-              border: '2px solid white',
-              borderTop: '2px solid transparent',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            Refreshing...
-          </>
-        ) : (
-          <>
-            🔄 Refresh from Server
-          </>
-        )}
-      </div>
+
       
 
     </div>
@@ -604,20 +541,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                         >
                           {customerAppointments.map((appointment, index) => {
                             const key = `${groupKey}-${index}`;
-                            // Debug only CUST-040 to reduce noise
-                            if (appointment.customerId === 'CUST-040') {
-                              console.log('[DEBUG] CUST-040 task:', {
-                                customerId: appointment.customerId,
-                                washType: appointment.washType,
-                                status: appointment.status,
-                                originalWashType: appointment.originalWashType,
-                                isCancelled: appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled'
-                              });
-                              
-                              // Check className
-                              const className = `appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''}`;
-                              console.log('[DEBUG] CUST-040 className:', className);
-                            }
+
                             
                             return (
                               <div 

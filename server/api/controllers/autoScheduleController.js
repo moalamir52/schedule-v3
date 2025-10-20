@@ -5,45 +5,13 @@ const checkAndGenerateNewWeek = async (req, res) => {
     const today = new Date();
     const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
     
-    // Check if it's Sunday (end of work week) or Monday (start of new week)
-    const shouldGenerateNewWeek = currentDay === 0 || currentDay === 1;
-    
-    if (shouldGenerateNewWeek) {
-      // Generate schedule for next week (weekOffset = 1)
-      const mockReq = {
-        params: { weekOffset: '1' },
-        body: { showAllSlots: false }
-      };
-      
-      const mockRes = {
-        json: (data) => {
-          console.log('[AUTO-SCHEDULE] Generated new week schedule:', data.message);
-          return data;
-        },
-        status: (code) => ({
-          json: (data) => {
-            console.error('[AUTO-SCHEDULE] Error generating new week:', data);
-            return data;
-          }
-        })
-      };
-      
-      await autoAssignSchedule(mockReq, mockRes);
-      
-      res.json({
-        success: true,
-        message: 'New week schedule generated automatically',
-        day: currentDay === 0 ? 'Sunday' : 'Monday',
-        weekGenerated: 'Next Week'
-      });
-    } else {
-      res.json({
-        success: true,
-        message: 'No new week generation needed',
-        day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][currentDay],
-        currentWeekStatus: 'Active'
-      });
-    }
+    // Disabled automatic generation - only check status
+    res.json({
+      success: true,
+      message: 'Auto-generation disabled - use manual Auto button',
+      day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][currentDay],
+      currentWeekStatus: 'Manual control enabled'
+    });
     
   } catch (error) {
     console.error('[AUTO-SCHEDULE] Error:', error);

@@ -27,28 +27,23 @@ const SchedulePage = () => {
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
-        // Check if new week needs to be generated
-        try {
-          const autoCheckResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/auto-schedule/check-new-week`);
-          const autoCheckData = await autoCheckResponse.json();
-          console.log('[AUTO-CHECK] New week check:', autoCheckData.message);
-        } catch (autoErr) {
-          console.warn('[AUTO-CHECK] Failed to check new week:', autoErr.message);
-        }
+        // Parallel fetch for better performance
+        const [overviewResponse, workersResponse] = await Promise.all([
+          fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`),
+          fetch(`${import.meta.env.VITE_API_URL}/api/workers`)
+        ]);
         
-        // Fetch overview data
-        const overviewResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`);
-        const overviewData = await overviewResponse.json();
+        const [overviewData, workersData] = await Promise.all([
+          overviewResponse.json(),
+          workersResponse.json()
+        ]);
+        
         setOverviewData(overviewData);
-
-        // Fetch workers
-        const workersResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
-        const workersData = await workersResponse.json();
         const activeWorkers = workersData.filter(worker => worker.Status === 'Active');
         setWorkers(activeWorkers);
 
-        // Load current schedule first
-        await loadCurrentSchedule();
+        // Load current schedule (non-blocking)
+        loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
       } finally {
@@ -64,11 +59,95 @@ const SchedulePage = () => {
     localStorage.setItem('scheduleCurrentView', viewName);
   };
 
+  // Auto - يقرأ الجدولة الموجودة من الإكسل فقط (F5)
   const handleAutoAssign = async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/0`;
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
+      const data = await response.json();
+      
+      if (data.success && data.assignments) {
+        setAssignedSchedule(data.assignments);
+        if (data.assignments.length === 0) {
+          setError('No schedule found. Use "Generate New Schedule" to create one.');
+        }
+      } else {
+        throw new Error(data.error || 'Failed to load schedule');
+      }
+    } catch (err) {
+      setError(err.message);
+      setAssignedSchedule([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Sync New Customers - يضيف العملاء الجدد فقط
+  const handleSyncNewCustomers = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/sync-new-customers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ weekOffset: currentWeekOffset })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to sync new customers');
+      }
+      
+      if (data.success && data.assignments) {
+        setAssignedSchedule(data.assignments);
+        const addedCount = data.newCustomersCount || 0;
+        if (addedCount > 0) {
+          alert(`✅ Successfully added ${addedCount} new customers to schedule!`);
+        } else {
+          alert('ℹ️ No new customers found to add. All customers are already in the schedule.');
+        }
+      } else {
+        throw new Error(data.error || 'Invalid response format');
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+
+  
+
+
+  const handleToggleShowAllSlots = async () => {
+    const newShowAllSlots = !showAllSlots;
+    setShowAllSlots(newShowAllSlots);
+    
+    // Just toggle the mode, don't auto-generate
+    // User needs to press Auto button to apply changes
+  };
+
+  const handleClear = () => {
+    setAssignedSchedule([]);
+    setError(null);
+  };
+  
+  const handleGenerateNew = async () => {
+    const confirmed = window.confirm(
+      'This will generate a completely new schedule and overwrite any existing data. Are you sure?'
+    );
+    
+    if (!confirmed) return;
+    
+    setIsLoading(true);
+    setError(null);
+    try {
+      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/${currentWeekOffset}`;
       
       const response = await fetch(url, {
         method: 'POST',
@@ -97,58 +176,32 @@ const SchedulePage = () => {
     }
   };
 
-  const handleToggleShowAllSlots = async () => {
-    const newShowAllSlots = !showAllSlots;
-    setShowAllSlots(newShowAllSlots);
-    
-    // Auto-generate schedule with new mode
-    setIsLoading(true);
-    setError(null);
-    try {
-      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/${currentWeekOffset}`;
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ showAllSlots: newShowAllSlots })
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`);
-      }
-      
-      if (data.success && data.assignments) {
-        setAssignedSchedule(data.assignments);
-      } else {
-        throw new Error(data.error || 'Invalid response format');
-      }
-    } catch (err) {
-      setError(err.message);
-      setAssignedSchedule([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleClear = () => {
-    setAssignedSchedule([]);
-    setError(null);
-  };
-
   const loadCurrentSchedule = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-      const data = await response.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
       
-      if (data.success && data.assignments) {
-        setAssignedSchedule(data.assignments);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success && data.assignments) {
+          setAssignedSchedule(data.assignments);
+        } else {
+          setAssignedSchedule([]);
+        }
+      } else {
+        setAssignedSchedule([]);
       }
     } catch (err) {
-      // Silent error handling
+      if (err.name === 'AbortError') {
+        console.warn('Schedule load timed out');
+      }
+      setAssignedSchedule([]);
     }
   };
 
@@ -604,6 +657,8 @@ const SchedulePage = () => {
       <ScheduleControls 
         onViewChange={handleViewChange}
         onAutoAssign={handleAutoAssign}
+        onSyncNewCustomers={handleSyncNewCustomers}
+        onGenerateNew={handleGenerateNew}
         onToggleShowAllSlots={handleToggleShowAllSlots}
         showAllSlots={showAllSlots}
         onClear={handleClear}

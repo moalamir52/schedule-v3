@@ -31,7 +31,7 @@ app.use((req, res, next) => {
     try {
       req.body = JSON.parse(req.body);
     } catch (e) {
-      console.log('Failed to parse text as JSON:', e);
+      // Silent fail
     }
   }
   next();
@@ -57,8 +57,6 @@ app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  
   // Start cron service
   const cronService = require('./services/cronService');
   cronService.start();
