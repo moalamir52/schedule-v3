@@ -643,17 +643,11 @@ const getSchedule = async (req, res) => {
     
     // Check cache first
     if (scheduleCache.data && (now - scheduleCache.timestamp) < scheduleCache.ttl) {
+      console.log('[CACHE] Returning cached schedule data');
       return res.json(scheduleCache.data);
     }
     
     const scheduledTasks = await getScheduledTasks();
-    
-    // Temporary debug logging
-    if (!scheduledTasks || scheduledTasks.length === 0) {
-      console.log('[DEBUG] No scheduled tasks found in Google Sheets');
-    } else {
-      console.log(`[DEBUG] Found ${scheduledTasks.length} scheduled tasks`);
-    }
     
     const assignments = scheduledTasks.map(task => ({
       day: task.Day,
@@ -690,7 +684,6 @@ const getSchedule = async (req, res) => {
     res.json(response);
     
   } catch (error) {
-    console.log('[DEBUG] Error in getSchedule:', error.message);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1007,7 +1000,7 @@ const updateTaskAssignment = async (req, res) => {
       }
     });
     
-
+    console.log(`[UPDATE-TASK] Removed ${existingTasks.length - uniqueTasks.length} duplicate tasks`);
     
     const updatedSchedule = uniqueTasks.map(task => ({
       day: task.Day || task.day,
@@ -1507,6 +1500,8 @@ const syncNewCustomers = async (req, res) => {
     const existingTasks = await getScheduledTasks();
     const existingCustomerIds = new Set(existingTasks.map(task => task.CustomerID));
     
+    console.log(`[SYNC-NEW] Existing customer IDs in schedule: ${Array.from(existingCustomerIds).join(', ')}`);
+    
     // Get all customers from database
     const [customers, workers, allHistory] = await Promise.all([
       getCustomers(),
@@ -1514,13 +1509,21 @@ const syncNewCustomers = async (req, res) => {
       getAllHistory()
     ]);
     
+    console.log(`[SYNC-NEW] Total customers in database: ${customers.length}`);
     const activeCustomers = customers.filter(customer => customer.Status === 'Active' || customer.Status === 'Booked');
+    console.log(`[SYNC-NEW] Active/Booked customers: ${activeCustomers.length}`);
+    console.log(`[SYNC-NEW] Active customer IDs: ${activeCustomers.map(c => c.CustomerID).join(', ')}`);
     
     // Find new customers not in existing schedule
     const newCustomers = customers.filter(customer => 
       (customer.Status === 'Active' || customer.Status === 'Booked') &&
       !existingCustomerIds.has(customer.CustomerID)
     );
+    
+    console.log(`[SYNC-NEW] New customers found: ${newCustomers.length}`);
+    if (newCustomers.length > 0) {
+      console.log(`[SYNC-NEW] New customer IDs: ${newCustomers.map(c => c.CustomerID).join(', ')}`);
+    }
     
     if (newCustomers.length === 0) {
       return res.json({
@@ -1581,7 +1584,7 @@ const syncNewCustomers = async (req, res) => {
     });
     
   } catch (error) {
-
+    console.error('[SYNC-NEW] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1715,13 +1718,18 @@ const batchUpdateTasks = async (req, res) => {
           const day = taskIdParts[2];
           const time = taskIdParts[3];
           
+          console.log(`[BATCH-UPDATE] Moving ${customerId} from ${day} ${time} to ${targetDay} ${targetTime}`);
+          
           // Only update if actually moving to different time/day
           if (day !== targetDay || time !== targetTime) {
             // Find and update all customer tasks at the source time slot
+            let tasksUpdated = 0;
             updatedTasks.forEach((task, index) => {
               if ((task.CustomerID || task.customerId) === customerId &&
                   (task.Day || task.day) === day &&
                   (task.Time || task.time) === time) {
+                
+                console.log(`[BATCH-UPDATE] Updating task for car: ${task.CarPlate || task.carPlate}`);
                 
                 if (task.WorkerName !== undefined) {
                   task.WorkerName = newWorkerName;
@@ -1736,8 +1744,11 @@ const batchUpdateTasks = async (req, res) => {
                   task.time = targetTime;
                   task.isLocked = 'TRUE';
                 }
+                tasksUpdated++;
               }
             });
+            
+            console.log(`[BATCH-UPDATE] Updated ${tasksUpdated} tasks for ${customerId}`);
           } else {
             // Just update worker if same time/day
             updatedTasks.forEach((task, index) => {
@@ -1756,6 +1767,7 @@ const batchUpdateTasks = async (req, res) => {
                 }
               }
             });
+            console.log(`[BATCH-UPDATE] Updated worker only for ${customerId} (same time slot)`);
           }
         }
         processedChanges++;
@@ -1791,7 +1803,7 @@ const batchUpdateTasks = async (req, res) => {
       customerStatus: task.customerStatus || 'Active'
     }));
     
-
+    console.log(`[BATCH-UPDATE] Removed ${updatedTasks.length - uniqueTasks.length} duplicate tasks before saving`);
     
     await clearAndWriteSheet('ScheduledTasks', formattedTasks);
     
@@ -1808,7 +1820,7 @@ const batchUpdateTasks = async (req, res) => {
     });
     
   } catch (error) {
-
+    console.error('[BATCH-UPDATE] Error:', error);
     res.status(500).json({ success: false, error: error.message, stack: error.stack });
   }
 };

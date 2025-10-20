@@ -123,6 +123,19 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onT
       
       <div style={controlGroupStyle}>
         <button 
+          style={{
+            ...buttonStyle,
+            backgroundColor: '#007bff',
+            color: 'white',
+            fontWeight: '600'
+          }}
+          onClick={onAutoAssign}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#0056b3'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#007bff'}
+        >
+          🔄 Auto
+        </button>
+        <button 
           style={navButtonStyle}
           onClick={() => onWeekChange(currentWeekOffset - 1)}
           onMouseEnter={(e) => e.target.style.backgroundColor = '#28a745'}
