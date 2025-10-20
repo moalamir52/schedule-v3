@@ -43,6 +43,7 @@ const SchedulePage = () => {
         setWorkers(activeWorkers);
 
         // Load current schedule (non-blocking)
+        console.log('[F5-DEBUG] Calling loadCurrentSchedule from useEffect');
         loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
@@ -64,17 +65,8 @@ const SchedulePage = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-      const data = await response.json();
-      
-      if (data.success && data.assignments) {
-        setAssignedSchedule(data.assignments);
-        if (data.assignments.length === 0) {
-          setError('No schedule found. Use "Generate New Schedule" to create one.');
-        }
-      } else {
-        throw new Error(data.error || 'Failed to load schedule');
-      }
+      // استخدام نفس الدالة المستخدمة في F5
+      await loadCurrentSchedule();
     } catch (err) {
       setError(err.message);
       setAssignedSchedule([]);
@@ -178,8 +170,11 @@ const SchedulePage = () => {
 
   const loadCurrentSchedule = async () => {
     try {
+      console.log('[F5-DEBUG] Starting loadCurrentSchedule...');
+      console.log('[F5-DEBUG] API URL:', import.meta.env.VITE_API_URL);
+      
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 seconds
       
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
         signal: controller.signal
@@ -187,19 +182,36 @@ const SchedulePage = () => {
       
       clearTimeout(timeoutId);
       
+      console.log('[F5-DEBUG] Response status:', response.status);
+      console.log('[F5-DEBUG] Response ok:', response.ok);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('[F5-DEBUG] Response data:', data);
+        
         if (data.success && data.assignments) {
+          console.log('[F5-DEBUG] Setting schedule with', data.assignments.length, 'assignments');
           setAssignedSchedule(data.assignments);
         } else {
+          console.log('[F5-DEBUG] No assignments found, setting empty array');
           setAssignedSchedule([]);
+          setError('No schedule data found. Click Auto button to load schedule.');
         }
       } else {
+        console.log('[F5-DEBUG] Response not ok, status:', response.status);
+        const errorText = await response.text();
+        console.log('[F5-DEBUG] Error response:', errorText);
         setAssignedSchedule([]);
+        setError(`Server error: ${response.status}. Click Auto button to load schedule.`);
       }
     } catch (err) {
+      console.log('[F5-DEBUG] Catch error:', err);
       if (err.name === 'AbortError') {
-        console.warn('Schedule load timed out');
+        console.warn('[F5-DEBUG] Schedule load timed out');
+        setError('Connection timeout. Click Auto button to load schedule.');
+      } else {
+        console.error('[F5-DEBUG] Load error:', err.message);
+        setError(`Connection error: ${err.message}. Click Auto button to load schedule.`);
       }
       setAssignedSchedule([]);
     }
