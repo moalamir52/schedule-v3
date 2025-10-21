@@ -1,5 +1,5 @@
 const express = require('express');
-const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, updateTaskAssignment, cancelBooking, batchUpdateTasks, syncNewCustomers } = require('../controllers/assignmentController');
+const { autoAssignSchedule, addManualAppointment, getAvailableWorkers, getSchedule, updateTaskAssignment, deleteTask, batchUpdateTasks, syncNewCustomers } = require('../controllers/assignmentController');
 
 const router = express.Router();
 
@@ -10,7 +10,7 @@ router.post('/manual', addManualAppointment);
 router.get('/available-workers', getAvailableWorkers);
 router.put('/update-task', updateTaskAssignment);
 router.post('/update-task', updateTaskAssignment);
-router.post('/cancel-booking', cancelBooking);
+router.delete('/delete-task', deleteTask);
 router.put('/batch-update', batchUpdateTasks);
 router.put('/batch-update-tasks', batchUpdateTasks); // Alternative endpoint name
 router.post('/sync-new-customers', syncNewCustomers);

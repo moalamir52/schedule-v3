@@ -43,7 +43,7 @@ const SchedulePage = () => {
         setWorkers(activeWorkers);
 
         // Load current schedule (non-blocking)
-        console.log('[F5-DEBUG] Calling loadCurrentSchedule from useEffect');
+        console.log('[LOAD-SCHEDULE] Calling loadCurrentSchedule from useEffect');
         loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
@@ -686,29 +686,28 @@ const SchedulePage = () => {
         currentView={currentView}
         currentWeekOffset={currentWeekOffset}
         onWeekChange={async (offset) => {
-          // Calculate week dates
+          // Calculate week dates (Monday to Saturday)
           const today = new Date();
-          const currentDay = today.getDay();
-          let saturdayOfWeek = new Date(today);
+          const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
           
-          if (currentDay === 0) {
-            saturdayOfWeek.setDate(today.getDate() - 1);
-          } else if (currentDay === 6) {
-            // Already Saturday
-          } else {
-            saturdayOfWeek.setDate(today.getDate() - currentDay - 1);
-          }
+          // Find Monday of current week
+          let mondayOfWeek = new Date(today);
+          const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Sunday is 6 days from Monday
+          mondayOfWeek.setDate(today.getDate() - daysFromMonday);
           
-          saturdayOfWeek.setDate(saturdayOfWeek.getDate() + (offset * 7));
-          const endOfWeek = new Date(saturdayOfWeek);
-          endOfWeek.setDate(saturdayOfWeek.getDate() + 6);
+          // Add offset weeks
+          mondayOfWeek.setDate(mondayOfWeek.getDate() + (offset * 7));
           
-          const startDate = saturdayOfWeek.toLocaleDateString('en-US', {
+          // Saturday is 5 days after Monday
+          const saturdayOfWeek = new Date(mondayOfWeek);
+          saturdayOfWeek.setDate(mondayOfWeek.getDate() + 5);
+          
+          const startDate = mondayOfWeek.toLocaleDateString('en-US', {
             day: '2-digit',
             month: 'short',
             year: 'numeric'
           });
-          const endDate = endOfWeek.toLocaleDateString('en-US', {
+          const endDate = saturdayOfWeek.toLocaleDateString('en-US', {
             day: '2-digit',
             month: 'short',
             year: 'numeric'

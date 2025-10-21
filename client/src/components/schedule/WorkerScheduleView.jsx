@@ -199,26 +199,24 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     }
   };
 
-  const handleCancelBooking = (appointment) => {
+  const handleDeleteTask = (appointment) => {
     setModal({
       isOpen: true,
       type: 'confirm',
-      title: 'Cancel Booking',
-      message: `Are you sure you want to cancel this booking?\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nTime: ${appointment.day} ${appointment.time}\nCar: ${appointment.carPlate}`,
-      onConfirm: () => confirmCancelBooking(appointment)
+      title: 'Delete Task',
+      message: `Are you sure you want to permanently delete this task?\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nTime: ${appointment.day} ${appointment.time}\nCar: ${appointment.carPlate}\n\nThis will remove it completely from the schedule.`,
+      onConfirm: () => confirmDeleteTask(appointment)
     });
   };
 
-  const confirmCancelBooking = async (appointment) => {
+  const confirmDeleteTask = async (appointment) => {
     setModal({ isOpen: false });
     
     try {
       const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
       
-
-      
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/cancel`, {
-        method: 'POST',
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/delete-task`, {
+        method: 'DELETE',
         headers: {
           'Content-Type': 'application/json'
         },
@@ -226,19 +224,17 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       });
       
       const data = await response.json();
-
       
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to cancel booking');
+        throw new Error(data.error || 'Failed to delete task');
       }
       
-      // Remove the booking from local state
+      // Remove the task from local state immediately
       if (onScheduleUpdate) {
         const updatedSchedule = assignedSchedule.filter(task => 
           `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
         );
         onScheduleUpdate(updatedSchedule);
-
       }
       
       setShowOverrideMenu(null);
@@ -246,16 +242,15 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         isOpen: true,
         type: 'success',
         title: 'Success',
-        message: `Task cancelled successfully!\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nCar: ${appointment.carPlate}`
+        message: `Task deleted successfully!\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nCar: ${appointment.carPlate}`
       });
       
     } catch (error) {
-
       setModal({
         isOpen: true,
         type: 'error',
         title: 'Error',
-        message: `Error cancelling booking: ${error.message}`
+        message: `Error deleting task: ${error.message}`
       });
     }
   };
@@ -697,9 +692,9 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
               textAlign: 'center',
               borderBottom: '1px solid #c82333'
             }}
-            onClick={() => handleCancelBooking(appointment)}
+            onClick={() => handleDeleteTask(appointment)}
           >
-            🗑️ Cancel Booking
+            🗑️ Delete Task
           </button>
           <button
             style={{

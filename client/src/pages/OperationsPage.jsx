@@ -3,6 +3,7 @@ import operationsService from '../services/operationsService';
 import authService from '../services/authService';
 import { hasPermission, PERMISSIONS, getRoleInfo } from '../utils/rolePermissions';
 import Modal from '../components/Modal';
+import WashRulesConfigSimple from '../components/WashRulesConfigSimple';
 
 const OperationsPage = () => {
   const [workers, setWorkers] = useState([]);
@@ -789,6 +790,9 @@ const OperationsPage = () => {
         </div>
       </div>
       )}
+
+      {/* Wash Rules Configuration Section */}
+      <WashRulesConfigSimple />
 
       {/* Actions Section */}
       <div className="card" style={{ marginBottom: '2rem' }}>

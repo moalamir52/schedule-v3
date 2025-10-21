@@ -366,33 +366,60 @@ async function clearAndWriteSheet(sheetName, data) {
     // Clear all content including headers
     await sheet.clear();
     
-    // Always set headers first
-    const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+    // Set headers based on sheet type
+    let headers, rowsData;
+    
+    if (sheetName === 'WashRules') {
+      headers = ['RuleId', 'RuleName', 'SingleCarPattern', 'MultiCarSettings', 'BiWeeklySettings', 'CreatedDate', 'Status'];
+      rowsData = data.map(item => ({
+        RuleId: item.RuleId,
+        RuleName: item.RuleName,
+        SingleCarPattern: item.SingleCarPattern,
+        MultiCarSettings: item.MultiCarSettings,
+        BiWeeklySettings: item.BiWeeklySettings,
+        CreatedDate: item.CreatedDate,
+        Status: item.Status
+      }));
+    } else {
+      // Default to ScheduledTasks format
+      headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
+      // Clean and validate data before sending to Google Sheets
+      rowsData = data.map(item => {
+        const cleanItem = {
+          Day: String(item.day || ''),
+          AppointmentDate: String(item.appointmentDate || ''),
+          Time: String(item.time || ''),
+          CustomerID: String(item.customerId || ''),
+          CustomerName: String(item.customerName || ''),
+          Villa: String(item.villa || ''),
+          CarPlate: String(item.carPlate || ''),
+          WashType: String(item.washType || 'EXT'),
+          WorkerName: String(item.workerName || ''),
+          WorkerID: String(item.workerId || ''),
+          PackageType: String(item.packageType || ''),
+          isLocked: String(item.isLocked || 'FALSE'),
+          ScheduleDate: String(item.scheduleDate || new Date().toISOString().split('T')[0])
+        };
+        
+        // Remove any undefined, null, or object values
+        Object.keys(cleanItem).forEach(key => {
+          if (cleanItem[key] === 'undefined' || cleanItem[key] === 'null' || typeof cleanItem[key] === 'object') {
+            cleanItem[key] = '';
+          }
+        });
+        
+        return cleanItem;
+      });
+    }
+    
     await sheet.setHeaderRow(headers);
-    console.log(`[SHEETS] Headers set for ${sheetName}`);
+    console.log(`[SHEETS] Headers set for ${sheetName}:`, headers);
     
     // Wait for headers to be set properly
     await new Promise(resolve => setTimeout(resolve, 200));
     
     if (data.length > 0) {
       console.log(`[SHEETS] Adding ${data.length} rows to ${sheetName}...`);
-      // Add all rows at once
-      const rowsData = data.map(item => ({
-        Day: item.day,
-        AppointmentDate: item.appointmentDate || '',
-        Time: item.time,
-        CustomerID: item.customerId,
-        CustomerName: item.customerName,
-        Villa: item.villa,
-        CarPlate: item.carPlate,
-        WashType: item.washType,
-        WorkerName: item.workerName,
-        WorkerID: item.workerId,
-        PackageType: item.packageType || '',
-        isLocked: item.isLocked || 'FALSE',
-        ScheduleDate: item.scheduleDate || new Date().toISOString().split('T')[0]
-      }));
-      
       await sheet.addRows(rowsData);
       console.log(`[SHEETS] Successfully added ${rowsData.length} rows to ${sheetName}`);
     } else {
@@ -978,6 +1005,17 @@ async function getAuditLogs(filters = {}) {
   }
 }
 
+async function getSheetData(sheetName) {
+  await loadSheet();
+  const sheet = doc.sheetsByTitle[sheetName];
+  if (!sheet) {
+    console.log(`Sheet '${sheetName}' not found`);
+    return [];
+  }
+  const rows = await sheet.getRows();
+  return mapRowsToObjects(rows, sheet.headerValues);
+}
+
 module.exports = {
   getCustomers,
   getHistoryForCar,
@@ -1012,5 +1050,6 @@ module.exports = {
   updateUser,
   deleteUser,
   addAuditLog,
-  getAuditLogs
+  getAuditLogs,
+  getSheetData
 };
