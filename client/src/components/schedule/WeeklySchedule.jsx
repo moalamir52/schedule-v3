@@ -11,7 +11,7 @@ function WeeklySchedule({ scheduleData }) {
       appointment.washDay === day && appointment.washTime === time
     );
     if (appointments.length > 0) {
-      console.log(`[DEBUG WeeklySchedule] ${day} ${time}:`, appointments.map(a => `${a.customerName}(${a.customerId})`));
+
     }
     return appointments;
   };
@@ -37,7 +37,7 @@ function WeeklySchedule({ scheduleData }) {
                   <td key={`${day}-${timeSlot}`}>
                     {appointments.map((appointment, index) => {
                       const key = `${day}-${appointment.customerId || 'no-id'}-${timeSlot}-${index}`;
-                      console.log(`[DEBUG WeeklySchedule] Key: ${key}`);
+
                       return (
                         <div 
                           key={key}

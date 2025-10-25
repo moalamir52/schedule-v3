@@ -1,4 +1,6 @@
 const { getCustomers, getWorkers, getAllHistory, getScheduledTasks, clearAndWriteSheet, addRowToSheet, addAuditLog, updateTaskInSheet, getSheetData } = require('../../services/googleSheetsService');
+const { determineIntCarForCustomer, checkIfFirstWeekOfBiWeekCycle } = require('../../services/logicService');
+const logger = require('../../services/logger');
 
 // Rate limiting for Google Sheets API
 let lastApiCall = 0;
@@ -17,7 +19,6 @@ const rateLimitedApiCall = async (apiFunction) => {
   lastApiCall = Date.now();
   return await apiFunction();
 };
-const { determineIntCarForCustomer, checkIfFirstWeekOfBiWeekCycle } = require('../../services/logicService');
 
 // Get wash rules from Google Sheets
 const getWashRules = async () => {
@@ -161,7 +162,8 @@ const autoAssignSchedule = async (req, res) => {
     
 
     
-    const activeWorkers = workers.filter(worker => worker.Status === 'Active');
+  // Normalize status comparison (case-insensitive) to avoid excluding workers due to casing or empty values
+  const activeWorkers = workers.filter(worker => ((worker.Status || '').toString().toLowerCase() === 'active'));
     
     if (activeWorkers.length === 0) {
       return res.status(400).json({ success: false, error: 'No active workers found.' });
@@ -322,7 +324,9 @@ const autoAssignSchedule = async (req, res) => {
       scheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0]
     }));
     
-    await clearAndWriteSheet('ScheduledTasks', scheduleForSaving);
+  // Validate and fix schedule before saving to prevent duplicates/conflicts caused by manual edits or race conditions
+  const validatedSchedule = validateAndFixSchedule(scheduleForSaving);
+  await clearAndWriteSheet('ScheduledTasks', validatedSchedule);
     
     // Clear cache after update
     clearScheduleCache();
@@ -676,6 +680,20 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = ['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
   
+  // Initialize worker assignment counters
+  const workerAssignmentCounts = {};
+
+  // Structured start log
+  try {
+    logger.assignment({
+      type: 'assign-start',
+      unlockedAppointments: unlockedAppointments.length,
+      activeWorkers: activeWorkers.length,
+      lockedTasks: lockedTasks.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) { /* swallow logger errors */ }
+
   // Group tasks by time slot
   const timeSlotGroups = {};
   unlockedAppointments.forEach(appointment => {
@@ -696,15 +714,23 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
   });
   
   const assignedTasks = [];
+  const totalTasks = unlockedAppointments.length;
   
   sortedTimeSlots.forEach(timeSlotKey => {
     const tasks = timeSlotGroups[timeSlotKey];
     const [day, time] = timeSlotKey.split('-');
     
-    // Get workers busy with locked tasks at this time slot
+    // Get workers busy with locked tasks at this time slot (normalize to string and fallback to name)
+    const normalizeId = (v) => (v === undefined || v === null) ? '' : String(v).trim();
+
     const busyWorkersFromLocked = lockedTasks
       .filter(task => task.Day === day && task.Time === time)
-      .map(task => task.WorkerID);
+      .map(task => {
+        const id = normalizeId(task.WorkerID);
+        if (id) return id;
+        return normalizeId(task.WorkerName || task.workerName || '');
+      })
+      .filter(Boolean);
     
     const workerCustomerMap = {}; // customerID -> worker mapping for this time slot
     
@@ -719,16 +745,82 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
         task.isLocked = 'FALSE';
         assigned = true;
       } else {
-        // Find next available worker (not busy with locked tasks or other assignments)
-        const busyWorkers = [...busyWorkersFromLocked, ...Object.values(workerCustomerMap).map(w => w.WorkerID)];
-        const availableWorker = activeWorkers.find(w => !busyWorkers.includes(w.WorkerID));
+        // Find next available worker using round-robin distribution
+        const busyWorkers = [
+          ...busyWorkersFromLocked,
+          ...Object.values(workerCustomerMap).map(w => normalizeId(w.WorkerID || w.workerId || w.ID || w.id || w.Name || w.name))
+        ].filter(Boolean);
+
+        // Get all available workers for this time slot (compare normalized WorkerID and fallback to Name)
+        const availableWorkers = activeWorkers.filter(w => {
+          const id = normalizeId(w.WorkerID || w.workerId || w.ID || w.id);
+          const name = normalizeId(w.Name || w.name || '');
+          return !busyWorkers.includes(id) && !busyWorkers.includes(name);
+        });
         
-        if (availableWorker) {
-          task.workerName = availableWorker.Name;
-          task.workerId = availableWorker.WorkerID;
+        if (availableWorkers.length > 0) {
+          // Use fair selection: pick worker with least assignments for this time slot
+          const slotKey = `${day}-${time}`;
+          if (!workerAssignmentCounts[slotKey]) {
+            workerAssignmentCounts[slotKey] = new Map();
+          }
+
+          // Reduce ordering bias: rotate availableWorkers deterministically based on slotKey
+          if (availableWorkers.length > 1) {
+            const seed = Array.from(slotKey).reduce((s, ch) => s + ch.charCodeAt(0), 0) % availableWorkers.length;
+            for (let r = 0; r < seed; r++) availableWorkers.push(availableWorkers.shift());
+          }
+
+          // Sort available workers by their current assignment count (ascending) using normalized IDs
+          availableWorkers.sort((a, b) => {
+            const aId = normalizeId(a.WorkerID || a.workerId || a.ID || a.id);
+            const bId = normalizeId(b.WorkerID || b.workerId || b.ID || b.id);
+            const aCount = workerAssignmentCounts[slotKey].get(aId) || 0;
+            const bCount = workerAssignmentCounts[slotKey].get(bId) || 0;
+            return aCount - bCount;
+          });
+
+          const worker = availableWorkers[0];
+
+          // Structured decision log: candidates and chosen worker
+          try {
+            const candidates = availableWorkers.map(w => {
+              const id = normalizeId(w.WorkerID || w.workerId || w.ID || w.id);
+              return { workerId: id || normalizeId(w.Name), name: w.Name || w.name || '', assignedCount: workerAssignmentCounts[slotKey].get(id) || 0 };
+            });
+            logger.assignment({
+              type: 'assign-decision',
+              slot: { day, time },
+              customerId: task.customerId,
+              candidates,
+              chosen: { workerId: worker.WorkerID, name: worker.Name },
+              reason: 'least-loaded',
+              timestamp: new Date().toISOString()
+            });
+          } catch (e) { /* swallow logger errors */ }
+          // Update assignment count
+          const chosenId = normalizeId(worker.WorkerID || worker.workerId || worker.ID || worker.id);
+          workerAssignmentCounts[slotKey].set(
+            chosenId,
+            (workerAssignmentCounts[slotKey].get(chosenId) || 0) + 1
+          );
+
+          task.workerName = worker.Name;
+          task.workerId = worker.WorkerID;
           task.isLocked = 'FALSE';
-          workerCustomerMap[task.customerId] = availableWorker;
+          workerCustomerMap[task.customerId] = worker;
           assigned = true;
+        } else {
+          // No available workers for this time slot (all busy/locked) - leave unassigned
+          try {
+            logger.assignment({
+              type: 'assign-skip',
+              slot: { day, time },
+              tasksInSlot: tasks.length,
+              busyWorkers: busyWorkers,
+              timestamp: new Date().toISOString()
+            });
+          } catch (e) { /* swallow logger errors */ }
         }
       }
       
@@ -740,6 +832,15 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
     });
   });
   
+  const unassigned = totalTasks - assignedTasks.length;
+  try {
+    logger.assignment({
+      type: 'assign-end',
+      assigned: assignedTasks.length,
+      unassigned,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) { /* swallow logger errors */ }
   return assignedTasks;
 }
 
@@ -761,6 +862,114 @@ function formatLockedTask(lockedTask) {
     isBiWeekly: lockedTask.PackageType?.includes('bi week') || false,
     customerStatus: lockedTask.customerStatus || 'Active'
   };
+}
+
+/**
+ * Validate and fix schedule array before saving.
+ * Rules enforced:
+ * 1) For each slot (appointmentDate/day + time) a customerId must have at most one worker.
+ *    If multiple tasks exist for same customer in same slot, keep the locked task if any, else keep the first and clear others.
+ * 2) For each slot a workerId must not be assigned to more than one customer.
+ *    If a worker is assigned to multiple customers in the same slot, keep only the first assignment and clear the rest (they become unassigned so auto-assign can fill them later).
+ */
+function validateAndFixSchedule(schedule) {
+  if (!Array.isArray(schedule)) return schedule;
+
+  const slotMap = new Map(); // slotKey -> array of tasks
+  const conflicts = { customerDuplicates: [], workerDoubleBooking: [] };
+
+  const normalize = v => (v === undefined || v === null) ? '' : String(v).trim();
+
+  // Group tasks by slot
+  schedule.forEach(task => {
+    const slotKey = `${normalize(task.appointmentDate) || normalize(task.day)}||${normalize(task.time)}`;
+    if (!slotMap.has(slotKey)) slotMap.set(slotKey, []);
+    slotMap.get(slotKey).push(task);
+  });
+
+  const cleaned = [];
+
+  // Process each slot independently
+  for (const [slotKey, tasks] of slotMap.entries()) {
+    // 1) Allow multiple cars per customer, but ensure unique customer+car combinations
+    const byCustomerCar = new Map(); // customerId+carPlate -> task kept
+
+    for (const t of tasks) {
+      const cid = normalize(t.customerId);
+      const carPlate = normalize(t.carPlate || t.CarPlate || 'NOPLATE');
+      const customerCarKey = `${cid}||${carPlate}`;
+
+      if (!byCustomerCar.has(customerCarKey)) {
+        byCustomerCar.set(customerCarKey, t);
+      } else {
+        const existing = byCustomerCar.get(customerCarKey);
+        // Prefer locked task
+        const existingLocked = (existing.isLocked || '').toString() === 'TRUE';
+        const currentLocked = (t.isLocked || '').toString() === 'TRUE';
+        
+        // Log the conflict - same customer+car has multiple appointments in same slot
+        conflicts.customerDuplicates.push({ 
+          slot: slotKey, 
+          customerId: cid, 
+          carPlate: carPlate,
+          error: 'Same customer+car cannot have multiple appointments in same time slot',
+          kept: { 
+            workerId: normalize(existing.workerId), 
+            locked: existingLocked 
+          }, 
+          removed: { 
+            workerId: normalize(t.workerId)
+          } 
+        });
+        
+        // Only replace if current is locked and existing isn't
+        if (currentLocked && !existingLocked) {
+          byCustomerCar.set(customerCarKey, t);
+        }
+      }
+    }
+
+    // 2) Ensure worker not assigned twice in same slot
+    const workerSeen = new Map(); // workerId -> task
+
+    for (const [custCarKey, task] of byCustomerCar.entries()) {
+      const wid = normalize(task.workerId) || normalize(task.workerName) || '';
+      if (!wid) {
+        // unassigned task, keep as is
+        cleaned.push(task);
+        continue;
+      }
+
+      if (!workerSeen.has(wid)) {
+        workerSeen.set(wid, task);
+        cleaned.push(task);
+      } else {
+        const kept = workerSeen.get(wid);
+        // If the existing assignment with this worker is for the same customer, allow multiple car assignments
+        const existingCustomer = normalize(kept.customerId);
+        const currentCustomer = normalize(task.customerId);
+        if (existingCustomer === currentCustomer) {
+          // Same customer, different car -> allow assignment
+          cleaned.push(task);
+        } else {
+          // Worker already assigned to a different customer in same slot -> clear this task's worker fields
+          conflicts.workerDoubleBooking.push({ slot: slotKey, workerId: wid, keptCustomer: existingCustomer, removedCustomer: currentCustomer, removedCar: normalize(task.carPlate || task.CarPlate || '') });
+          // Clear assignment on the conflicting task so it becomes unassigned
+          task.workerId = '';
+          task.workerName = '';
+          // keep the task (unassigned) so it can be re-assigned later
+          cleaned.push(task);
+        }
+      }
+    }
+  }
+
+  // Log conflicts for debugging
+  try {
+    logger.assignment({ type: 'validate-schedule', totalInput: schedule.length, totalOutput: cleaned.length, conflicts, timestamp: new Date().toISOString() });
+  } catch (e) { /* swallow logger errors */ }
+
+  return cleaned;
 }
 
 // Keep existing functions for other endpoints
@@ -1159,7 +1368,9 @@ const updateTaskAssignment = async (req, res) => {
     // Clear cache before saving
     clearScheduleCache();
     
-    await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+  // Validate updated schedule before saving
+  const validatedUpdated = validateAndFixSchedule(updatedSchedule);
+  await clearAndWriteSheet('ScheduledTasks', validatedUpdated);
     
     console.log(`[UPDATE-TASK] Successfully saved ${updatedSchedule.length} tasks to Google Sheets`);
     
@@ -1648,7 +1859,8 @@ function getOriginalTimeFromHistory(completedTask) {
 
 const deleteTask = async (req, res) => {
   try {
-    const { taskId } = req.body;
+    // Get taskId from URL parameter or request body
+    const taskId = req.params.customerId || req.body.taskId;
     
     if (!taskId) {
       return res.status(400).json({ 
@@ -1782,7 +1994,9 @@ const syncNewCustomers = async (req, res) => {
       customerStatus: task.customerStatus || 'Active'
     }));
     
-    await clearAndWriteSheet('ScheduledTasks', scheduleForSaving);
+  // Validate combined schedule before saving when syncing new customers
+  const validatedCombined = validateAndFixSchedule(scheduleForSaving);
+  await clearAndWriteSheet('ScheduledTasks', validatedCombined);
     clearScheduleCache();
     
     // Count actual new customers added (from original newCustomers list)
@@ -2033,6 +2247,62 @@ const batchUpdateTasks = async (req, res) => {
   }
 };
 
+const getWashHistory = async (req, res) => {
+  try {
+    const { customerId } = req.params;
+    const limit = parseInt(req.query.limit) || 6;
+    
+    console.log('Fetching wash history for:', customerId);
+    
+    if (!customerId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Customer ID is required' 
+      });
+    }
+    
+    const allHistory = await getAllHistory();
+    
+    // Filter history for this customer and sort by date (newest first)
+    const customerHistory = allHistory
+      .filter(record => record.CustomerID === customerId)
+      .sort((a, b) => {
+        const parseDate = (dateStr) => {
+          if (!dateStr) return new Date(0);
+          const months = {'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
+                         'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11};
+          const parts = dateStr.split('-');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0]);
+            const month = months[parts[1]];
+            const year = parseInt(parts[2]);
+            return new Date(year, month, day);
+          }
+          return new Date(dateStr);
+        };
+        return parseDate(b.WashDate) - parseDate(a.WashDate);
+      })
+      .slice(0, limit)
+      .map(record => ({
+        washDate: record.WashDate,
+        carPlate: record.CarPlate,
+        washType: record.WashTypePerformed || record.WashType || 'EXT',
+        status: record.Status
+      }));
+    
+    console.log('Found wash history records:', customerHistory.length);
+    
+    res.json({
+      success: true,
+      history: customerHistory
+    });
+    
+  } catch (error) {
+    console.error('[WASH-HISTORY] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = { 
   autoAssignSchedule, 
   getSchedule,
@@ -2042,5 +2312,8 @@ module.exports = {
   deleteTask,
   batchUpdateTasks,
   syncNewCustomers,
+  getWashHistory,
   clearScheduleCache
 };
+// Export validator for external use (dry-run validation)
+module.exports.validateAndFixSchedule = validateAndFixSchedule;

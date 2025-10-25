@@ -1,6 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import InvoiceGenerator from '../components/InvoiceGenerator';
 
+// Add CSS to hide number input spinners
+const hideSpinnersStyle = `
+  /* Hide Chrome, Safari, Edge, Opera spinners */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  
+  /* Hide Firefox spinners */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+`;
+
+// Inject the CSS
+if (typeof document !== 'undefined') {
+  const styleElement = document.createElement('style');
+  styleElement.textContent = hideSpinnersStyle;
+  document.head.appendChild(styleElement);
+}
+
 const InvoicesPage = () => {
   const [invoices, setInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -17,12 +39,12 @@ const InvoicesPage = () => {
     clientName: '',
     villa: '',
     phone: '',
-    serviceDescription: '',
     vehicleTypes: '',
     serves: '',
     amount: '',
     paymentStatus: 'pending',
-    notes: ''
+    notes: '',
+    selectedServices: []
   });
   const [stats, setStats] = useState({
     total: 0,
@@ -48,7 +70,8 @@ const InvoicesPage = () => {
     totalAmount: '',
     paymentStatus: 'pending',
     paymentMethod: 'Cash',
-    notes: ''
+    notes: '',
+    selectedServices: []
   });
   const [showBankSettings, setShowBankSettings] = useState(false);
   const [bankConfig, setBankConfig] = useState({
@@ -74,12 +97,19 @@ const InvoicesPage = () => {
   const [showDueToday, setShowDueToday] = useState(false);
   const [showClientDetails, setShowClientDetails] = useState(false);
   const [selectedClientDetails, setSelectedClientDetails] = useState(null);
+  const [services, setServices] = useState([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [serviceCategory, setServiceCategory] = useState('all');
+  const [showDuplicatesModal, setShowDuplicatesModal] = useState(false);
+  const [duplicatesData, setDuplicatesData] = useState({ duplicates: [], summary: {} });
+  const [loadingDuplicates, setLoadingDuplicates] = useState(false);
 
   useEffect(() => {
     loadInvoices();
     loadCustomers();
     loadAvailableClients();
     loadMonthlyStats();
+    loadServices();
     
     // Load bank config from localStorage
     const savedBankConfig = localStorage.getItem('bankConfig');
@@ -94,7 +124,7 @@ const InvoicesPage = () => {
     }
   }, []);
 
-  // Recalculate stats when month filter changes
+  // Recalculate stats when invoices or month filter changes
   useEffect(() => {
     if (invoices && invoices.length > 0) {
       calculateStats(invoices);
@@ -107,12 +137,20 @@ const InvoicesPage = () => {
       if (response.ok) {
         const data = await response.json();
         if (data && data.success) {
-          setInvoices(data.invoices || []);
-          calculateStats(data.invoices || []);
+          const invoiceData = data.invoices || [];
+          setInvoices(invoiceData);
+          // Force calculate stats immediately after setting invoices
+          setTimeout(() => calculateStats(invoiceData), 100);
         }
       } else {
         console.error('Server error:', response.status);
         setInvoices([]);
+        setMonthlyStats({
+          thisMonth: { total: 0, count: 0 },
+          paid: { total: 0, count: 0 },
+          pending: { total: 0, count: 0 },
+          allTime: { total: 0, count: 0 }
+        });
       }
     } catch (err) {
       console.error('Failed to load invoices:', err);
@@ -176,17 +214,8 @@ const InvoicesPage = () => {
   };
 
   const loadMonthlyStats = async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/stats`);
-      if (response.ok) {
-        const data = await response.json();
-        if (data && typeof data === 'object') {
-          setMonthlyStats(data);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load monthly stats:', err);
-    }
+    // This function is kept for compatibility but stats are now calculated from invoices
+
   };
 
   const handleOneTimeInvoice = async () => {
@@ -204,17 +233,44 @@ const InvoicesPage = () => {
     
     const nextGlogoNumber = maxGlogoNumber + 1;
     
+    const totalAmount = oneTimeInvoiceData.selectedServices.reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0);
+    
+    // Determine service category for subject
+    const getServiceCategory = (services) => {
+      const hasCarService = services.some(s => 
+        s.name.toLowerCase().includes('clean car') || s.name.toLowerCase().includes('garage')
+      );
+      const hasHomeService = services.some(s => 
+        s.name.toLowerCase().includes('exterior glass') || 
+        s.name.toLowerCase().includes('facade') || 
+        s.name.toLowerCase().includes('garden cleaning') || 
+        s.name.toLowerCase().includes('house painting')
+      );
+      
+      if (hasCarService && hasHomeService) {
+        return 'Car & Home Services';
+      } else if (hasCarService) {
+        return 'Car Services';
+      } else if (hasHomeService) {
+        return 'Home Services';
+      } else {
+        return 'General Services';
+      }
+    };
+
     const tempClient = {
       name: oneTimeInvoiceData.clientName || 'Walk-in Customer',
       villa: oneTimeInvoiceData.villa || 'N/A',
       phone: oneTimeInvoiceData.phone || 'N/A',
-      fee: parseFloat(oneTimeInvoiceData.amount) || 0,
+      fee: totalAmount,
       washmanPackage: 'One-Time Service',
       typeOfCar: oneTimeInvoiceData.vehicleTypes || 'N/A',
-      serves: oneTimeInvoiceData.serves || 'One-time car wash service',
+      serves: oneTimeInvoiceData.selectedServices.map((s, index) => `${index + 1}. ${s.name} (AED ${s.price})`).join('\n'),
+      subject: getServiceCategory(oneTimeInvoiceData.selectedServices),
       payment: oneTimeInvoiceData.paymentStatus,
       startDate: new Date().toLocaleDateString('en-GB'),
       isOneTime: true,
+      selectedServices: oneTimeInvoiceData.selectedServices,
       nextInvoiceNumber: `GLOGO-${nextGlogoNumber}`
     };
 
@@ -228,12 +284,12 @@ const InvoicesPage = () => {
       clientName: '',
       villa: '',
       phone: '',
-      serviceDescription: '',
       vehicleTypes: '',
       serves: '',
       amount: '',
       paymentStatus: 'pending',
-      notes: ''
+      notes: '',
+      selectedServices: []
     });
   };
 
@@ -321,6 +377,25 @@ const InvoicesPage = () => {
     }
   };
 
+  const loadServices = async () => {
+    try {
+      setLoadingServices(true);
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`);
+      if (response.ok) {
+        const data = await response.json();
+        setServices(Array.isArray(data) ? data : []);
+      } else {
+        console.error('Failed to load services:', response.status);
+        setServices([]);
+      }
+    } catch (err) {
+      console.error('Failed to load services:', err);
+      setServices([]);
+    } finally {
+      setLoadingServices(false);
+    }
+  };
+
   const createBulkInvoices = async () => {
     if (!availableClients || availableClients.length === 0) {
       setAlertMessage('No clients available for invoicing this month');
@@ -357,7 +432,7 @@ const InvoicesPage = () => {
             const errorData = await response.json();
             if (errorData.error && errorData.error.includes('already has an invoice')) {
               skipCount++;
-              console.log(`Skipped ${client.Name} - already has invoice`);
+
             } else {
               console.error(`Failed to create invoice for ${client.Name}:`, errorData.error);
             }
@@ -447,7 +522,7 @@ const InvoicesPage = () => {
   };
 
   const updateInvoiceStatus = async (invoiceId, status, paymentMethod = '') => {
-    console.log('[FRONTEND] Updating invoice:', { invoiceId, status, paymentMethod });
+
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/update/${invoiceId}`, {
         method: 'PUT',
@@ -455,12 +530,12 @@ const InvoicesPage = () => {
         body: JSON.stringify({ status, paymentMethod })
       });
       
-      console.log('[FRONTEND] Update response status:', response.status);
+
       const data = await response.json();
-      console.log('[FRONTEND] Update response data:', data);
+
       
       if (response.ok) {
-        console.log('[FRONTEND] Update successful, reloading invoices...');
+
         loadInvoices();
         loadMonthlyStats();
       } else {
@@ -472,7 +547,7 @@ const InvoicesPage = () => {
   };
 
   const deleteInvoice = async (invoiceId) => {
-    console.log('Attempting to delete invoice:', invoiceId);
+
     setConfirmMessage('Are you sure you want to delete this invoice?');
     setConfirmCallback(() => async () => {
       try {
@@ -788,6 +863,42 @@ const InvoicesPage = () => {
           >
             📋 {showDueToday ? 'Show All' : 'Due Today'}
           </button>
+          <button
+            onClick={async () => {
+              setLoadingDuplicates(true);
+              try {
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/check-duplicates`);
+                if (response.ok) {
+                  const data = await response.json();
+                  setDuplicatesData(data);
+                  setShowDuplicatesModal(true);
+                } else {
+                  setAlertMessage('Failed to check for duplicates');
+                  setShowAlert(true);
+                }
+              } catch (error) {
+                setAlertMessage('Error checking duplicates: ' + error.message);
+                setShowAlert(true);
+              } finally {
+                setLoadingDuplicates(false);
+              }
+            }}
+            disabled={loadingDuplicates}
+            style={{
+              backgroundColor: loadingDuplicates ? '#6c757d' : '#e74c3c',
+              color: 'white',
+              border: 'none',
+              borderRadius: '10px',
+              padding: '12px 20px',
+              cursor: loadingDuplicates ? 'not-allowed' : 'pointer',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 12px rgba(231, 76, 60, 0.3)',
+              transition: 'all 0.3s ease'
+            }}
+          >
+            {loadingDuplicates ? '⏳ Checking...' : '🔍 Check Duplicates'}
+          </button>
         </div>
         
       {/* Search and Filter Bar */}
@@ -1041,7 +1152,7 @@ const InvoicesPage = () => {
                           <>
                             <button
                               onClick={() => {
-                                console.log('[BUTTON CLICK] Mark as Paid clicked for:', invoice.InvoiceID);
+
                                 setPendingInvoiceId(invoice.InvoiceID);
                                 setShowPaymentMethodModal(true);
                               }}
@@ -1052,7 +1163,7 @@ const InvoicesPage = () => {
                             </button>
                             <button
                               onClick={() => {
-                                console.log('[BUTTON CLICK] Mark as Overdue clicked for:', invoice.InvoiceID);
+
                                 updateInvoiceStatus(invoice.InvoiceID, 'Overdue');
                               }}
                               style={actionButtonStyle('#dc3545')}
@@ -1064,18 +1175,27 @@ const InvoicesPage = () => {
                         )}
                         <button
                           onClick={() => {
-                            console.log('[BUTTON CLICK] Edit clicked for:', invoice);
+
                             // Get customer data from customers sheet
                             const customerData = customers.find(c => c.CustomerID === invoice.CustomerID);
+                            
+                            // Parse existing services from invoice
+                            let selectedServices = [];
+                            if (invoice.Services) {
+                              const serviceLines = invoice.Services.split('\n');
+                              selectedServices = serviceLines.map(line => {
+                                const match = line.match(/^\d+\. (.+) \(AED (\d+)\)$/);
+                                if (match) {
+                                  return { name: match[1], price: match[2] };
+                                }
+                                return { name: line, price: '' };
+                              }).filter(s => s.name.trim());
+                            }
+                            
                             const enrichedInvoice = {
                               ...invoice,
                               Phone: customerData?.Phone || invoice.Phone || '',
-                              ServiceDescription: customerData?.Washman_Package || invoice.PackageID || '',
-                              Services: customerData?.Serves || invoice.Services || '',
-                              VehicleType: customerData?.CarPlates || invoice.Vehicle || '',
-                              NumberOfCars: customerData?.CarPlates ? customerData.CarPlates.split(',').length : 1,
-                              Payment: customerData?.Payment || invoice.Payment || '',
-                              SubTotal: invoice.SubTotal || ''
+                              selectedServices: selectedServices
                             };
                             setEditingInvoice(enrichedInvoice);
                           }}
@@ -1246,142 +1366,349 @@ const InvoicesPage = () => {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.8)',
           display: 'flex',
-          justifyContent: 'center',
           alignItems: 'center',
+          justifyContent: 'center',
           zIndex: 1000
         }}>
           <div style={{
             backgroundColor: 'white',
-            padding: '30px',
             borderRadius: '12px',
-            width: '400px',
-            maxWidth: '90vw'
+            padding: '30px',
+            width: '90%',
+            maxWidth: '500px',
+            maxHeight: '90vh',
+            overflow: 'auto'
           }}>
-            <h3 style={{ marginBottom: '20px' }}>Create New Invoice</h3>
-            
-            <div style={{ marginBottom: '15px' }}>
-              <label>Customer:</label>
-              <select
-                value={newInvoice.customerID}
-                onChange={(e) => setNewInvoice({...newInvoice, customerID: e.target.value})}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+              borderBottom: '2px solid #007bff',
+              paddingBottom: '10px'
+            }}>
+              <div>
+                <h3 style={{ color: '#007bff', margin: 0 }}>📋 New Invoice</h3>
+                <p style={{ color: '#666', fontSize: '14px', margin: '5px 0 0 0' }}>Create invoice for existing customer</p>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
                 style={{
-                  width: '100%',
-                  padding: '8px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ddd'
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer'
                 }}
               >
-                <option value="">Select Customer</option>
-                {(customers || []).map(customer => (
-                  <option key={customer.CustomerID} value={customer.CustomerID}>
-                    {customer.Name} - {customer.Villa}
-                  </option>
-                ))}
-              </select>
+                ×
+              </button>
             </div>
-            
-            <div style={{ marginBottom: '15px' }}>
-              <label>Total Amount:</label>
-              <input
-                type="number"
-                value={newInvoice.totalAmount}
-                onChange={(e) => setNewInvoice({...newInvoice, totalAmount: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ddd'
-                }}
-              />
-            </div>
-            
-            <div style={{ marginBottom: '15px' }}>
-              <label>Payment Status:</label>
-              <select
-                value={newInvoice.paymentStatus || 'pending'}
-                onChange={(e) => setNewInvoice({...newInvoice, paymentStatus: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ddd'
-                }}
-              >
-                <option value="pending">⏳ Pending</option>
-                <option value="PAID">✅ Paid</option>
-              </select>
-            </div>
-            
-            {newInvoice.paymentStatus === 'PAID' && (
-              <div style={{ marginBottom: '15px' }}>
-                <label>Payment Method:</label>
+
+            <div style={{ display: 'grid', gap: '15px' }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Service Category</label>
                 <select
-                  value={newInvoice.paymentMethod || 'Cash'}
-                  onChange={(e) => setNewInvoice({...newInvoice, paymentMethod: e.target.value})}
+                  value={serviceCategory}
+                  onChange={(e) => setServiceCategory(e.target.value)}
                   style={{
                     width: '100%',
-                    padding: '8px',
-                    marginTop: '5px',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    marginBottom: '15px'
+                  }}
+                >
+                  <option value="all">All Services</option>
+                  <option value="car">Car Services</option>
+                  <option value="home">Home Services</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Customer</label>
+                <select
+                  value={newInvoice.customerID}
+                  onChange={(e) => setNewInvoice({...newInvoice, customerID: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
                     borderRadius: '4px',
                     border: '1px solid #ddd'
                   }}
                 >
-                  <option value="Cash">💵 Cash</option>
-                  <option value="Bank">🏦 Bank Transfer</option>
+                  <option value="">Select Customer</option>
+                  {(customers || []).map(customer => (
+                    <option key={customer.CustomerID} value={customer.CustomerID}>
+                      {customer.Name} - {customer.Villa}
+                    </option>
+                  ))}
                 </select>
               </div>
-            )}
-            
-            <div style={{ marginBottom: '20px' }}>
-              <label>Notes:</label>
-              <textarea
-                value={newInvoice.notes}
-                onChange={(e) => setNewInvoice({...newInvoice, notes: e.target.value})}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  marginTop: '5px',
-                  borderRadius: '4px',
-                  border: '1px solid #ddd',
-                  height: '60px'
-                }}
-              />
-            </div>
-            
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={createInvoice}
-                style={{
-                  flex: 1,
-                  background: '#007bff',
-                  color: 'white',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Create Invoice
-              </button>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                style={{
-                  flex: 1,
-                  background: '#6c757d',
-                  color: 'white',
-                  padding: '10px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Services & Pricing</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <select
+                    onChange={(e) => {
+                      const selectedService = e.target.value;
+                      if (selectedService && !newInvoice.selectedServices?.find(s => s.name === selectedService)) {
+                        const newService = { name: selectedService, price: '' };
+                        setNewInvoice({
+                          ...newInvoice,
+                          selectedServices: [...(newInvoice.selectedServices || []), newService]
+                        });
+                      }
+                      e.target.value = '';
+                    }}
+                    disabled={loadingServices}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd',
+                      backgroundColor: loadingServices ? '#f8f9fa' : 'white'
+                    }}
+                  >
+                    <option value="">{loadingServices ? 'Loading...' : 'Add Service'}</option>
+                    {services.filter(service => {
+                      if (serviceCategory === 'all') return true;
+                      const serviceName = service.ServiceName.toLowerCase();
+                      if (serviceCategory === 'car') {
+                        return serviceName.includes('clean car') || serviceName.includes('garage');
+                      }
+                      if (serviceCategory === 'home') {
+                        return serviceName.includes('exterior glass') || 
+                               serviceName.includes('facade') || 
+                               serviceName.includes('garden cleaning') || 
+                               serviceName.includes('house painting');
+                      }
+                      return false;
+                    }).map(service => (
+                      <option key={`serves-${service.ServiceID || service.serviceId}`} value={service.ServiceName}>
+                        {service.ServiceName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newService = { name: '', price: '' };
+                      setNewInvoice({
+                        ...newInvoice,
+                        selectedServices: [...(newInvoice.selectedServices || []), newService]
+                      });
+                    }}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '8px 12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+                
+                {(newInvoice.selectedServices || []).map((service, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={service.name}
+                      onChange={(e) => {
+                        const updatedServices = [...(newInvoice.selectedServices || [])];
+                        updatedServices[index].name = e.target.value;
+                        setNewInvoice({...newInvoice, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={service.price}
+                      onChange={(e) => {
+                        const updatedServices = [...(newInvoice.selectedServices || [])];
+                        updatedServices[index].price = e.target.value;
+                        setNewInvoice({...newInvoice, selectedServices: updatedServices});
+                      }}
+                      placeholder="Price"
+                      min="0"
+                      style={{
+                        width: '80px',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd',
+                        MozAppearance: 'textfield'
+                      }}
+                      onWheel={(e) => e.target.blur()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedServices = (newInvoice.selectedServices || []).filter((_, i) => i !== index);
+                        setNewInvoice({...newInvoice, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '8px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                
+                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                  <strong>Total: AED {(newInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Payment Status</label>
+                <select
+                  value={newInvoice.paymentStatus || 'pending'}
+                  onChange={(e) => setNewInvoice({...newInvoice, paymentStatus: e.target.value})}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd'
+                  }}
+                >
+                  <option value="pending">⏳ Pending</option>
+                  <option value="yes/cash">✅ Paid (Cash)</option>
+                  <option value="yes/bank">✅ Paid (Bank)</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Notes (Optional)</label>
+                <textarea
+                  value={newInvoice.notes}
+                  onChange={(e) => setNewInvoice({...newInvoice, notes: e.target.value})}
+                  placeholder="Additional notes..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    height: '60px',
+                    resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button
+                  onClick={() => setShowCreateModal(false)}
+                  style={{
+                    backgroundColor: '#6c757d',
+                    color: 'white',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    // Get selected customer data
+                    const selectedCustomer = customers.find(c => c.CustomerID === newInvoice.customerID);
+                    if (!selectedCustomer) {
+                      setAlertMessage('Please select a customer');
+                      setShowAlert(true);
+                      return;
+                    }
+                    
+                    if (!newInvoice.selectedServices || newInvoice.selectedServices.length === 0) {
+                      setAlertMessage('Please add at least one service');
+                      setShowAlert(true);
+                      return;
+                    }
+                    
+                    const totalAmount = (newInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0);
+                    
+                    // Determine service category for subject
+                    const getServiceCategory = (services) => {
+                      const hasCarService = services.some(s => 
+                        s.name.toLowerCase().includes('clean car') || s.name.toLowerCase().includes('garage')
+                      );
+                      const hasHomeService = services.some(s => 
+                        s.name.toLowerCase().includes('exterior glass') || 
+                        s.name.toLowerCase().includes('facade') || 
+                        s.name.toLowerCase().includes('garden cleaning') || 
+                        s.name.toLowerCase().includes('house painting')
+                      );
+                      
+                      if (hasCarService && hasHomeService) {
+                        return 'Car & Home Services';
+                      } else if (hasCarService) {
+                        return 'Car Services';
+                      } else if (hasHomeService) {
+                        return 'Home Services';
+                      } else {
+                        return 'General Services';
+                      }
+                    };
+                    
+                    const clientData = {
+                      name: selectedCustomer.Name,
+                      villa: selectedCustomer.Villa,
+                      phone: selectedCustomer.Phone || 'N/A',
+                      fee: totalAmount,
+                      washmanPackage: selectedCustomer.Washman_Package || 'Custom Services',
+                      typeOfCar: selectedCustomer.CarPlates || selectedCustomer.TypeOfCar || 'N/A',
+                      serves: (newInvoice.selectedServices || []).map((s, index) => `${index + 1}. ${s.name} (AED ${s.price})`).join('\n'),
+                      subject: getServiceCategory(newInvoice.selectedServices || []),
+                      payment: newInvoice.paymentStatus,
+                      paymentMethod: newInvoice.paymentStatus?.includes('cash') ? 'Cash' : newInvoice.paymentStatus?.includes('bank') ? 'Bank' : '',
+                      startDate: new Date().toLocaleDateString('en-GB'),
+                      customerID: selectedCustomer.CustomerID,
+                      selectedServices: newInvoice.selectedServices,
+                      notes: newInvoice.notes
+                    };
+                    
+                    setSelectedClientForInvoice(clientData);
+                    setShowInvoiceGenerator(true);
+                    setShowCreateModal(false);
+                    setNewInvoice({ 
+                      customerID: '', 
+                      totalAmount: '', 
+                      paymentStatus: 'pending', 
+                      paymentMethod: 'Cash', 
+                      notes: '',
+                      selectedServices: []
+                    });
+                  }}
+                  style={{
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    padding: '10px 20px',
+                    border: 'none',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  📋 Create & Print Invoice
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1418,7 +1745,10 @@ const InvoicesPage = () => {
               borderBottom: '2px solid #fd7e14',
               paddingBottom: '10px'
             }}>
-              <h3 style={{ color: '#fd7e14', margin: 0 }}>⚡ One-Time Invoice</h3>
+              <div>
+                <h3 style={{ color: '#fd7e14', margin: 0 }}>⚡ One-Time Invoice</h3>
+                <p style={{ color: '#666', fontSize: '14px', margin: '5px 0 0 0' }}>Quick invoice for walk-in customers</p>
+              </div>
               <button
                 onClick={() => setShowOneTimeInvoiceForm(false)}
                 style={{
@@ -1435,38 +1765,115 @@ const InvoicesPage = () => {
               </button>
             </div>
 
+
+
             <div style={{ display: 'grid', gap: '15px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Client Name</label>
-                <input
-                  type="text"
-                  value={oneTimeInvoiceData.clientName}
-                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, clientName: e.target.value})}
-                  placeholder="Enter client name (optional)"
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Service Category</label>
+                <select
+                  value={serviceCategory}
+                  onChange={(e) => setServiceCategory(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '4px',
-                    border: '1px solid #ddd'
+                    border: '1px solid #ddd',
+                    marginBottom: '15px'
                   }}
-                />
+                >
+                  <option value="all">All Services</option>
+                  <option value="car">Car Services</option>
+                  <option value="home">Home Services</option>
+                </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Villa</label>
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Client Name</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <select
+                    value={oneTimeInvoiceData.clientName}
+                    onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, clientName: e.target.value})}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}
+                  >
+                    <option value="">Select or type name</option>
+                    <option value="Walk-in Customer">🚶 Walk-in Customer</option>
+                    <option value="Guest">🎆 Guest</option>
+                    <option value="Visitor">👥 Visitor</option>
+                    {[...new Set(customers.map(c => c.Name || c.CustomerName).filter(name => name))]
+                      .sort()
+                      .slice(0, 10)
+                      .map(name => (
+                        <option key={name} value={name}>
+                          👤 {name}
+                        </option>
+                      ))
+                    }
+                  </select>
                   <input
                     type="text"
-                    value={oneTimeInvoiceData.villa}
-                    onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, villa: e.target.value})}
-                    placeholder="Villa number"
+                    value={oneTimeInvoiceData.clientName}
+                    onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, clientName: e.target.value})}
+                    placeholder="Custom name"
                     style={{
-                      width: '100%',
+                      width: '150px',
                       padding: '8px 12px',
                       borderRadius: '4px',
                       border: '1px solid #ddd'
                     }}
                   />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Villa</label>
+                  <div style={{ display: 'flex', gap: '5px' }}>
+                    <select
+                      value={oneTimeInvoiceData.villa}
+                      onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, villa: e.target.value})}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd'
+                      }}
+                    >
+                      <option value="">Select Villa</option>
+                      <option value="Parking">🅿️ Parking Area</option>
+                      <option value="Guest">🏨 Guest Area</option>
+                      {[...new Set(customers.map(c => c.Villa).filter(villa => villa))]
+                        .sort((a, b) => {
+                          const aNum = parseInt(a.match(/\d+/)?.[0]) || 0;
+                          const bNum = parseInt(b.match(/\d+/)?.[0]) || 0;
+                          if (aNum !== bNum) return aNum - bNum;
+                          return a.localeCompare(b);
+                        })
+                        .slice(0, 20)
+                        .map(villa => (
+                          <option key={villa} value={villa}>
+                            🏠 {villa}
+                          </option>
+                        ))
+                      }
+                    </select>
+                    <input
+                      type="text"
+                      value={oneTimeInvoiceData.villa}
+                      onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, villa: e.target.value})}
+                      placeholder="Custom"
+                      style={{
+                        width: '80px',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                  </div>
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Phone</label>
@@ -1485,71 +1892,133 @@ const InvoicesPage = () => {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Service Description</label>
-                <input
-                  type="text"
-                  value={oneTimeInvoiceData.serviceDescription}
-                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, serviceDescription: e.target.value})}
-                  placeholder="e.g., Car wash service, Interior cleaning"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
+
 
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Vehicle Type(s)</label>
-                <input
-                  type="text"
-                  value={oneTimeInvoiceData.vehicleTypes}
-                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, vehicleTypes: e.target.value})}
-                  placeholder="e.g., Sedan, SUV, Hatchback"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Services & Pricing</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <select
+                    onChange={(e) => {
+                      const selectedService = e.target.value;
+                      if (selectedService && !oneTimeInvoiceData.selectedServices.find(s => s.name === selectedService)) {
+                        const newService = { name: selectedService, price: '' };
+                        setOneTimeInvoiceData({
+                          ...oneTimeInvoiceData,
+                          selectedServices: [...oneTimeInvoiceData.selectedServices, newService]
+                        });
+                      }
+                      e.target.value = '';
+                    }}
+                    disabled={loadingServices}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd',
+                      backgroundColor: loadingServices ? '#f8f9fa' : 'white'
+                    }}
+                  >
+                    <option value="">{loadingServices ? 'Loading...' : 'Add Service'}</option>
+                    {services.filter(service => {
+                      if (serviceCategory === 'all') return true;
+                      const serviceName = service.ServiceName.toLowerCase();
+                      if (serviceCategory === 'car') {
+                        return serviceName.includes('clean car') || serviceName.includes('garage');
+                      }
+                      if (serviceCategory === 'home') {
+                        return serviceName.includes('exterior glass') || serviceName.includes('facade') || serviceName.includes('garden cleaning') || serviceName.includes('house painting');
+                      }
+                      return false;
+                    }).map(service => (
+                      <option key={`serves-${service.ServiceID || service.serviceId}`} value={service.ServiceName}>
+                        {service.ServiceName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newService = { name: '', price: '' };
+                      setOneTimeInvoiceData({
+                        ...oneTimeInvoiceData,
+                        selectedServices: [...oneTimeInvoiceData.selectedServices, newService]
+                      });
+                    }}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '8px 12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+                
+                {oneTimeInvoiceData.selectedServices.map((service, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={service.name}
+                      onChange={(e) => {
+                        const updatedServices = [...oneTimeInvoiceData.selectedServices];
+                        updatedServices[index].name = e.target.value;
+                        setOneTimeInvoiceData({...oneTimeInvoiceData, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={service.price}
+                      onChange={(e) => {
+                        const updatedServices = [...oneTimeInvoiceData.selectedServices];
+                        updatedServices[index].price = e.target.value;
+                        setOneTimeInvoiceData({...oneTimeInvoiceData, selectedServices: updatedServices});
+                      }}
+                      placeholder="Price"
+                      min="0"
+                      style={{
+                        width: '80px',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd',
+                        MozAppearance: 'textfield'
+                      }}
+                      onWheel={(e) => e.target.blur()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedServices = oneTimeInvoiceData.selectedServices.filter((_, i) => i !== index);
+                        setOneTimeInvoiceData({...oneTimeInvoiceData, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '8px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                
+                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                  <strong>Total: AED {oneTimeInvoiceData.selectedServices.reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                </div>
               </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Services</label>
-                <input
-                  type="text"
-                  value={oneTimeInvoiceData.serves}
-                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, serves: e.target.value})}
-                  placeholder="e.g., Exterior wash, Interior cleaning"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
 
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Amount (AED)</label>
-                <input
-                  type="number"
-                  value={oneTimeInvoiceData.amount}
-                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, amount: e.target.value})}
-                  placeholder="0"
-                  min="0"
-                  step="0.01"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
 
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Payment Status</label>
@@ -1567,6 +2036,70 @@ const InvoicesPage = () => {
                   <option value="yes/cash">✅ Paid (Cash)</option>
                   <option value="yes/bank">✅ Paid (Bank)</option>
                 </select>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Notes (Optional)</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '5px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setOneTimeInvoiceData({...oneTimeInvoiceData, notes: 'Emergency service - same day'})}
+                    style={{
+                      backgroundColor: '#dc3545',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🚨 Emergency
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOneTimeInvoiceData({...oneTimeInvoiceData, notes: 'VIP customer - premium service'})}
+                    style={{
+                      backgroundColor: '#ffc107',
+                      color: 'black',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    👑 VIP
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOneTimeInvoiceData({...oneTimeInvoiceData, notes: 'First time customer'})}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                      fontSize: '12px'
+                    }}
+                  >
+                    🆕 New
+                  </button>
+                </div>
+                <textarea
+                  value={oneTimeInvoiceData.notes}
+                  onChange={(e) => setOneTimeInvoiceData({...oneTimeInvoiceData, notes: e.target.value})}
+                  placeholder="Additional notes or special instructions..."
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '4px',
+                    border: '1px solid #ddd',
+                    height: '60px',
+                    resize: 'vertical'
+                  }}
+                />
               </div>
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
@@ -1621,8 +2154,8 @@ const InvoicesPage = () => {
             backgroundColor: 'white',
             padding: '30px',
             borderRadius: '12px',
-            width: '500px',
-            maxWidth: '90vw',
+            width: '90%',
+            maxWidth: '600px',
             maxHeight: '90vh',
             overflow: 'auto'
           }}>
@@ -1634,7 +2167,10 @@ const InvoicesPage = () => {
               borderBottom: '2px solid #17a2b8',
               paddingBottom: '10px'
             }}>
-              <h3 style={{ color: '#17a2b8', margin: 0 }}>✏️ Edit Invoice: {editingInvoice.Ref || editingInvoice.InvoiceID}</h3>
+              <div>
+                <h3 style={{ color: '#17a2b8', margin: 0 }}>✏️ Edit Invoice: {editingInvoice.Ref || editingInvoice.InvoiceID}</h3>
+                <p style={{ color: '#666', fontSize: '14px', margin: '5px 0 0 0' }}>Modify invoice details and services</p>
+              </div>
               <button
                 onClick={() => setEditingInvoice(null)}
                 style={{
@@ -1651,51 +2187,41 @@ const InvoicesPage = () => {
               </button>
             </div>
 
-            {/* Original Data Display */}
-            <div style={{
-              backgroundColor: '#e7f3ff',
-              padding: '15px',
-              borderRadius: '8px',
-              border: '1px solid #b3d9ff',
-              marginBottom: '20px'
-            }}>
-              <h4 style={{ color: '#0066cc', margin: '0 0 10px 0' }}>📋 Original Invoice Data</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', fontSize: '14px' }}>
-                <div><strong>Name:</strong> {editingInvoice.CustomerName}</div>
-                <div><strong>Villa:</strong> {editingInvoice.Villa}</div>
-                <div><strong>Amount:</strong> AED {editingInvoice.TotalAmount}</div>
-                <div><strong>Package:</strong> {(() => {
-                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
-                  return customerData?.Washman_Package || editingInvoice.PackageID || 'N/A';
-                })()}</div>
-                <div><strong>Services:</strong> {(() => {
-                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
-                  return customerData?.Serves || editingInvoice.Services || 'N/A';
-                })()}</div>
-                <div><strong>Vehicle:</strong> {(() => {
-                  const customerData = customers.find(c => c.CustomerID === editingInvoice.CustomerID);
-                  return customerData?.CarPlates || editingInvoice.Vehicle || 'N/A';
-                })()}</div>
-              </div>
-            </div>
-
             <div style={{ display: 'grid', gap: '15px' }}>
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Client Name *</label>
-                <input
-                  type="text"
-                  value={editingInvoice.CustomerName}
-                  onChange={(e) => setEditingInvoice({...editingInvoice, CustomerName: e.target.value})}
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Service Category</label>
+                <select
+                  value={serviceCategory}
+                  onChange={(e) => setServiceCategory(e.target.value)}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
                     borderRadius: '4px',
-                    border: '1px solid #ddd'
+                    border: '1px solid #ddd',
+                    marginBottom: '15px'
                   }}
-                />
+                >
+                  <option value="all">All Services</option>
+                  <option value="car">Car Services</option>
+                  <option value="home">Home Services</option>
+                </select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Client Name</label>
+                  <input
+                    type="text"
+                    value={editingInvoice.CustomerName}
+                    onChange={(e) => setEditingInvoice({...editingInvoice, CustomerName: e.target.value})}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd'
+                    }}
+                  />
+                </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Villa</label>
                   <input
@@ -1710,78 +2236,16 @@ const InvoicesPage = () => {
                     }}
                   />
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Phone</label>
                   <input
                     type="tel"
                     value={editingInvoice.Phone || ''}
                     onChange={(e) => setEditingInvoice({...editingInvoice, Phone: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>SUB (Subject)</label>
-                <input
-                  type="text"
-                  value={editingInvoice.Subject || editingInvoice.Services || ''}
-                  onChange={(e) => setEditingInvoice({...editingInvoice, Subject: e.target.value})}
-                  placeholder="e.g., Car Wash, Interior Cleaning"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Service Description</label>
-                <input
-                  type="text"
-                  value={editingInvoice.ServiceDescription || ''}
-                  onChange={(e) => setEditingInvoice({...editingInvoice, ServiceDescription: e.target.value})}
-                  placeholder="e.g., 3 Ext 1 INT bi week Car Wash Service"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Services (Serves)</label>
-                <input
-                  type="text"
-                  value={editingInvoice.Services || ''}
-                  onChange={(e) => setEditingInvoice({...editingInvoice, Services: e.target.value})}
-                  placeholder="e.g., 2 Ext 1 INT week+ garage bi-weekly"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Vehicle Type(s)</label>
-                  <input
-                    type="text"
-                    value={editingInvoice.VehicleType || ''}
-                    onChange={(e) => setEditingInvoice({...editingInvoice, VehicleType: e.target.value})}
-                    placeholder="e.g., 2 sedan"
+                    placeholder="Phone number"
                     style={{
                       width: '100%',
                       padding: '8px 12px',
@@ -1791,37 +2255,152 @@ const InvoicesPage = () => {
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Number of Cars</label>
-                  <input
-                    type="number"
-                    value={editingInvoice.NumberOfCars || ''}
-                    onChange={(e) => setEditingInvoice({...editingInvoice, NumberOfCars: e.target.value})}
-                    min="1"
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Duration</label>
+                  <select
+                    value={editingInvoice.Duration || '30 days'}
+                    onChange={(e) => setEditingInvoice({...editingInvoice, Duration: e.target.value})}
                     style={{
                       width: '100%',
                       padding: '8px 12px',
                       borderRadius: '4px',
                       border: '1px solid #ddd'
                     }}
-                  />
+                  >
+                    <option value="1 Time">1 Time</option>
+                    <option value="30 days">30 days</option>
+                    <option value="7 days">7 days</option>
+                    <option value="14 days">14 days</option>
+                    <option value="60 days">60 days</option>
+                    <option value="90 days">90 days</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Amount (AED) *</label>
-                <input
-                  type="number"
-                  value={editingInvoice.TotalAmount}
-                  onChange={(e) => setEditingInvoice({...editingInvoice, TotalAmount: e.target.value})}
-                  min="0"
-                  step="0.01"
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '4px',
-                    border: '1px solid #ddd'
-                  }}
-                />
+                <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Services & Pricing</label>
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+                  <select
+                    onChange={(e) => {
+                      const selectedService = e.target.value;
+                      if (selectedService && !(editingInvoice.selectedServices || []).find(s => s.name === selectedService)) {
+                        const newService = { name: selectedService, price: '' };
+                        setEditingInvoice({
+                          ...editingInvoice,
+                          selectedServices: [...(editingInvoice.selectedServices || []), newService]
+                        });
+                      }
+                      e.target.value = '';
+                    }}
+                    disabled={loadingServices}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd',
+                      backgroundColor: loadingServices ? '#f8f9fa' : 'white'
+                    }}
+                  >
+                    <option value="">{loadingServices ? 'Loading...' : 'Add Service'}</option>
+                    {services.filter(service => {
+                      if (serviceCategory === 'all') return true;
+                      const serviceName = service.ServiceName.toLowerCase();
+                      if (serviceCategory === 'car') {
+                        return serviceName.includes('clean car') || serviceName.includes('garage');
+                      }
+                      if (serviceCategory === 'home') {
+                        return serviceName.includes('exterior glass') || 
+                               serviceName.includes('facade') || 
+                               serviceName.includes('garden cleaning') || 
+                               serviceName.includes('house painting');
+                      }
+                      return false;
+                    }).map(service => (
+                      <option key={`serves-${service.ServiceID || service.serviceId}`} value={service.ServiceName}>
+                        {service.ServiceName}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newService = { name: '', price: '' };
+                      setEditingInvoice({
+                        ...editingInvoice,
+                        selectedServices: [...(editingInvoice.selectedServices || []), newService]
+                      });
+                    }}
+                    style={{
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '4px',
+                      padding: '8px 12px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+                
+                {(editingInvoice.selectedServices || []).map((service, index) => (
+                  <div key={index} style={{ display: 'flex', gap: '10px', marginBottom: '10px', alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      value={service.name}
+                      onChange={(e) => {
+                        const updatedServices = [...(editingInvoice.selectedServices || [])];
+                        updatedServices[index].name = e.target.value;
+                        setEditingInvoice({...editingInvoice, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={service.price}
+                      onChange={(e) => {
+                        const updatedServices = [...(editingInvoice.selectedServices || [])];
+                        updatedServices[index].price = e.target.value;
+                        setEditingInvoice({...editingInvoice, selectedServices: updatedServices});
+                      }}
+                      placeholder="Price"
+                      min="0"
+                      style={{
+                        width: '80px',
+                        padding: '8px 12px',
+                        borderRadius: '4px',
+                        border: '1px solid #ddd',
+                        MozAppearance: 'textfield'
+                      }}
+                      onWheel={(e) => e.target.blur()}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updatedServices = (editingInvoice.selectedServices || []).filter((_, i) => i !== index);
+                        setEditingInvoice({...editingInvoice, selectedServices: updatedServices});
+                      }}
+                      style={{
+                        backgroundColor: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '8px 12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                
+                <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
+                  <strong>Total: AED {(editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
@@ -1868,41 +2447,6 @@ const InvoicesPage = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Payment</label>
-                  <input
-                    type="text"
-                    value={editingInvoice.Payment || ''}
-                    onChange={(e) => setEditingInvoice({...editingInvoice, Payment: e.target.value})}
-                    placeholder="paid or amount (e.g., 200)"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd'
-                    }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Sub Total</label>
-                  <input
-                    type="number"
-                    value={editingInvoice.SubTotal || ''}
-                    onChange={(e) => setEditingInvoice({...editingInvoice, SubTotal: e.target.value})}
-                    placeholder="Sub total amount"
-                    min="0"
-                    step="0.01"
-                    style={{
-                      width: '100%',
-                      padding: '8px 12px',
-                      borderRadius: '4px',
-                      border: '1px solid #ddd'
-                    }}
-                  />
-                </div>
-              </div>
-
               <div>
                 <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Notes</label>
                 <textarea
@@ -1918,17 +2462,6 @@ const InvoicesPage = () => {
                     resize: 'vertical'
                   }}
                 />
-              </div>
-
-              <div style={{
-                backgroundColor: '#e7f3ff',
-                padding: '12px',
-                borderRadius: '6px',
-                border: '1px solid #b3d9ff',
-                fontSize: '14px',
-                color: '#0066cc'
-              }}>
-                ℹ️ Note: This will update the invoice with the same reference number ({editingInvoice.Ref || editingInvoice.InvoiceID}) and automatically print the updated version.
               </div>
 
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
@@ -1948,23 +2481,48 @@ const InvoicesPage = () => {
                 <button
                   onClick={async () => {
                     try {
+                      const totalAmount = (editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0);
+                      
+                      // Determine service category for subject
+                      const getServiceCategory = (services) => {
+                        const hasCarService = services.some(s => 
+                          s.name.toLowerCase().includes('clean car') || s.name.toLowerCase().includes('garage')
+                        );
+                        const hasHomeService = services.some(s => 
+                          s.name.toLowerCase().includes('exterior glass') || 
+                          s.name.toLowerCase().includes('facade') || 
+                          s.name.toLowerCase().includes('garden cleaning') || 
+                          s.name.toLowerCase().includes('house painting')
+                        );
+                        
+                        if (hasCarService && hasHomeService) {
+                          return 'Car & Home Services';
+                        } else if (hasCarService) {
+                          return 'Car Services';
+                        } else if (hasHomeService) {
+                          return 'Home Services';
+                        } else {
+                          return 'General Services';
+                        }
+                      };
+                      
+                      const servicesText = (editingInvoice.selectedServices || []).map((s, index) => `${index + 1}. ${s.name} (AED ${s.price})`).join('\n');
+                      const subject = getServiceCategory(editingInvoice.selectedServices || []);
+                      
                       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/update/${editingInvoice.InvoiceID}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                           customerName: editingInvoice.CustomerName,
                           villa: editingInvoice.Villa,
-                          totalAmount: editingInvoice.TotalAmount,
+                          totalAmount: totalAmount,
                           status: editingInvoice.Status,
                           paymentMethod: editingInvoice.Status === 'Pending' ? '' : editingInvoice.PaymentMethod,
                           notes: editingInvoice.Notes,
-                          subTotal: editingInvoice.SubTotal,
-                          services: editingInvoice.Services,
-                          vehicleType: editingInvoice.VehicleType,
-                          serviceDescription: editingInvoice.ServiceDescription,
+                          services: servicesText,
                           phone: editingInvoice.Phone,
-                          payment: editingInvoice.Payment,
-                          subject: editingInvoice.Subject
+                          subject: subject,
+                          duration: editingInvoice.Duration || '30 days'
                         })
                       });
                       
@@ -1974,15 +2532,16 @@ const InvoicesPage = () => {
                           name: editingInvoice.CustomerName,
                           villa: editingInvoice.Villa,
                           phone: editingInvoice.Phone || 'N/A',
-                          fee: editingInvoice.TotalAmount,
-                          washmanPackage: editingInvoice.ServiceDescription || 'Standard Service',
-                          typeOfCar: editingInvoice.VehicleType || 'N/A',
-                          serves: editingInvoice.Services || '',
+                          fee: totalAmount,
+                          washmanPackage: editingInvoice.Duration === '1 Time' ? 'One-Time Service' : 'Custom Services',
+                          typeOfCar: 'N/A',
+                          serves: servicesText,
+                          subject: subject,
                           payment: editingInvoice.PaymentMethod === 'Cash' ? 'yes/cash' : editingInvoice.PaymentMethod === 'Bank' ? 'yes/bank' : 'pending',
                           customerID: editingInvoice.CustomerID,
                           existingRef: editingInvoice.Ref || editingInvoice.InvoiceID,
-                          subTotal: editingInvoice.SubTotal,
-                          subject: editingInvoice.Subject,
+                          selectedServices: editingInvoice.selectedServices,
+                          duration: editingInvoice.Duration || '30 days',
                           isEdit: true
                         };
                         
@@ -2224,15 +2783,24 @@ const InvoicesPage = () => {
                           <button
                             onClick={() => {
                               if (clientInvoice) {
+                                // Parse existing services from invoice
+                                let selectedServices = [];
+                                if (clientInvoice.Services) {
+                                  const serviceLines = clientInvoice.Services.split('\n');
+                                  selectedServices = serviceLines.map(line => {
+                                    const match = line.match(/^\d+\. (.+) \(AED (\d+)\)$/);
+                                    if (match) {
+                                      return { name: match[1], price: match[2] };
+                                    }
+                                    return { name: line, price: '' };
+                                  }).filter(s => s.name.trim());
+                                }
+                                
                                 // Enrich invoice with customer data
                                 const enrichedInvoice = {
                                   ...clientInvoice,
                                   Phone: client.Phone || clientInvoice.Phone || '',
-                                  ServiceDescription: client.Washman_Package || clientInvoice.ServiceDescription || '',
-                                  Services: client.Serves || clientInvoice.Services || '',
-                                  VehicleType: client.CarPlates || clientInvoice.VehicleType || '',
-                                  NumberOfCars: client.CarPlates ? client.CarPlates.split(',').length : 1,
-                                  Payment: client.Payment || clientInvoice.Payment || ''
+                                  selectedServices: selectedServices
                                 };
                                 setEditingInvoice(enrichedInvoice);
                                 setShowClientsPanel(false);
@@ -2409,7 +2977,7 @@ const InvoicesPage = () => {
           onInvoiceCreated={(invoice) => {
             loadInvoices();
             loadAvailableClients(); // Refresh client lists
-            console.log('Invoice created:', invoice);
+
           }}
         />
       )}
@@ -2655,8 +3223,10 @@ const InvoicesPage = () => {
                   borderRadius: '4px',
                   border: '1px solid #ddd',
                   fontSize: '16px',
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  MozAppearance: 'textfield'
                 }}
+                onWheel={(e) => e.target.blur()}
               />
             </div>
             <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
@@ -2988,6 +3558,258 @@ const InvoicesPage = () => {
                   }}>{selectedClientDetails.Notes}</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Duplicates Detection Modal */}
+      {showDuplicatesModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: '12px',
+            padding: '30px',
+            width: '90%',
+            maxWidth: '800px',
+            maxHeight: '80vh',
+            overflow: 'auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '20px',
+              borderBottom: '2px solid #e74c3c',
+              paddingBottom: '10px'
+            }}>
+              <div>
+                <h3 style={{ color: '#e74c3c', margin: 0 }}>🔍 Duplicate Invoice Detection</h3>
+                <p style={{ color: '#666', fontSize: '14px', margin: '5px 0 0 0' }}>
+                  {duplicatesData.message || 'Scan results for duplicate invoices'}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowDuplicatesModal(false)}
+                style={{
+                  backgroundColor: '#dc3545',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '30px',
+                  height: '30px',
+                  cursor: 'pointer'
+                }}
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Summary Stats */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+              gap: '15px',
+              marginBottom: '20px'
+            }}>
+              <div style={{
+                backgroundColor: '#f8f9fa',
+                padding: '15px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                border: '1px solid #dee2e6'
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#28a745' }}>
+                  {duplicatesData.summary?.total || 0}
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>Total Invoices</div>
+              </div>
+              <div style={{
+                backgroundColor: '#fff3cd',
+                padding: '15px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                border: '1px solid #ffeaa7'
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#856404' }}>
+                  {duplicatesData.summary?.duplicateRefs || 0}
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>Duplicate REFs</div>
+              </div>
+              <div style={{
+                backgroundColor: '#f8d7da',
+                padding: '15px',
+                borderRadius: '8px',
+                textAlign: 'center',
+                border: '1px solid #f5c6cb'
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#721c24' }}>
+                  {duplicatesData.summary?.totalDuplicateInvoices || 0}
+                </div>
+                <div style={{ fontSize: '12px', color: '#666' }}>Affected Invoices</div>
+              </div>
+            </div>
+
+            {/* Duplicates List */}
+            {duplicatesData.duplicates && duplicatesData.duplicates.length > 0 ? (
+              <div>
+                <h4 style={{ color: '#e74c3c', marginBottom: '15px' }}>⚠️ Found Issues:</h4>
+                <div style={{ maxHeight: '400px', overflow: 'auto' }}>
+                  {duplicatesData.duplicates.map((duplicate, index) => (
+                    <div key={index} style={{
+                      backgroundColor: duplicate.severity === 'HIGH' ? '#f8d7da' : '#fff3cd',
+                      border: `1px solid ${duplicate.severity === 'HIGH' ? '#f5c6cb' : '#ffeaa7'}`,
+                      borderRadius: '8px',
+                      padding: '15px',
+                      marginBottom: '10px'
+                    }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '10px'
+                      }}>
+                        <h5 style={{
+                          margin: 0,
+                          color: duplicate.severity === 'HIGH' ? '#721c24' : '#856404'
+                        }}>
+                          {duplicate.type === 'DUPLICATE_REF' ? '🔴 Duplicate REF Number' : '🟡 Multiple Monthly Invoices'}
+                        </h5>
+                        <span style={{
+                          backgroundColor: duplicate.severity === 'HIGH' ? '#dc3545' : '#ffc107',
+                          color: duplicate.severity === 'HIGH' ? 'white' : 'black',
+                          padding: '2px 8px',
+                          borderRadius: '12px',
+                          fontSize: '12px',
+                          fontWeight: 'bold'
+                        }}>
+                          {duplicate.severity}
+                        </span>
+                      </div>
+                      
+                      <div style={{ marginBottom: '10px', fontSize: '14px' }}>
+                        {duplicate.type === 'DUPLICATE_REF' ? (
+                          <><strong>REF:</strong> {duplicate.ref} ({duplicate.count} times)</>
+                        ) : (
+                          <><strong>Customer:</strong> {duplicate.customerID} in {duplicate.month} ({duplicate.count} invoices)</>
+                        )}
+                      </div>
+                      
+                      <div style={{ fontSize: '12px' }}>
+                        <strong>Affected Invoices:</strong>
+                        <div style={{ marginTop: '5px' }}>
+                          {duplicate.invoices.map((invoice, idx) => (
+                            <div key={idx} style={{
+                              backgroundColor: 'rgba(255,255,255,0.7)',
+                              padding: '5px 8px',
+                              margin: '2px 0',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center'
+                            }}>
+                              <span>
+                                {invoice.InvoiceID} - {invoice.CustomerName} ({invoice.Villa}) - AED {invoice.TotalAmount}
+                                <br/>
+                                <small style={{ color: '#666' }}>
+                                  Created: {invoice.CreatedAt ? new Date(invoice.CreatedAt).toLocaleDateString('en-GB') : 'N/A'}
+                                </small>
+                              </span>
+                              <button
+                                onClick={async () => {
+                                  if (window.confirm(`Are you sure you want to delete this duplicate invoice?\n\nInvoice: ${invoice.InvoiceID}\nCustomer: ${invoice.CustomerName}\nAmount: AED ${invoice.TotalAmount}`)) {
+                                    try {
+                                      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/delete/${invoice.InvoiceID}`, {
+                                        method: 'DELETE'
+                                      });
+                                      
+                                      if (response.ok) {
+                                        setAlertMessage(`Invoice ${invoice.InvoiceID} deleted successfully`);
+                                        setShowAlert(true);
+                                        
+                                        // Refresh duplicates data
+                                        const dupResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/check-duplicates`);
+                                        if (dupResponse.ok) {
+                                          const newData = await dupResponse.json();
+                                          setDuplicatesData(newData);
+                                        }
+                                        
+                                        // Refresh main invoice list
+                                        loadInvoices();
+                                        loadAvailableClients();
+                                      } else {
+                                        setAlertMessage('Failed to delete invoice');
+                                        setShowAlert(true);
+                                      }
+                                    } catch (error) {
+                                      setAlertMessage('Error deleting invoice: ' + error.message);
+                                      setShowAlert(true);
+                                    }
+                                  }
+                                }}
+                                style={{
+                                  backgroundColor: '#dc3545',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '4px 8px',
+                                  cursor: 'pointer',
+                                  fontSize: '10px',
+                                  marginLeft: '10px'
+                                }}
+                                title="Delete this duplicate invoice"
+                              >
+                                🗑️ Delete
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                textAlign: 'center',
+                padding: '40px',
+                backgroundColor: '#d4edda',
+                borderRadius: '8px',
+                border: '1px solid #c3e6cb'
+              }}>
+                <div style={{ fontSize: '48px', marginBottom: '10px' }}>✅</div>
+                <h4 style={{ color: '#155724', margin: '0 0 10px 0' }}>No Duplicates Found!</h4>
+                <p style={{ color: '#155724', margin: 0 }}>All invoices have unique references and proper customer billing.</p>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'center', marginTop: '20px' }}>
+              <button
+                onClick={() => setShowDuplicatesModal(false)}
+                style={{
+                  backgroundColor: '#6c757d',
+                  color: 'white',
+                  padding: '10px 20px',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '16px'
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

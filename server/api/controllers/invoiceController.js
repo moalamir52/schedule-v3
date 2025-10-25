@@ -1,4 +1,4 @@
-const { addRowToSheet, getInvoices, addInvoiceRecord, deleteInvoiceRecord, getCustomers, updateInvoiceStatus, getOrCreateInvoiceNumber } = require('../../services/googleSheetsService');
+const { addRowToSheet, getInvoices, addInvoiceRecord, deleteInvoiceRecord, getCustomers, updateInvoiceStatus, getOrCreateInvoiceNumber, detectDuplicateInvoices } = require('../../services/googleSheetsService');
 
 const createInvoice = async (req, res) => {
   try {
@@ -279,6 +279,23 @@ const getInvoiceStats = async (req, res) => {
   }
 };
 
+const checkDuplicateInvoices = async (req, res) => {
+  try {
+    const result = await detectDuplicateInvoices();
+    
+    res.json({
+      success: true,
+      ...result,
+      message: result.duplicates.length > 0 
+        ? `Found ${result.duplicates.length} duplicate issues affecting ${result.summary.totalDuplicateInvoices} invoices`
+        : 'No duplicate invoices found'
+    });
+  } catch (error) {
+    console.error('Error checking duplicate invoices:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   createInvoice,
   getAllInvoices,
@@ -287,5 +304,6 @@ module.exports = {
   exportInvoices,
   printInvoice,
   getInvoiceNumber,
-  getInvoiceStats
+  getInvoiceStats,
+  checkDuplicateInvoices
 };

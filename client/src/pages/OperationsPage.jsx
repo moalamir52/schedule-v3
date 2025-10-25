@@ -33,16 +33,16 @@ const OperationsPage = () => {
 
   const loadWorkers = async () => {
     try {
-      console.log('Loading workers...');
+
       const workersData = await operationsService.getWorkers();
-      console.log('Workers data received:', workersData);
+
       
       const workerNames = workersData.map(w => {
         if (typeof w === 'string') return w;
         return w.Name || w.WorkerName || 'Unknown';
       }).filter(name => name && name !== 'Unknown');
       
-      console.log('Processed worker names:', workerNames);
+
       setWorkers(workerNames.length > 0 ? workerNames : ['Raqib', 'Rahman']);
     } catch (error) {
       console.error('Failed to load workers:', error);
@@ -226,7 +226,7 @@ const OperationsPage = () => {
     }
 
     try {
-      console.log('Adding worker:', newWorkerName.trim());
+
       await operationsService.addWorker(newWorkerName.trim(), 'Car Washer', 'Active');
       
       // Reload workers to get updated list

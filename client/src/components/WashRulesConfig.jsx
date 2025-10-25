@@ -120,7 +120,7 @@ const WashRulesConfig = () => {
       });
       
       if (response.ok) {
-        console.log('Rules saved to server successfully');
+
       } else {
         console.error('Failed to save rules to server');
       }

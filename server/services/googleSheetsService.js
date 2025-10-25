@@ -3,6 +3,8 @@
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 const { google } = require('googleapis');
+const { apiRetry } = require('../utils/apiRetry');
+const { getCachedTasks, setCachedTasks, clearTasksCache } = require('../utils/taskCache');
 
 // Conditionally load credentials
 let creds;
@@ -42,13 +44,15 @@ function mapRowsToObjects(rows, headers) {
 }
 
 async function getCustomers() {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['Budget - customers'];
-  if (!sheet) {
-    throw new Error("Sheet 'Budget - customers' not found.");
-  }
-  const rows = await sheet.getRows();
-  return mapRowsToObjects(rows, sheet.headerValues);
+  return await apiRetry(async () => {
+    await loadSheet();
+    const sheet = doc.sheetsByTitle['Budget - customers'];
+    if (!sheet) {
+      throw new Error("Sheet 'Budget - customers' not found.");
+    }
+    const rows = await sheet.getRows();
+    return mapRowsToObjects(rows, sheet.headerValues);
+  });
 }
 
 async function getHistoryForCar(carPlate) {
@@ -72,21 +76,24 @@ async function getHistoryForCar(carPlate) {
 }
 
 async function getAllHistory() {
-  await loadSheet();
-  const sheet = doc.sheetsByTitle['wash_history'];
-  if (!sheet) {
-    throw new Error("Sheet 'wash_history' not found.");
-  }
-  const rows = await sheet.getRows();
-  return mapRowsToObjects(rows, sheet.headerValues);
-}
-
-async function addHistoryRecord(historyData) {
+  return await apiRetry(async () => {
     await loadSheet();
     const sheet = doc.sheetsByTitle['wash_history'];
     if (!sheet) {
-        throw new Error("Sheet 'wash_history' not found.");
+      throw new Error("Sheet 'wash_history' not found.");
     }
+    const rows = await sheet.getRows();
+    return mapRowsToObjects(rows, sheet.headerValues);
+  });
+}
+
+async function addHistoryRecord(historyData) {
+    return await apiRetry(async () => {
+        await loadSheet();
+        const sheet = doc.sheetsByTitle['wash_history'];
+        if (!sheet) {
+            throw new Error("Sheet 'wash_history' not found.");
+        }
     
     // Format date as DD-MMM-YYYY (e.g., 8-Oct-2025)
     const formatDate = (date) => {
@@ -116,9 +123,8 @@ async function addHistoryRecord(historyData) {
         const cell = sheet.getCell(nextRowIndex - 1, index); // -1 because getCell is 0-indexed
         cell.value = dataWithFormattedDate[header] || '';
     });
-    await sheet.saveUpdatedCells();
-    
-
+        await sheet.saveUpdatedCells();
+    });
 }
 
 // Add new customer
@@ -271,51 +277,33 @@ async function addRowsToSheet(sheetName, data) {
 }
 
 async function getScheduledTasks() {
-  try {
-    // Force reload document info to get latest data
+  // Try cache first
+  const cached = getCachedTasks();
+  if (cached) return cached;
+  
+  // Fetch from API with retry
+  const tasks = await apiRetry(async () => {
     await doc.loadInfo();
     const sheet = doc.sheetsByTitle['ScheduledTasks'];
-    if (!sheet) {
-      console.log('[SHEETS] ScheduledTasks sheet not found');
-      return [];
-    }
+    if (!sheet) return [];
     
-    // Force reload sheet cells to get latest data
-    await sheet.loadCells();
+    const rows = await sheet.getRows();
+    if (!rows || rows.length === 0) return [];
     
-    // Check if sheet is empty
-    if (sheet.rowCount <= 1) {
-      console.log('[SHEETS] ScheduledTasks sheet is empty');
-      return [];
-    }
-    
-    // Set headers manually if needed
     const headers = ['Day', 'AppointmentDate', 'Time', 'CustomerID', 'CustomerName', 'Villa', 'CarPlate', 'WashType', 'WorkerName', 'WorkerID', 'PackageType', 'isLocked', 'ScheduleDate'];
     
-    // Get all rows as raw data with fresh reload
-    const rows = await sheet.getRows();
-    if (!rows || rows.length === 0) {
-      console.log('[SHEETS] No rows found in ScheduledTasks');
-      return [];
-    }
-    
-    console.log(`[SHEETS] Found ${rows.length} rows in ScheduledTasks`);
-    
-    // Map rows manually using headers
-    const allTasks = rows.map(row => {
+    return rows.map(row => {
       const task = {};
       headers.forEach((header, index) => {
         task[header] = row._rawData[index] || '';
       });
       return task;
     });
-    
-    console.log(`[SHEETS] Retrieved ${allTasks.length} tasks from ScheduledTasks`);
-    return allTasks;
-  } catch (error) {
-    console.error('[SHEETS] Error:', error.message);
-    return [];
-  }
+  }, 2, 1500);
+  
+  // Cache the result
+  setCachedTasks(tasks);
+  return tasks;
 }
 
 async function addRowToSheet(sheetName, data) {
@@ -355,11 +343,12 @@ async function addRowToSheet(sheetName, data) {
 
 async function clearAndWriteSheet(sheetName, data) {
   console.log(`[SHEETS] clearAndWriteSheet called for ${sheetName} with ${data.length} items`);
-  await loadSheet();
-  const sheet = doc.sheetsByTitle[sheetName];
-  if (!sheet) {
-    throw new Error(`Sheet '${sheetName}' not found.`);
-  }
+  return await apiRetry(async () => {
+    await loadSheet();
+    const sheet = doc.sheetsByTitle[sheetName];
+    if (!sheet) {
+      throw new Error(`Sheet '${sheetName}' not found.`);
+    }
   
   try {
     console.log(`[SHEETS] Clearing sheet ${sheetName}...`);
@@ -421,22 +410,25 @@ async function clearAndWriteSheet(sheetName, data) {
     if (data.length > 0) {
       console.log(`[SHEETS] Adding ${data.length} rows to ${sheetName}...`);
       await sheet.addRows(rowsData);
+      clearTasksCache(); // Clear cache after bulk update
       console.log(`[SHEETS] Successfully added ${rowsData.length} rows to ${sheetName}`);
     } else {
       console.log(`[SHEETS] No data to add to ${sheetName}`);
     }
-  } catch (error) {
-    console.error(`[SHEETS] Error in clearAndWriteSheet: ${error.message}`);
-    throw error;
-  }
+    } catch (error) {
+      console.error(`[SHEETS] Error in clearAndWriteSheet: ${error.message}`);
+      throw error;
+    }
+  });
 }
 
 async function addInvoiceRecord(invoiceData) {
-    await loadSheet();
-    const sheet = doc.sheetsByTitle['invoices'];
-    if (!sheet) {
-        throw new Error("Sheet 'invoices' not found.");
-    }
+    return await apiRetry(async () => {
+        await loadSheet();
+        const sheet = doc.sheetsByTitle['invoices'];
+        if (!sheet) {
+            throw new Error("Sheet 'invoices' not found.");
+        }
     
     // Get GLOGO number if not provided
     let refNumber = invoiceData.Ref;
@@ -451,57 +443,74 @@ async function addInvoiceRecord(invoiceData) {
     // Generate unique Invoice ID
     let invoiceId = invoiceData.InvoiceID;
     if (!invoiceId) {
-        const rows = await sheet.getRows();
-        let isUnique = false;
-        let counter = 0;
-        
-        while (!isUnique) {
-            const timestamp = Date.now() + counter;
-            invoiceId = `INV-${timestamp}`;
-            
-            // Check if this ID already exists
-            const exists = rows.find(row => row.get('InvoiceID') === invoiceId);
-            
-            if (!exists) {
-                isUnique = true;
-            } else {
-                counter++;
-            }
-            
-            // Safety check
-            if (counter > 1000) {
-                throw new Error('Unable to generate unique invoice ID');
-            }
-        }
+        const timestamp = Date.now();
+        invoiceId = `INV-${timestamp}`;
     }
     
-    await sheet.addRow({
-        InvoiceID: invoiceId,
-        Ref: refNumber,
-        CustomerID: invoiceData.CustomerID,
-        CustomerName: invoiceData.CustomerName,
-        Villa: invoiceData.Villa,
-        InvoiceDate: invoiceData.InvoiceDate || new Date().toISOString().split('T')[0],
-        DueDate: invoiceData.DueDate,
-        TotalAmount: invoiceData.TotalAmount,
-        Status: invoiceData.Status,
-        PaymentMethod: invoiceData.PaymentMethod,
-        Start: invoiceData.Start,
-        End: invoiceData.End,
-        Vehicle: invoiceData.Vehicle,
-        PackageID: invoiceData.PackageID,
-        Services: invoiceData.Services,
-        Notes: invoiceData.Notes,
-        CreatedBy: invoiceData.CreatedBy,
-        CreatedAt: invoiceData.CreatedAt,
-        SubTotal: invoiceData.SubTotal || '',
-        Phone: invoiceData.Phone || '',
-        Payment: invoiceData.Payment || '',
-        Subject: invoiceData.Subject || invoiceData.Services || ''
-    });
+    // Check if this is updating a reserved record
+    const rows = await sheet.getRows();
+    const reservedRow = rows.find(row => 
+        row.get('Ref') === refNumber && 
+        row.get('Status') === 'RESERVED'
+    );
     
-
-    return refNumber;
+    if (reservedRow) {
+        // Update the reserved record with actual data
+        reservedRow.set('InvoiceID', invoiceId);
+        reservedRow.set('CustomerID', invoiceData.CustomerID);
+        reservedRow.set('CustomerName', invoiceData.CustomerName);
+        reservedRow.set('Villa', invoiceData.Villa);
+        reservedRow.set('InvoiceDate', invoiceData.InvoiceDate || new Date().toISOString().split('T')[0]);
+        reservedRow.set('DueDate', invoiceData.DueDate);
+        reservedRow.set('TotalAmount', invoiceData.TotalAmount);
+        reservedRow.set('Status', invoiceData.Status);
+        reservedRow.set('PaymentMethod', invoiceData.PaymentMethod);
+        reservedRow.set('Start', invoiceData.Start);
+        reservedRow.set('End', invoiceData.End);
+        reservedRow.set('Vehicle', invoiceData.Vehicle);
+        reservedRow.set('PackageID', invoiceData.PackageID);
+        reservedRow.set('Services', invoiceData.Services);
+        reservedRow.set('Notes', invoiceData.Notes);
+        reservedRow.set('CreatedBy', invoiceData.CreatedBy);
+        reservedRow.set('CreatedAt', invoiceData.CreatedAt);
+        reservedRow.set('SubTotal', invoiceData.SubTotal || '');
+        reservedRow.set('Phone', invoiceData.Phone || '');
+        reservedRow.set('Payment', invoiceData.Payment || '');
+        reservedRow.set('Subject', invoiceData.Subject || invoiceData.Services || '');
+        
+        await reservedRow.save();
+        console.log(`[INVOICE] Updated reserved record for ${refNumber}`);
+    } else {
+        // Create new record (fallback)
+        await sheet.addRow({
+            InvoiceID: invoiceId,
+            Ref: refNumber,
+            CustomerID: invoiceData.CustomerID,
+            CustomerName: invoiceData.CustomerName,
+            Villa: invoiceData.Villa,
+            InvoiceDate: invoiceData.InvoiceDate || new Date().toISOString().split('T')[0],
+            DueDate: invoiceData.DueDate,
+            TotalAmount: invoiceData.TotalAmount,
+            Status: invoiceData.Status,
+            PaymentMethod: invoiceData.PaymentMethod,
+            Start: invoiceData.Start,
+            End: invoiceData.End,
+            Vehicle: invoiceData.Vehicle,
+            PackageID: invoiceData.PackageID,
+            Services: invoiceData.Services,
+            Notes: invoiceData.Notes,
+            CreatedBy: invoiceData.CreatedBy,
+            CreatedAt: invoiceData.CreatedAt,
+            SubTotal: invoiceData.SubTotal || '',
+            Phone: invoiceData.Phone || '',
+            Payment: invoiceData.Payment || '',
+            Subject: invoiceData.Subject || invoiceData.Services || ''
+        });
+        console.log(`[INVOICE] Created new record for ${refNumber}`);
+        }
+        
+        return refNumber;
+    });
 }
 
 async function getInvoices() {
@@ -723,6 +732,7 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
     const month = (now.getMonth() + 1).toString().padStart(2, '0');
     const monthKey = `${year}${month}`;
     
+    // Reload sheet to get latest data
     const rows = await sheet.getRows();
     
     // For regular customers, check if they already have invoice this month
@@ -738,7 +748,7 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
         }
     }
     
-    // Get highest number for this month from both active and deleted invoices
+    // Get all existing refs for this month (including reserved ones)
     const monthInvoices = rows.filter(row => 
         row.get('Ref') && 
         row.get('Ref').includes(`GLOGO-${monthKey}`)
@@ -770,15 +780,36 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
     let nextNumber = 1;
     let invoiceNumber;
     let isUnique = false;
+    let attempts = 0;
     
-    while (!isUnique) {
+    while (!isUnique && attempts < 10) {
         invoiceNumber = `GLOGO-${monthKey}${nextNumber.toString().padStart(3, '0')}`;
         
-        // Check if this number already exists in active or deleted invoices
+        // Check if this number already exists
         const exists = allRefs.includes(invoiceNumber);
         
         if (!exists) {
-            isUnique = true;
+            // ATOMIC OPERATION: Immediately reserve this number by creating a placeholder
+            try {
+                await sheet.addRow({
+                    InvoiceID: `RESERVED-${Date.now()}`,
+                    Ref: invoiceNumber,
+                    CustomerID: customerID || 'RESERVED',
+                    CustomerName: customerName || 'RESERVED',
+                    Villa: villa || 'RESERVED',
+                    Status: 'RESERVED',
+                    TotalAmount: 0,
+                    CreatedAt: new Date().toISOString(),
+                    CreatedBy: 'System-Reserve'
+                });
+                
+                console.log(`[INVOICE] Reserved number: ${invoiceNumber}`);
+                isUnique = true;
+            } catch (error) {
+                console.log(`[INVOICE] Failed to reserve ${invoiceNumber}, trying next...`);
+                nextNumber++;
+                attempts++;
+            }
         } else {
             nextNumber++;
         }
@@ -787,6 +818,10 @@ async function getOrCreateInvoiceNumber(customerID, customerName, villa) {
         if (nextNumber > 999) {
             throw new Error('Maximum invoice numbers reached for this month');
         }
+    }
+    
+    if (!isUnique) {
+        throw new Error('Failed to reserve unique invoice number after multiple attempts');
     }
     
     return invoiceNumber;
@@ -878,13 +913,11 @@ async function deleteUser(userId) {
 }
 
 async function updateTaskInSheet(taskId, updates) {
-  try {
+  return await apiRetry(async () => {
     const startTime = Date.now();
     await loadSheet();
     const sheet = doc.sheetsByTitle['ScheduledTasks'];
-    if (!sheet) {
-      return false;
-    }
+    if (!sheet) return false;
     
     const rows = await sheet.getRows();
     const taskIdParts = taskId.split('-');
@@ -903,16 +936,12 @@ async function updateTaskInSheet(taskId, updates) {
         row.set(key, updates[key]);
       });
       await row.save();
-      const duration = Date.now() - startTime;
-      console.log(`[FAST-UPDATE] Updated task ${taskId} in ${duration}ms`);
+      clearTasksCache(); // Clear cache after update
+      console.log(`[FAST-UPDATE] Updated ${taskId} in ${Date.now() - startTime}ms`);
       return true;
     }
-    
     return false;
-  } catch (error) {
-    console.error('[FAST-UPDATE] Error:', error.message);
-    return false;
-  }
+  }, 2, 2000); // 2 retries, 2s delay
 }
 
 async function addAuditLog(auditData) {
@@ -1016,6 +1045,83 @@ async function getSheetData(sheetName) {
   return mapRowsToObjects(rows, sheet.headerValues);
 }
 
+async function detectDuplicateInvoices() {
+  await loadSheet();
+  const sheet = doc.sheetsByTitle['invoices'];
+  if (!sheet) {
+    return { duplicates: [], summary: { total: 0, duplicateRefs: 0, duplicateCustomers: 0 } };
+  }
+  
+  const rows = await sheet.getRows();
+  const invoices = mapRowsToObjects(rows, sheet.headerValues);
+  
+  // Filter out reserved invoices
+  const activeInvoices = invoices.filter(inv => inv.Status !== 'RESERVED');
+  
+  const duplicates = [];
+  const refCounts = {};
+  const customerMonthCounts = {};
+  
+  // Check for duplicate Ref numbers
+  activeInvoices.forEach(invoice => {
+    const ref = invoice.Ref;
+    if (ref) {
+      if (!refCounts[ref]) {
+        refCounts[ref] = [];
+      }
+      refCounts[ref].push(invoice);
+    }
+    
+    // Check for duplicate customer invoices in same month
+    if (invoice.CustomerID && invoice.CustomerID !== 'ONE_TIME') {
+      const invoiceDate = new Date(invoice.InvoiceDate || invoice.CreatedAt);
+      const monthKey = `${invoice.CustomerID}-${invoiceDate.getFullYear()}-${invoiceDate.getMonth()}`;
+      
+      if (!customerMonthCounts[monthKey]) {
+        customerMonthCounts[monthKey] = [];
+      }
+      customerMonthCounts[monthKey].push(invoice);
+    }
+  });
+  
+  // Find duplicate Refs
+  Object.keys(refCounts).forEach(ref => {
+    if (refCounts[ref].length > 1) {
+      duplicates.push({
+        type: 'DUPLICATE_REF',
+        ref: ref,
+        count: refCounts[ref].length,
+        invoices: refCounts[ref],
+        severity: 'HIGH'
+      });
+    }
+  });
+  
+  // Find duplicate customer invoices in same month
+  Object.keys(customerMonthCounts).forEach(monthKey => {
+    if (customerMonthCounts[monthKey].length > 1) {
+      const [customerID, year, month] = monthKey.split('-');
+      duplicates.push({
+        type: 'DUPLICATE_CUSTOMER_MONTH',
+        customerID: customerID,
+        month: `${year}-${String(parseInt(month) + 1).padStart(2, '0')}`,
+        count: customerMonthCounts[monthKey].length,
+        invoices: customerMonthCounts[monthKey],
+        severity: 'MEDIUM'
+      });
+    }
+  });
+  
+  const summary = {
+    total: activeInvoices.length,
+    duplicateRefs: Object.keys(refCounts).filter(ref => refCounts[ref].length > 1).length,
+    duplicateCustomers: Object.keys(customerMonthCounts).filter(key => customerMonthCounts[key].length > 1).length,
+    totalDuplicateInvoices: duplicates.reduce((sum, dup) => sum + dup.count - 1, 0)
+  };
+  
+  return { duplicates, summary };
+}
+
 module.exports = {
   getCustomers,
   getHistoryForCar,
@@ -1051,5 +1157,6 @@ module.exports = {
   deleteUser,
   addAuditLog,
   getAuditLogs,
-  getSheetData
+  getSheetData,
+  detectDuplicateInvoices
 };

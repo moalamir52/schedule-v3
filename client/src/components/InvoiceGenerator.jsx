@@ -62,6 +62,85 @@ const Invoice = ({ invoiceData }) => {
     year: 'numeric'
   });
 
+  // Generate smart subject based on service type and package
+  const generateSmartSubject = (packageId, serves, vehicleType) => {
+    const text = `${packageId || ''} ${serves || ''} ${vehicleType || ''}`.toLowerCase();
+    
+    // Car wash service detection
+    if (text.includes('car') || text.includes('wash') || text.includes('vehicle') || 
+        text.includes('ext') || text.includes('int') || text.includes('exterior') || 
+        text.includes('interior') || text.includes('sedan') || text.includes('suv') ||
+        text.includes('mercedes') || text.includes('bmw') || text.includes('audi') ||
+        text.includes('garage') || text.includes('parking') ||
+        packageId?.includes('Ext') || packageId?.includes('INT')) {
+      
+      return `🚗 Car Wash Service`;
+    }
+    
+    // House cleaning services
+    if (text.includes('house') || text.includes('home') || text.includes('cleaning') || 
+        text.includes('منزل') || text.includes('تنظيف')) {
+      return `🏠 House Cleaning Service`;
+    }
+    
+    // Garden services
+    if (text.includes('garden') || text.includes('landscape') || 
+        text.includes('حديقة') || text.includes('زراعة')) {
+      return `🌿 Garden Service`;
+    }
+    
+    // Pool services
+    if (text.includes('pool') || text.includes('swimming') || text.includes('مسبح')) {
+      return `🏊 Pool Service`;
+    }
+    
+    // Fallback - check if it's still car related
+    if (packageId?.toLowerCase().includes('ext') || packageId?.toLowerCase().includes('int')) {
+      return `🚗 Car Wash Service`;
+    }
+    
+    // Final fallback
+    return '🔧 Service';
+  };
+
+  // Determine service type based on service name/description
+  const determineServiceType = (serviceName, serves) => {
+    const text = `${serviceName || ''} ${serves || ''}`.toLowerCase();
+    
+    if (text.includes('car') || text.includes('wash') || text.includes('vehicle') || text.includes('sedan') || text.includes('suv')) {
+      return 'vehicle';
+    }
+    if (text.includes('house') || text.includes('home') || text.includes('cleaning') || text.includes('منزل') || text.includes('تنظيف')) {
+      return 'house';
+    }
+    if (text.includes('garden') || text.includes('landscape') || text.includes('حديقة') || text.includes('زراعة')) {
+      return 'garden';
+    }
+    if (text.includes('pool') || text.includes('swimming') || text.includes('مسبح')) {
+      return 'pool';
+    }
+    
+    // Default to vehicle if contains car wash related terms
+    if (text.includes('ext') || text.includes('int') || text.includes('exterior') || text.includes('interior')) {
+      return 'vehicle';
+    }
+    
+    return 'general';
+  };
+
+  const serviceType = determineServiceType(service.packageId, service.serves);
+  
+  // Get service type display name
+  const getServiceTypeDisplay = (type) => {
+    switch (type) {
+      case 'vehicle': return '🚗 Vehicle Services';
+      case 'house': return '🏠 House Services';
+      case 'garden': return '🌿 Garden Services';
+      case 'pool': return '🏊 Pool Services';
+      default: return '🔧 General Services';
+    }
+  };
+
   return (
     <Letterhead>
       <h1 style={styles.header}>Tax Invoice</h1>
@@ -89,7 +168,7 @@ const Invoice = ({ invoiceData }) => {
         </div>
       )}
 
-      <p style={styles.subject}>SUB: {service.subject}</p>
+      <p style={styles.subject}>SUB: {generateSmartSubject(service.packageId, service.serves, service.vehicleType)}</p>
 
       <p>{service.packageId === 'One-Time Service' ? 'Thank you for using our car wash service.' : 'Thank you for subscribing to the monthly car wash service.'}</p>
 
@@ -114,10 +193,13 @@ const Invoice = ({ invoiceData }) => {
               <strong>Package ID:</strong> {service.packageId}<br />
               {service.serves && service.serves.trim() && service.serves !== service.packageId && (
                 <>
-                  <strong>Services:</strong> {service.serves}<br />
+                  <strong>Services:</strong><br />
+                  {service.serves.split('\n').map((line, index) => (
+                    <span key={index}>{line}<br /></span>
+                  ))}
                 </>
               )}
-              {service.vehicleType && service.vehicleType.trim() && (
+              {service.vehicleType && service.vehicleType.trim() && service.vehicleType !== 'N/A' && (
                 <>
                   <strong>Vehicle:</strong> {service.vehicleType}<br />
                 </>
@@ -134,7 +216,7 @@ const Invoice = ({ invoiceData }) => {
                 </>
               )}
             </td>
-            <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{service.packageId === 'One-Time Service' ? '1 Time' : service.duration}</td>
+            <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{invoiceData.duration || (service.packageId === 'One-Time Service' ? '1 Time' : service.duration)}</td>
             <td style={{...styles.td, textAlign: 'center', verticalAlign: 'middle'}}>{displaySubtotal}</td>
           </tr>
           <tr>
@@ -177,6 +259,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   const [showRefConfirmDialog, setShowRefConfirmDialog] = useState(false);
   const [nextRefNumber, setNextRefNumber] = useState('');
   const [showBankSettings, setShowBankSettings] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [bankConfig, setBankConfig] = useState({
     accountHolderName: 'GLOGO PARKING CAR WASHING LLC',
     bankName: 'ENBD',
@@ -219,7 +302,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
 
   const generateInvoiceData = () => {
     const today = new Date();
-    const isOneTime = clientData.washmanPackage === 'One-Time Service';
+    const isOneTime = clientData.washmanPackage === 'One-Time Service' || clientData.isOneTime;
     
     // Use backend calculated dates if available
     const invoiceDate = clientData.invoiceDate ? new Date(clientData.invoiceDate) : today;
@@ -249,18 +332,21 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         addressLine1: clientData.villa || ''
       },
       service: {
-        subject: clientData.subject || clientData.serves || clientData.washmanPackage || 'Car Wash',
+        subject: clientData.subject,
         packageId: clientData.washmanPackage,
         serves: clientData.serves || clientData.washmanPackage,
         vehicleType: clientData.typeOfCar || '',
+        serviceType: clientData.serviceType,
+        serviceArea: clientData.serviceArea,
         startDate: startDateStr,
         endDate: isOneTime ? null : endDateStr,
-        duration: isOneTime ? '1 Time' : '30 days'
+        duration: clientData.duration || (isOneTime ? '1 Time' : '30 days')
       },
       basePrice: parseInt(clientData.fee) || '',
       isPaid: isPaid,
       vat: vatRate || 0,
-      bankConfig: bankConfig
+      bankConfig: bankConfig,
+      duration: clientData.duration || (isOneTime ? '1 Time' : '30 days')
     };
   };
 
@@ -333,6 +419,9 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   }, [propBankConfig, propVatRate]);
 
   const handleRefConfirm = async () => {
+    if (isGenerating) return;
+    
+    setIsGenerating(true);
     try {
       const actualRef = await generateRefNumber();
       
@@ -405,6 +494,8 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     } catch (error) {
       console.error('Error creating invoice:', error);
       alert('Error creating invoice. Please try again.');
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -418,8 +509,28 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
             This number cannot be used again.
           </p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
-            <button onClick={handleRefConfirm} style={styles.generateButton}>Confirm</button>
-            <button onClick={() => setShowRefConfirmDialog(false)} style={styles.cancelButton}>Cancel</button>
+            <button 
+              onClick={handleRefConfirm} 
+              disabled={isGenerating}
+              style={{
+                ...styles.generateButton,
+                backgroundColor: isGenerating ? '#6c757d' : '#548235',
+                cursor: isGenerating ? 'not-allowed' : 'pointer'
+              }}
+            >
+              {isGenerating ? '⏳ Creating...' : 'Confirm'}
+            </button>
+            <button 
+              onClick={() => setShowRefConfirmDialog(false)} 
+              disabled={isGenerating}
+              style={{
+                ...styles.cancelButton,
+                opacity: isGenerating ? 0.5 : 1,
+                cursor: isGenerating ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       </div>
@@ -449,23 +560,36 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
           <div style={styles.buttonGroup}>
             <button 
               onClick={() => {
+                if (isGenerating) return;
                 setIsTestMode(true);
                 setConfirmedRef('TEST-INVOICE');
                 setIsPaid(clientData.payment?.toLowerCase().includes('yes/') || false);
                 setShowInvoice(true);
               }}
-              style={{...styles.generateButton, backgroundColor: '#ffc107', color: '#000'}}
+              disabled={isGenerating}
+              style={{
+                ...styles.generateButton, 
+                backgroundColor: isGenerating ? '#6c757d' : '#ffc107', 
+                color: isGenerating ? 'white' : '#000',
+                cursor: isGenerating ? 'not-allowed' : 'pointer'
+              }}
             >
               🧪 Test Invoice (No Number)
             </button>
             <button 
               onClick={() => {
+                if (isGenerating) return;
                 setNextRefNumber(previewRefNumber());
                 setShowRefConfirmDialog(true);
               }}
-              style={styles.generateButton}
+              disabled={isGenerating}
+              style={{
+                ...styles.generateButton,
+                backgroundColor: isGenerating ? '#6c757d' : '#548235',
+                cursor: isGenerating ? 'not-allowed' : 'pointer'
+              }}
             >
-              📄 Generate & Print Invoice
+              {isGenerating ? '⏳ Generating...' : '📄 Generate & Print Invoice'}
             </button>
             <button onClick={onClose} style={styles.cancelButton}>
               Cancel

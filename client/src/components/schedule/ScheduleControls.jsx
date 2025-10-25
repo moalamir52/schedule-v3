@@ -155,7 +155,7 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onT
           onMouseEnter={(e) => e.target.style.backgroundColor = currentWeekOffset === 0 ? '#218838' : '#5a6268'}
           onMouseLeave={(e) => e.target.style.backgroundColor = currentWeekOffset === 0 ? '#28a745' : '#6c757d'}
         >
-          This Week
+          {currentWeekOffset === 0 ? 'This Week' : 'Current Week'}
         </button>
         <button 
           style={navButtonStyle}

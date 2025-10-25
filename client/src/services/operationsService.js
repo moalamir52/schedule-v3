@@ -85,10 +85,10 @@ class OperationsService {
       const totalCompanyRevenue = activeClients.reduce((sum, client) => sum + (parseFloat(client.Fee) || 0), 0);
       const totalTasks = assignments.length;
       
-      console.log('🔍 Worker Performance Debug:');
-      console.log('Total Company Revenue:', totalCompanyRevenue);
-      console.log('Total Tasks:', totalTasks);
-      console.log('Active Clients:', activeClients.length);
+
+
+
+
       
       const workers = workersData.map((worker, index) => {
         const workerName = worker.Name || worker.WorkerName || 'Unknown Worker';
@@ -109,7 +109,7 @@ class OperationsService {
         const revenueShare = totalTasks > 0 ? (workerTasks / totalTasks) : 0;
         const workerRevenue = Math.floor(totalCompanyRevenue * revenueShare);
         
-        console.log(`Worker ${workerName}: ${workerTasks} tasks, ${(revenueShare * 100).toFixed(1)}% share, ${workerRevenue} AED`);
+
         
         // Calculate efficiency based on workload distribution
         const avgTasksPerWorker = totalTasks / workersData.length;
@@ -456,7 +456,7 @@ class OperationsService {
   
   async addWorker(workerName, job, status) {
     try {
-      console.log('Sending request to add worker:', { name: workerName, job, status });
+
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -464,7 +464,7 @@ class OperationsService {
       });
       
       const result = await response.json();
-      console.log('Add worker response:', result);
+
       
       if (!response.ok) {
         throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);

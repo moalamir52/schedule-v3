@@ -8,13 +8,15 @@ const {
   exportInvoices, 
   printInvoice,
   getInvoiceNumber,
-  getInvoiceStats
+  getInvoiceStats,
+  checkDuplicateInvoices
 } = require('../controllers/invoiceController');
 
 router.post('/', createInvoice);
 router.post('/create', createInvoice);
 router.post('/get-number', getInvoiceNumber);
 router.get('/stats', getInvoiceStats);
+router.get('/check-duplicates', checkDuplicateInvoices);
 router.get('/all', getAllInvoices);
 router.get('/export', exportInvoices);
 router.get('/print/:id', printInvoice);

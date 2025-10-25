@@ -1,0 +1,345 @@
+/* Modern Modal Styles for WeekPatternModal */
+.modal-overlay-v2 {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+}
+
+.modal-container-v2 {
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  width: 90%;
+  max-width: 480px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header-v2 {
+  display: flex;
+  align-items: center;
+  padding: 16px 24px;
+  background-color: #f7f9fc;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.header-icon-v2 {
+  color: #28a745; /* Green Branding */
+  font-size: 22px;
+  margin-right: 12px;
+}
+
+.modal-header-v2 h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #343a40;
+  flex-grow: 1;
+}
+
+.close-btn-v2 {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #adb5bd;
+  font-size: 24px;
+  padding: 0;
+  line-height: 1;
+}
+.close-btn-v2:hover {
+  color: #343a40;
+}
+
+.modal-content-v2 {
+  padding: 24px;
+  line-height: 1.6;
+}
+
+.change-summary-v2 {
+  background-color: #f1f3f5;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.car-info-v2 {
+  font-size: 14px;
+  color: #495057;
+  margin-bottom: 12px;
+}
+
+.change-details-v2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  background-color: #fff;
+  padding: 12px;
+  border-radius: 8px;
+}
+
+.day-v2 {
+  font-weight: 600;
+  color: #343a40;
+}
+
+.wash-badge-v2 {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  text-transform: uppercase;
+}
+
+.wash-badge-v2.ext {
+  background-color: #3498db; /* Blue for EXT - kept for clarity */
+}
+
+.wash-badge-v2.int {
+  background-color: #2ecc71; /* Green for INT */
+}
+
+.wash-badge-v2.small {
+  padding: 3px 8px;
+  font-size: 10px;
+}
+
+.arrow-icon-v2 {
+  color: #868e96;
+  font-size: 20px;
+}
+
+.instruction-v2 {
+  font-size: 16px;
+  color: #495057;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.appointments-list-v2 {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px; /* Add space before history section */
+}
+
+.appointment-row-v2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+  padding: 12px 16px;
+  border-radius: 8px;
+}
+
+.appointment-day-v2 {
+  font-weight: 500;
+  color: #343a40;
+}
+
+.wash-type-toggle-v2 {
+  display: flex;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.toggle-btn-v2 {
+  background-color: #fff;
+  border: none;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.toggle-btn-v2:first-child {
+  border-right: 1px solid #dee2e6;
+}
+
+.toggle-btn-v2.active {
+  background-color: #28a745; /* Green Branding */
+  color: #fff;
+}
+
+.no-remaining-v2 {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    color: #868e96;
+    font-size: 14px;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+
+/* History Section Styles */
+.history-section-v2 {
+  border-top: 1px solid #e9ecef;
+  margin-top: 24px;
+  padding-top: 24px;
+}
+
+.history-toggle-btn-v2 {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.history-toggle-btn-v2:hover {
+  color: #343a40;
+}
+
+.history-toggle-btn-v2 span {
+  flex-grow: 1;
+  text-align: left;
+  margin-left: 8px;
+}
+
+.chevron-icon-v2 {
+  transition: transform 0.3s ease;
+}
+
+.chevron-icon-v2.open {
+  transform: rotate(180deg);
+}
+
+.history-content-v2 {
+  margin-top: 16px;
+  max-height: 265px; /* Set a max height for the list */
+  overflow-y: auto; /* Add a scrollbar when content exceeds max height */
+  padding-right: 8px; /* Add some space for the scrollbar */
+}
+
+.history-loader-v2, .history-error-v2, .history-empty-v2 {
+  text-align: center;
+  padding: 20px;
+  color: #868e96;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.history-list-v2 {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item-v2 {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr auto; /* Date | Car | Type */
+  align-items: center;
+  padding: 12px;
+  border-radius: 8px;
+  gap: 10px;
+}
+
+/* Zebra Striping */
+.history-item-v2:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.history-date-v2 {
+  font-size: 14px;
+  color: #495057;
+  font-weight: 500;
+}
+
+.history-car-v2 {
+  font-size: 14px;
+  color: #868e96;
+  font-weight: 500;
+}
+
+.modal-actions-v2 {
+  display: flex;
+  justify-content: stretch;
+  padding: 16px 24px;
+  background-color: #f7f9fc;
+  border-top: 1px solid #e9ecef;
+  gap: 12px;
+}
+
+.action-btn-v2 {
+  flex-grow: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+
+.skip-btn-v2 {
+  background-color: #fff;
+  color: #495057;
+  border: 1px solid #ced4da;
+}
+
+.skip-btn-v2:hover {
+  background-color: #f8f9fa;
+}
+
+.apply-btn-v2 {
+  background-color: #28a745;
+  color: #fff;
+}
+
+.apply-btn-v2:hover {
+  background-color: #218838;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
+}
+
+.apply-btn-v2:disabled {
+  background-color: #adb5bd;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

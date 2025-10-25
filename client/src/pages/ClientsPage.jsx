@@ -177,8 +177,7 @@ function ClientsPage() {
     });
     
     setFilteredClients(filtered);
-    console.log('Search applied:', searchTerm);
-    console.log('Search results:', filtered.length);
+
   };
 
   const handleFilter = (filters) => {
@@ -197,8 +196,7 @@ function ClientsPage() {
     }
     
     setFilteredClients(filtered);
-    console.log('Filter applied:', filters);
-    console.log('Filtered results:', filtered.length);
+
   };
 
   const handleExport = () => {
@@ -212,7 +210,7 @@ function ClientsPage() {
       const csv = e.target.result;
       const clients = parseCSV(csv);
       // Process imported clients
-      console.log('Imported clients:', clients);
+
     };
     reader.readAsText(file);
   };

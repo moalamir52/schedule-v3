@@ -8,26 +8,7 @@ function Sidebar({ user, onLogout }) {
     const saved = localStorage.getItem('sidebarOpen');
     return saved ? JSON.parse(saved) : false;
   });
-  const [showDebug, setShowDebug] = useState(false);
-  const [debugData, setDebugData] = useState('Loading debug info...');
 
-  useEffect(() => {
-    if (showDebug) {
-      fetchDebugData();
-    }
-  }, [showDebug]);
-
-  const fetchDebugData = async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
-      if (!response.ok) throw new Error('Failed to fetch clients');
-      const clients = await response.json();
-      const packages = [...new Set(clients.map(c => c.Washman_Package).filter(p => p))];
-      setDebugData(JSON.stringify(packages, null, 2));
-    } catch (error) {
-      setDebugData('Error loading debug info: ' + error.message);
-    }
-  };
 
   const sidebarStyle = {
     position: 'fixed',
@@ -262,39 +243,7 @@ function Sidebar({ user, onLogout }) {
             System Cleanup
           </Link>
           
-          <div
-            style={{
-              ...linkStyle,
-              cursor: 'pointer',
-              borderTop: '2px solid #28a745',
-              marginTop: '10px'
-            }}
-            onClick={() => setShowDebug(!showDebug)}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#28a745'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
-          >
-            <FiCode style={iconStyle} />
-            Debug Info {showDebug ? '▼' : '▶'}
-          </div>
-          
-          {showDebug && (
-            <div style={{
-              backgroundColor: '#0d4d1a',
-              padding: '15px',
-              margin: '0 10px 10px 10px',
-              borderRadius: '8px',
-              fontSize: '11px',
-              fontFamily: 'monospace',
-              color: '#a8e6a3',
-              maxHeight: '200px',
-              overflowY: 'auto'
-            }}>
-              <div style={{ marginBottom: '10px', color: 'white', fontWeight: 'bold' }}>Available Packages:</div>
-              <div>
-                {debugData}
-              </div>
-            </div>
-          )}
+
           
           {/* Logout Button */}
           <div

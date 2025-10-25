@@ -271,9 +271,9 @@ function DashboardPage() {
             key={item.id}
             to={item.link}
             onClick={() => {
-              console.log(`Navigating to: ${item.title} - ${item.link}`);
+
               if (item.id === 'daily-tasks') {
-                console.log('Daily Tasks clicked - should navigate to /tasks');
+
               }
             }}
             style={{

@@ -1,4 +1,7 @@
 require('dotenv').config();
+// Install centralized logger early to capture/silence existing console.* calls
+const logger = require('./services/logger');
+logger.install();
 const express = require('express');
 const cors = require('cors');
 

@@ -43,7 +43,7 @@ const SchedulePage = () => {
         setWorkers(activeWorkers);
 
         // Load current schedule (non-blocking)
-        console.log('[LOAD-SCHEDULE] Calling loadCurrentSchedule from useEffect');
+
         loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
@@ -170,11 +170,11 @@ const SchedulePage = () => {
 
   const loadCurrentSchedule = async () => {
     try {
-      console.log('[F5-DEBUG] Starting loadCurrentSchedule...');
-      console.log('[F5-DEBUG] API URL:', import.meta.env.VITE_API_URL);
+
+
       
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 seconds
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds for online server
       
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
         signal: controller.signal
@@ -182,30 +182,30 @@ const SchedulePage = () => {
       
       clearTimeout(timeoutId);
       
-      console.log('[F5-DEBUG] Response status:', response.status);
-      console.log('[F5-DEBUG] Response ok:', response.ok);
+
+
       
       if (response.ok) {
         const data = await response.json();
-        console.log('[F5-DEBUG] Response data:', data);
+
         
         if (data.success && data.assignments) {
-          console.log('[F5-DEBUG] Setting schedule with', data.assignments.length, 'assignments');
+
           setAssignedSchedule(data.assignments);
         } else {
-          console.log('[F5-DEBUG] No assignments found, setting empty array');
+
           setAssignedSchedule([]);
           setError('No schedule data found. Click Auto button to load schedule.');
         }
       } else {
-        console.log('[F5-DEBUG] Response not ok, status:', response.status);
+
         const errorText = await response.text();
-        console.log('[F5-DEBUG] Error response:', errorText);
+
         setAssignedSchedule([]);
         setError(`Server error: ${response.status}. Click Auto button to load schedule.`);
       }
     } catch (err) {
-      console.log('[F5-DEBUG] Catch error:', err);
+
       if (err.name === 'AbortError') {
         console.warn('[F5-DEBUG] Schedule load timed out');
         setError('Connection timeout. Click Auto button to load schedule.');
@@ -249,15 +249,22 @@ const SchedulePage = () => {
     }
     
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds for delete
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual/${customerId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Delete endpoint not found. Please restart the server.');
         }
-        throw new Error(`Server error: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
       
       const data = await response.json();
@@ -269,7 +276,11 @@ const SchedulePage = () => {
       // Refresh the schedule after deleting
       await loadCurrentSchedule();
     } catch (err) {
-      alert(`Error deleting appointment: ${err.message}`);
+      if (err.name === 'AbortError') {
+        alert('Delete operation timed out. Please check your connection and try again.');
+      } else {
+        alert(`Error deleting appointment: ${err.message}`);
+      }
     }
   };
 
@@ -686,6 +697,9 @@ const SchedulePage = () => {
         currentView={currentView}
         currentWeekOffset={currentWeekOffset}
         onWeekChange={async (offset) => {
+          // Update the week offset first
+          setCurrentWeekOffset(offset);
+          
           // Calculate week dates (Monday to Saturday)
           const today = new Date();
           const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
@@ -719,7 +733,6 @@ const SchedulePage = () => {
           );
           
           if (confirmed) {
-            setCurrentWeekOffset(offset);
             setIsLoading(true);
             
             try {

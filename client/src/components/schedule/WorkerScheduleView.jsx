@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../Modal';
+import WeekPatternModal from './WeekPatternModal';
 
 const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate, onCustomerFilter, customerFilter, currentWeekOffset = 0 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
@@ -10,13 +11,41 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [pendingChanges, setPendingChanges] = useState([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [weekPatternModal, setWeekPatternModal] = useState({ isOpen: false, customerInfo: null, changedAppointment: null, weekAppointments: [] });
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
   ];
-  
+
+  // --- REFACTORED DATE CALCULATION ---
+  const getWeekStartDate = (offset = 0) => {
+    const today = new Date();
+    const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    
+    // Calculate days to subtract to get to the previous Monday.
+    // If today is Sunday (0), we subtract 6 days. If Monday (1), 0 days. If Tuesday (2), 1 day, etc.
+    const daysToMonday = (currentDay === 0) ? 6 : currentDay - 1;
+    
+    const mondayOfThisWeek = new Date(today);
+    mondayOfThisWeek.setDate(today.getDate() - daysToMonday);
+    
+    // Apply the week offset
+    mondayOfThisWeek.setDate(mondayOfThisWeek.getDate() + (offset * 7));
+    mondayOfThisWeek.setHours(0, 0, 0, 0);
+    
+    return mondayOfThisWeek;
+  };
+
+  const [weekStartDate, setWeekStartDate] = useState(() => getWeekStartDate(currentWeekOffset));
+
+  // Update week start date when currentWeekOffset changes
+  useEffect(() => {
+    setWeekStartDate(getWeekStartDate(currentWeekOffset));
+  }, [currentWeekOffset]);
+  // --- END OF REFACTORED DATE CALCULATION ---
+
   // Save all pending changes to server
   const saveToServer = async () => {
     if (pendingChanges.length === 0) {
@@ -145,6 +174,46 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   const handleWashTypeChange = async (appointment, newWashType) => {
     const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
     
+    // Check if should show week pattern modal
+    const customerAppointments = assignedSchedule.filter(apt => 
+      apt.customerId === appointment.customerId
+    );
+    
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const customerDays = customerAppointments
+      .map(apt => apt.day)
+      .filter(day => days.includes(day))
+      .sort((a, b) => days.indexOf(a) - days.indexOf(b));
+    
+    const shouldShowModal = customerAppointments.length > 1 && (
+      (customerDays.includes('Monday') && appointment.day === 'Monday') ||
+      (!customerDays.includes('Monday') && appointment.day === customerDays[0])
+    );
+    
+    if (shouldShowModal) {
+      // Show week pattern modal
+      setWeekPatternModal({
+        isOpen: true,
+        customerInfo: {
+          customerId: appointment.customerId,
+          customerName: appointment.customerName,
+          villa: appointment.villa,
+          packageType: appointment.packageType
+        },
+        changedAppointment: {
+          customerId: appointment.customerId,
+          day: appointment.day,
+          time: appointment.time,
+          carPlate: appointment.carPlate,
+          oldWashType: appointment.washType,
+          newWashType: newWashType
+        },
+        weekAppointments: customerAppointments
+      });
+      setShowOverrideMenu(null);
+      return;
+    }
+    
     // Update UI immediately
     if (onScheduleUpdate) {
       const updatedSchedule = assignedSchedule.map(task => 
@@ -175,6 +244,65 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     setShowOverrideMenu(null);
   };
 
+  const handleWeekPatternApply = (changes) => {
+    // Apply the changed appointment first
+    const changedTaskId = `${weekPatternModal.changedAppointment.customerId || assignedSchedule.find(apt => 
+      apt.day === weekPatternModal.changedAppointment.day && 
+      apt.carPlate === weekPatternModal.changedAppointment.carPlate
+    )?.customerId}-${weekPatternModal.changedAppointment.day}-${assignedSchedule.find(apt => 
+      apt.day === weekPatternModal.changedAppointment.day && 
+      apt.carPlate === weekPatternModal.changedAppointment.carPlate
+    )?.time}-${weekPatternModal.changedAppointment.carPlate}`;
+    
+    // Update UI for all changes
+    if (onScheduleUpdate) {
+      let updatedSchedule = [...assignedSchedule];
+      
+      // Apply the original change
+      updatedSchedule = updatedSchedule.map(task => 
+        `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === changedTaskId
+          ? { ...task, washType: weekPatternModal.changedAppointment.newWashType, isLocked: 'TRUE' }
+          : task
+      );
+      
+      // Apply additional changes from modal
+      changes.forEach(change => {
+        updatedSchedule = updatedSchedule.map(task => 
+          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === change.taskId
+            ? { ...task, washType: change.newWashType, isLocked: 'TRUE' }
+            : task
+        );
+      });
+      
+      onScheduleUpdate(updatedSchedule);
+    }
+    
+    // Add all changes to pending changes
+    const allChanges = [
+      {
+        type: 'washType',
+        taskId: changedTaskId,
+        newWashType: weekPatternModal.changedAppointment.newWashType,
+        timestamp: Date.now()
+      },
+      ...changes.map(change => ({
+        type: 'washType',
+        taskId: change.taskId,
+        newWashType: change.newWashType,
+        timestamp: Date.now()
+      }))
+    ];
+    
+    setPendingChanges(prev => {
+      let filtered = [...prev];
+      // Remove existing changes for these tasks
+      allChanges.forEach(change => {
+        filtered = filtered.filter(existing => existing.taskId !== change.taskId);
+      });
+      return [...filtered, ...allChanges];
+    });
+  };
+
   const handleCustomerNameClick = async (customerId) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${customerId}`);
@@ -186,7 +314,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           appointment.customerId === customerId
         );
         
-        setCustomerInfo({ 
+        setCustomerInfo({
           isOpen: true, 
           data: data,
           appointments: customerAppointments
@@ -386,93 +514,66 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     <>
     {/* Control Buttons */}
     <div style={{
-      position: 'fixed',
+      position: 'absolute',
       top: '20px',
       right: '20px',
-      zIndex: 1000,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '10px'
+      zIndex: 9999
     }}>
       {/* Save to Server Button */}
-      {pendingChanges.length > 0 && (
-        <div style={{
-          background: '#28a745',
-          color: 'white',
-          padding: '15px 25px',
-          borderRadius: '10px',
-          boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
-          cursor: 'pointer',
-          fontSize: '16px',
-          fontWeight: 'bold',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
-        }}
-        onClick={saveToServer}
-        >
-          {isSaving ? (
-            <>
-              <div style={{
-                width: '20px',
-                height: '20px',
-                border: '2px solid white',
-                borderTop: '2px solid transparent',
-                borderRadius: '50%',
-                animation: 'spin 1s linear infinite'
-              }}></div>
-              Saving...
-            </>
-          ) : (
-            <>
-              💾 Save to Server ({pendingChanges.length})
-            </>
-          )}
-        </div>
-      )}
+      <div style={{
+        background: pendingChanges.length > 0 ? '#28a745' : '#6c757d',
+        color: 'white',
+        padding: '15px 25px',
+        borderRadius: '10px',
+        boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
+        cursor: pendingChanges.length > 0 ? 'pointer' : 'default',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
+        opacity: pendingChanges.length > 0 ? 1 : 0.6
+      }}
+      onClick={pendingChanges.length > 0 ? saveToServer : undefined}
+      >
+        {isSaving ? (
+          <>
+            <div style={{
+              width: '20px',
+              height: '20px',
+              border: '2px solid white',
+              borderTop: '2px solid transparent',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }}></div>
+            Saving...
+          </>
+        ) : (
+          <>
+            💾 Save to Server {pendingChanges.length > 0 ? `(${pendingChanges.length})` : ''}
+          </>
+        )}
+      </div>
       
 
       
 
     </div>
     
-    <table className="timetable">
+    <table className="timetable" key={`week-${currentWeekOffset}-${weekStartDate.getTime()}`}>
       <thead>
         <tr>
           <th rowSpan="2">Time</th>
-          {days.map(day => {
-            // Calculate actual date for this day based on weekOffset (Saturday = start of work week)
-            const today = new Date();
-            const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-            
-            // Find the Monday of current work week (Monday is start of work week)
-            let mondayOfWeek = new Date(today);
-            if (currentDay === 0) { // Sunday - go to next Monday
-              mondayOfWeek.setDate(today.getDate() + 1);
-            } else if (currentDay === 1) { // Monday - start of work week
-              // Already Monday
-            } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
-              mondayOfWeek.setDate(today.getDate() - currentDay + 1);
-            }
-            
-            // Add week offset
-            mondayOfWeek.setDate(mondayOfWeek.getDate() + (currentWeekOffset * 7));
-            
-            const dayOffsets = {
-              'Monday': 0,
-              'Tuesday': 1,
-              'Wednesday': 2, 
-              'Thursday': 3,
-              'Friday': 4,
-              'Saturday': 5
-            };
-            const targetDate = new Date(mondayOfWeek);
-            targetDate.setDate(mondayOfWeek.getDate() + dayOffsets[day]);
+          {days.map((day, dayIndex) => {
+            const targetDate = new Date(weekStartDate);
+            targetDate.setDate(weekStartDate.getDate() + dayIndex);
             
             const displayDate = targetDate.toLocaleDateString('en-GB', {
               day: '2-digit',
               month: '2-digit'
             });
+            
+
             
             return (
               <th key={day} colSpan={workers.length}>
@@ -488,7 +589,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           {days.map((day, dayIndex) => 
             workers.map((worker, workerIndex) => (
               <th 
-                key={`${day}-${worker.WorkerID || worker.Name}`} 
+                key={`${day}-${worker.WorkerID || worker.Name}`}
                 className={workerIndex === workers.length - 1 ? 'day-separator' : ''}
                 style={{ fontSize: '11px' }}
               >
@@ -505,7 +606,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
             {days.map((day, dayIndex) => 
               workers.map((worker, workerIndex) => (
                 <td 
-                  key={`${day}-${worker.WorkerID || worker.Name}-${time}`} 
+                  key={`${day}-${worker.WorkerID || worker.Name}-${time}`}
                   className={`${workerIndex === workers.length - 1 ? 'day-separator' : ''} drop-zone`}
                   style={{ padding: '4px', width: '120px' }}
                   onDragOver={(e) => handleDragOver(e)}
@@ -727,7 +828,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     
     {/* Customer Info Modal */}
     {customerInfo.isOpen && (
-      <div className="customer-info-modal" onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] })}>
+      <div className="customer-info-modal" onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] }) }>
         <div className="customer-info-content" onClick={(e) => e.stopPropagation()}>
           <div className="customer-info-header">
             <h3>{customerInfo.data?.CustomerName || 'Customer Information'}</h3>
@@ -801,6 +902,15 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         </div>
       </div>
     )}
+    
+    <WeekPatternModal
+      isOpen={weekPatternModal.isOpen}
+      onClose={() => setWeekPatternModal({ isOpen: false, customerInfo: null, changedAppointment: null, weekAppointments: [] })}
+      customerInfo={weekPatternModal.customerInfo}
+      changedAppointment={weekPatternModal.changedAppointment}
+      weekAppointments={weekPatternModal.weekAppointments}
+      onApplyChanges={handleWeekPatternApply}
+    />
     </>
   );
 };
