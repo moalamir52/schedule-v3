@@ -25,17 +25,52 @@ const WeekPatternModal = ({
 
     setIsLoadingHistory(true);
     setErrorHistory(null);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/wash-history/${customerId}?limit=${limit}`);
-      if (response.ok) {
-        const data = await response.json();
-        setWashHistory(data.history || []);
-      } else {
-        const errorData = await response.json();
-        setErrorHistory(errorData.error || `Failed to fetch history`);
+      let response;
+      try {
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/wash-history/${customerId}?limit=${limit}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal
+        });
+        if (!response.ok && response.status === 404) {
+          throw new Error('Route not found');
+        }
+      } catch (err) {
+        // Try fallback route
+        response = await fetch(`${import.meta.env.VITE_API_URL}/api/wash-history/${customerId}?limit=${limit}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal
+        });
       }
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      setWashHistory(data.history || []);
     } catch (error) {
-      setErrorHistory('Network error');
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        setErrorHistory('Request timeout - please try again');
+      } else if (error.message.includes('Failed to fetch')) {
+        setErrorHistory('Connection failed - check network');
+      } else {
+        setErrorHistory(error.message || 'Network error');
+      }
+      console.error('Wash history fetch error:', error);
     } finally {
       setIsLoadingHistory(false);
     }

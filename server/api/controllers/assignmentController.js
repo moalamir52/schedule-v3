@@ -680,20 +680,6 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = ['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
   
-  // Initialize worker assignment counters
-  const workerAssignmentCounts = {};
-
-  // Structured start log
-  try {
-    logger.assignment({
-      type: 'assign-start',
-      unlockedAppointments: unlockedAppointments.length,
-      activeWorkers: activeWorkers.length,
-      lockedTasks: lockedTasks.length,
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) { /* swallow logger errors */ }
-
   // Group tasks by time slot
   const timeSlotGroups = {};
   unlockedAppointments.forEach(appointment => {
@@ -714,22 +700,16 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
   });
   
   const assignedTasks = [];
-  const totalTasks = unlockedAppointments.length;
+  let workerIndex = 0; // Simple round-robin counter
   
   sortedTimeSlots.forEach(timeSlotKey => {
     const tasks = timeSlotGroups[timeSlotKey];
     const [day, time] = timeSlotKey.split('-');
     
-    // Get workers busy with locked tasks at this time slot (normalize to string and fallback to name)
-    const normalizeId = (v) => (v === undefined || v === null) ? '' : String(v).trim();
-
-    const busyWorkersFromLocked = lockedTasks
+    // Get workers busy with locked tasks at this time slot
+    const busyWorkers = lockedTasks
       .filter(task => task.Day === day && task.Time === time)
-      .map(task => {
-        const id = normalizeId(task.WorkerID);
-        if (id) return id;
-        return normalizeId(task.WorkerName || task.workerName || '');
-      })
+      .map(task => task.WorkerName || task.workerName)
       .filter(Boolean);
     
     const workerCustomerMap = {}; // customerID -> worker mapping for this time slot
@@ -745,82 +725,22 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
         task.isLocked = 'FALSE';
         assigned = true;
       } else {
-        // Find next available worker using round-robin distribution
-        const busyWorkers = [
-          ...busyWorkersFromLocked,
-          ...Object.values(workerCustomerMap).map(w => normalizeId(w.WorkerID || w.workerId || w.ID || w.id || w.Name || w.name))
-        ].filter(Boolean);
-
-        // Get all available workers for this time slot (compare normalized WorkerID and fallback to Name)
-        const availableWorkers = activeWorkers.filter(w => {
-          const id = normalizeId(w.WorkerID || w.workerId || w.ID || w.id);
-          const name = normalizeId(w.Name || w.name || '');
-          return !busyWorkers.includes(id) && !busyWorkers.includes(name);
-        });
+        // Get available workers for this time slot
+        const availableWorkers = activeWorkers.filter(worker => 
+          !busyWorkers.includes(worker.Name) && 
+          !Object.values(workerCustomerMap).some(w => w.Name === worker.Name)
+        );
         
         if (availableWorkers.length > 0) {
-          // Use fair selection: pick worker with least assignments for this time slot
-          const slotKey = `${day}-${time}`;
-          if (!workerAssignmentCounts[slotKey]) {
-            workerAssignmentCounts[slotKey] = new Map();
-          }
-
-          // Reduce ordering bias: rotate availableWorkers deterministically based on slotKey
-          if (availableWorkers.length > 1) {
-            const seed = Array.from(slotKey).reduce((s, ch) => s + ch.charCodeAt(0), 0) % availableWorkers.length;
-            for (let r = 0; r < seed; r++) availableWorkers.push(availableWorkers.shift());
-          }
-
-          // Sort available workers by their current assignment count (ascending) using normalized IDs
-          availableWorkers.sort((a, b) => {
-            const aId = normalizeId(a.WorkerID || a.workerId || a.ID || a.id);
-            const bId = normalizeId(b.WorkerID || b.workerId || b.ID || b.id);
-            const aCount = workerAssignmentCounts[slotKey].get(aId) || 0;
-            const bCount = workerAssignmentCounts[slotKey].get(bId) || 0;
-            return aCount - bCount;
-          });
-
-          const worker = availableWorkers[0];
-
-          // Structured decision log: candidates and chosen worker
-          try {
-            const candidates = availableWorkers.map(w => {
-              const id = normalizeId(w.WorkerID || w.workerId || w.ID || w.id);
-              return { workerId: id || normalizeId(w.Name), name: w.Name || w.name || '', assignedCount: workerAssignmentCounts[slotKey].get(id) || 0 };
-            });
-            logger.assignment({
-              type: 'assign-decision',
-              slot: { day, time },
-              customerId: task.customerId,
-              candidates,
-              chosen: { workerId: worker.WorkerID, name: worker.Name },
-              reason: 'least-loaded',
-              timestamp: new Date().toISOString()
-            });
-          } catch (e) { /* swallow logger errors */ }
-          // Update assignment count
-          const chosenId = normalizeId(worker.WorkerID || worker.workerId || worker.ID || worker.id);
-          workerAssignmentCounts[slotKey].set(
-            chosenId,
-            (workerAssignmentCounts[slotKey].get(chosenId) || 0) + 1
-          );
+          // Simple round-robin assignment
+          const worker = availableWorkers[workerIndex % availableWorkers.length];
+          workerIndex++;
 
           task.workerName = worker.Name;
           task.workerId = worker.WorkerID;
           task.isLocked = 'FALSE';
           workerCustomerMap[task.customerId] = worker;
           assigned = true;
-        } else {
-          // No available workers for this time slot (all busy/locked) - leave unassigned
-          try {
-            logger.assignment({
-              type: 'assign-skip',
-              slot: { day, time },
-              tasksInSlot: tasks.length,
-              busyWorkers: busyWorkers,
-              timestamp: new Date().toISOString()
-            });
-          } catch (e) { /* swallow logger errors */ }
         }
       }
       
@@ -832,15 +752,6 @@ function assignWorkersToTasks(unlockedAppointments, activeWorkers, lockedTasks) 
     });
   });
   
-  const unassigned = totalTasks - assignedTasks.length;
-  try {
-    logger.assignment({
-      type: 'assign-end',
-      assigned: assignedTasks.length,
-      unassigned,
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) { /* swallow logger errors */ }
   return assignedTasks;
 }
 

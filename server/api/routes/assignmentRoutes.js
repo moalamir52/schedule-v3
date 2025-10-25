@@ -17,6 +17,7 @@ router.put('/batch-update-tasks', batchUpdateTasks); // Alternative endpoint nam
 router.post('/sync-new-customers', syncNewCustomers);
 router.post('/force-generate/:weekOffset', autoAssignSchedule);
 router.get('/wash-history/:customerId', getWashHistory);
+router.get('/history/:customerId', getWashHistory); // Alternative route
 
 // Test endpoint
 router.get('/test', (req, res) => {

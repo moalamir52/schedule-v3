@@ -61,6 +61,30 @@ app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 
+// Direct wash history route as fallback
+app.get('/api/wash-history/:customerId', async (req, res) => {
+  try {
+    const { getWashHistory } = require('./api/controllers/assignmentController');
+    await getWashHistory(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Version check endpoint
+app.get('/api/version', (req, res) => {
+  res.json({
+    success: true,
+    version: '2.1.0',
+    features: {
+      simplifiedWorkerAssignment: true,
+      washHistoryFallback: true,
+      improvedErrorHandling: true
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
 app.listen(PORT, () => {
   // Start cron service
   const cronService = require('./services/cronService');
