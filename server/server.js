@@ -61,6 +61,21 @@ app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'Schedule v3 Server is running',
+    version: '2.1.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      health: '/api/version',
+      schedule: '/api/schedule/assign',
+      washHistory: '/api/schedule/assign/wash-history/:customerId'
+    }
+  });
+});
+
 // Direct wash history route as fallback
 app.get('/api/wash-history/:customerId', async (req, res) => {
   try {
@@ -85,8 +100,27 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// Error handling
+process.on('uncaughtException', (error) => {
+  console.error('🔴 Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🔴 Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
 app.listen(PORT, () => {
+  console.log(`✅ Schedule v3 Server running on port ${PORT}`);
+  console.log(`🌐 Server URL: http://localhost:${PORT}`);
+  console.log(`📊 Version: 2.1.0`);
+  console.log(`⏰ Started at: ${new Date().toISOString()}`);
+  
   // Start cron service
-  const cronService = require('./services/cronService');
-  cronService.start();
+  try {
+    const cronService = require('./services/cronService');
+    cronService.start();
+    console.log('✅ Cron service started');
+  } catch (error) {
+    console.log('⚠️ Cron service failed to start:', error.message);
+  }
 });
