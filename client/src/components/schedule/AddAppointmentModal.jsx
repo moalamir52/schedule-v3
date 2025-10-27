@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 
 const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
   const [formData, setFormData] = useState({
+    customerName: '',
     villa: '',
     day: 'Saturday',
     time: '9:00 AM',
     workerName: '',
-    washType: 'EXT',
-    carPlate: ''
+    cars: [{ plate: '', washType: 'EXT' }]
   });
 
   const [loading, setLoading] = useState(false);
@@ -53,8 +53,8 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.villa || !formData.workerName) {
-      setError('Villa and Worker are required');
+    if (!formData.customerName || !formData.villa || !formData.workerName || formData.cars.some(car => !car.plate.trim())) {
+      setError('Customer Name, Villa, Worker and at least one car plate are required');
       return;
     }
 
@@ -62,14 +62,25 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
     setError('');
 
     try {
-      await onAdd(formData);
+      // Send each car as separate appointment
+      for (const car of formData.cars) {
+        await onAdd({
+          customerName: formData.customerName,
+          villa: formData.villa,
+          day: formData.day,
+          time: formData.time,
+          workerName: formData.workerName,
+          washType: car.washType,
+          carPlate: car.plate
+        });
+      }
       setFormData({
+        customerName: '',
         villa: '',
         day: 'Saturday',
         time: '9:00 AM',
         workerName: workers[0]?.Name || '',
-        washType: 'EXT',
-        carPlate: ''
+        cars: [{ plate: '', washType: 'EXT' }]
       });
       onClose();
     } catch (err) {
@@ -95,6 +106,17 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               ⚠️ {error}
             </div>
           )}
+
+          <div className="form-group">
+            <label>👤 Customer Name:</label>
+            <input
+              type="text"
+              value={formData.customerName}
+              onChange={(e) => setFormData(prev => ({ ...prev, customerName: e.target.value }))}
+              placeholder="Enter customer name"
+              required
+            />
+          </div>
 
           <div className="form-group">
             <label>🏠 Villa:</label>
@@ -137,48 +159,119 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
             </div>
           </div>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>👷 Worker: {availableWorkers.length > 0 && `(${availableWorkers.length} available)`}</label>
-              <select
-                value={formData.workerName}
-                onChange={(e) => setFormData(prev => ({ ...prev, workerName: e.target.value }))}
-                required
-              >
-                <option value="">Select Worker</option>
-                {availableWorkers.map(worker => (
-                  <option key={worker.WorkerID} value={worker.Name}>
-                    {worker.Name} ✅
-                  </option>
-                ))}
-                {workers.filter(w => !availableWorkers.find(aw => aw.WorkerID === w.WorkerID)).map(worker => (
-                  <option key={worker.WorkerID} value={worker.Name} disabled>
-                    {worker.Name} ❌ (Busy)
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>🧽 Wash Type:</label>
-              <select
-                value={formData.washType}
-                onChange={(e) => setFormData(prev => ({ ...prev, washType: e.target.value }))}
-              >
-                <option value="EXT">EXT</option>
-                <option value="INT">INT</option>
-              </select>
-            </div>
+          <div className="form-group">
+            <label>👷 Worker: {availableWorkers.length > 0 && `(${availableWorkers.length} available)`}</label>
+            <select
+              value={formData.workerName}
+              onChange={(e) => setFormData(prev => ({ ...prev, workerName: e.target.value }))}
+              required
+            >
+              <option value="">Select Worker</option>
+              {availableWorkers.map(worker => (
+                <option key={worker.WorkerID} value={worker.Name}>
+                  {worker.Name} ✅
+                </option>
+              ))}
+              {workers.filter(w => !availableWorkers.find(aw => aw.WorkerID === w.WorkerID)).map(worker => (
+                <option key={worker.WorkerID} value={worker.Name} disabled>
+                  {worker.Name} ❌ (Busy)
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="form-group">
-            <label>🚗 Car Plate (Optional):</label>
-            <input
-              type="text"
-              value={formData.carPlate}
-              onChange={(e) => setFormData(prev => ({ ...prev, carPlate: e.target.value }))}
-              placeholder="Enter car plate number"
-            />
+            <label>🚗 Cars:</label>
+            {formData.cars.map((car, index) => (
+              <div key={index} style={{ 
+                border: '1px solid #e9ecef', 
+                borderRadius: '8px', 
+                padding: '12px', 
+                marginBottom: '8px',
+                backgroundColor: '#f8f9fa'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                  <span style={{ fontWeight: 'bold', minWidth: '60px' }}>Car {index + 1}:</span>
+                  {formData.cars.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newCars = formData.cars.filter((_, i) => i !== index);
+                        setFormData(prev => ({ ...prev, cars: newCars }));
+                      }}
+                      style={{
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '4px 8px',
+                        fontSize: '12px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '8px' }}>
+                  <input
+                    type="text"
+                    value={car.plate}
+                    onChange={(e) => {
+                      const newCars = [...formData.cars];
+                      newCars[index].plate = e.target.value;
+                      setFormData(prev => ({ ...prev, cars: newCars }));
+                    }}
+                    placeholder="Car plate number"
+                    required
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  />
+                  <select
+                    value={car.washType}
+                    onChange={(e) => {
+                      const newCars = [...formData.cars];
+                      newCars[index].washType = e.target.value;
+                      setFormData(prev => ({ ...prev, cars: newCars }));
+                    }}
+                    style={{
+                      padding: '8px',
+                      border: '1px solid #ddd',
+                      borderRadius: '4px',
+                      fontSize: '14px'
+                    }}
+                  >
+                    <option value="EXT">EXT</option>
+                    <option value="INT">INT</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => {
+                setFormData(prev => ({
+                  ...prev,
+                  cars: [...prev.cars, { plate: '', washType: 'EXT' }]
+                }));
+              }}
+              style={{
+                background: '#28a745',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                padding: '8px 12px',
+                fontSize: '14px',
+                cursor: 'pointer',
+                marginTop: '8px'
+              }}
+            >
+              + Add Another Car
+            </button>
           </div>
 
           <div className="form-actions">

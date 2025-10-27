@@ -642,7 +642,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                             return (
                               <div 
                                 key={key}
-                                className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''}`}
+                                className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''} ${appointment.customerId && appointment.customerId.startsWith('MANUAL_') ? 'manual-appointment' : ''}`}
                                 style={{ 
                                   position: 'relative'
                                 }}

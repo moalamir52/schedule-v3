@@ -229,6 +229,47 @@
   background-color: #ADD8E6; /* بيبي بلو للإنتيريار */
 }
 
+/* Manual Appointment Styles */
+.appointment-item.manual-appointment {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%) !important;
+  border: 2px solid #2196f3 !important;
+  box-shadow: 0 2px 8px rgba(33, 150, 243, 0.3);
+  position: relative;
+}
+
+.appointment-item.manual-appointment::before {
+  content: "✋";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  font-size: 10px;
+  z-index: 10;
+  background: #2196f3;
+  color: white;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+}
+
+.appointment-item.manual-appointment .customer-name {
+  color: #1976d2 !important;
+  font-weight: bold;
+}
+
+.appointment-item.manual-appointment .villa,
+.appointment-item.manual-appointment .car-plate {
+  color: #1565c0 !important;
+}
+
+.appointment-item.manual-appointment .wash-type {
+  color: #0d47a1 !important;
+  font-weight: bold;
+}
+
 /* Cancelled Task Styles */
 .appointment-item.cancelled-task {
   background-color: #ffebee !important;
@@ -438,10 +479,15 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 15;
 }
 
 .delete-btn:hover {
   background: #c82333;
+  transform: scale(1.1);
 }
 
 /* Customer Info Modal */

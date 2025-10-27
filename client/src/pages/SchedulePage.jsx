@@ -65,9 +65,12 @@ const SchedulePage = () => {
     setIsLoading(true);
     setError(null);
     try {
+      console.log('[AUTO-ASSIGN] Starting auto assign process...');
       // استخدام نفس الدالة المستخدمة في F5
       await loadCurrentSchedule();
+      console.log('[AUTO-ASSIGN] Auto assign completed successfully');
     } catch (err) {
+      console.error('[AUTO-ASSIGN] Error:', err);
       setError(err.message);
       setAssignedSchedule([]);
     } finally {
@@ -80,6 +83,9 @@ const SchedulePage = () => {
     setIsLoading(true);
     setError(null);
     try {
+      console.log('[SYNC-NEW-CUSTOMERS] Starting sync process...');
+      console.log('[SYNC-NEW-CUSTOMERS] Calling endpoint: /api/schedule/assign/sync-new-customers');
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/sync-new-customers`, {
         method: 'POST',
         headers: {
@@ -89,23 +95,40 @@ const SchedulePage = () => {
       });
       
       const data = await response.json();
+      console.log('[SYNC-NEW-CUSTOMERS] API Response:', data);
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to sync new customers');
       }
       
       if (data.success && data.assignments) {
+        console.log('[SYNC-NEW-CUSTOMERS] New assignments received:', data.assignments.length);
+        console.log('[SYNC-NEW-CUSTOMERS] New customers added:', data.newCustomersCount || 0);
+        console.log('[SYNC-NEW-CUSTOMERS] New customers details:', data.newCustomers || []);
+        
         setAssignedSchedule(data.assignments);
         const addedCount = data.newCustomersCount || 0;
+        const newCustomers = data.newCustomers || [];
+        
         if (addedCount > 0) {
-          alert(`✅ Successfully added ${addedCount} new customers to schedule!`);
+          console.log('[SYNC-NEW-CUSTOMERS] Success! Added customers:', newCustomers.map(c => `${c.CustomerID} - ${c.Name}`));
+          
+          // Force refresh to show new customers
+          setTimeout(async () => {
+            console.log('[SYNC-NEW-CUSTOMERS] Force refreshing schedule to show new customers...');
+            await loadCurrentSchedule();
+          }, 1000);
+          
+          alert(`✅ Successfully added ${addedCount} new customers to schedule!\n\nNew customers:\n${newCustomers.map(c => `• ${c.CustomerID} - ${c.Name} (Villa ${c.Villa})`).join('\n')}`);
         } else {
+          console.log('[SYNC-NEW-CUSTOMERS] No new customers found');
           alert('ℹ️ No new customers found to add. All customers are already in the schedule.');
         }
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
     } catch (err) {
+      console.error('[SYNC-NEW-CUSTOMERS] Error:', err);
       setError(err.message);
     } finally {
       setIsLoading(false);
@@ -170,8 +193,7 @@ const SchedulePage = () => {
 
   const loadCurrentSchedule = async () => {
     try {
-
-
+      console.log('[LOAD-SCHEDULE] Starting to load current schedule...');
       
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 seconds for online server
@@ -182,35 +204,37 @@ const SchedulePage = () => {
       
       clearTimeout(timeoutId);
       
-
-
+      console.log('[LOAD-SCHEDULE] Response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-
+        console.log('[LOAD-SCHEDULE] Data received:', data);
         
         if (data.success && data.assignments) {
-
+          console.log('[LOAD-SCHEDULE] Total assignments:', data.assignments.length);
+          const manualAppointments = data.assignments.filter(apt => apt.customerId && apt.customerId.startsWith('MANUAL_'));
+          console.log('[LOAD-SCHEDULE] Manual appointments found:', manualAppointments.length);
+          
           setAssignedSchedule(data.assignments);
+          setError(null); // Clear any previous errors
         } else {
-
+          console.log('[LOAD-SCHEDULE] No assignments in response');
           setAssignedSchedule([]);
           setError('No schedule data found. Click Auto button to load schedule.');
         }
       } else {
-
         const errorText = await response.text();
-
+        console.error('[LOAD-SCHEDULE] Server error:', response.status, errorText);
         setAssignedSchedule([]);
         setError(`Server error: ${response.status}. Click Auto button to load schedule.`);
       }
     } catch (err) {
-
+      console.error('[LOAD-SCHEDULE] Error:', err);
       if (err.name === 'AbortError') {
-        console.warn('[F5-DEBUG] Schedule load timed out');
+        console.warn('[LOAD-SCHEDULE] Schedule load timed out');
         setError('Connection timeout. Click Auto button to load schedule.');
       } else {
-        console.error('[F5-DEBUG] Load error:', err.message);
+        console.error('[LOAD-SCHEDULE] Load error:', err.message);
         setError(`Connection error: ${err.message}. Click Auto button to load schedule.`);
       }
       setAssignedSchedule([]);
@@ -219,6 +243,8 @@ const SchedulePage = () => {
 
   const handleAddAppointment = async (appointmentData) => {
     try {
+      console.log('[ADD-APPOINTMENT] Sending appointment data:', appointmentData);
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual`, {
         method: 'POST',
         headers: {
@@ -228,17 +254,31 @@ const SchedulePage = () => {
       });
       
       const data = await response.json();
+      console.log('[ADD-APPOINTMENT] API Response:', data);
       
       if (!response.ok) {
         throw new Error(data.error || 'Failed to add appointment');
       }
       
-      // Refresh the schedule after adding
-      await loadCurrentSchedule();
+      console.log('[ADD-APPOINTMENT] Manual appointment added successfully:', data.appointment);
+      
+      // Force refresh the schedule after adding
+      setIsLoading(true);
+      try {
+        await loadCurrentSchedule();
+        console.log('[ADD-APPOINTMENT] Schedule refreshed after adding appointment');
+        alert(`✅ Appointment added successfully!\n\nVilla: ${appointmentData.villa}\nDay: ${appointmentData.day}\nTime: ${appointmentData.time}\nWorker: ${appointmentData.workerName}\nWash Type: ${appointmentData.washType}`);
+      } catch (refreshError) {
+        console.error('[ADD-APPOINTMENT] Error refreshing schedule:', refreshError);
+        alert('⚠️ Appointment added but failed to refresh schedule. Press F5 to refresh the page.');
+      } finally {
+        setIsLoading(false);
+      }
       
       // Close the modal
       setShowAddModal(false);
     } catch (err) {
+      console.error('[ADD-APPOINTMENT] Error:', err);
       throw new Error(err.message);
     }
   };
@@ -249,6 +289,8 @@ const SchedulePage = () => {
     }
     
     try {
+      console.log('[DELETE-APPOINTMENT] Deleting appointment for customer:', customerId);
+      
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds for delete
       
@@ -268,14 +310,18 @@ const SchedulePage = () => {
       }
       
       const data = await response.json();
+      console.log('[DELETE-APPOINTMENT] Delete response:', data);
       
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete appointment');
       }
       
+      console.log('[DELETE-APPOINTMENT] Appointment deleted successfully, refreshing schedule...');
+      
       // Refresh the schedule after deleting
       await loadCurrentSchedule();
     } catch (err) {
+      console.error('[DELETE-APPOINTMENT] Error:', err);
       if (err.name === 'AbortError') {
         alert('Delete operation timed out. Please check your connection and try again.');
       } else {
@@ -287,17 +333,22 @@ const SchedulePage = () => {
   const getFilteredSchedule = () => {
     let filtered = assignedSchedule;
     
+    console.log('[FILTER-DEBUG] Total schedule items:', filtered.length);
+    console.log('[FILTER-DEBUG] Manual appointments:', filtered.filter(item => item.customerId && item.customerId.startsWith('MANUAL_')).length);
+    
     // Filter by today if needed
     if (viewMode === 'today') {
       const today = new Date();
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const todayName = dayNames[today.getDay()];
       filtered = filtered.filter(item => item.day === todayName);
+      console.log('[FILTER-DEBUG] After today filter:', filtered.length);
     }
     
     // Filter by customer if selected
     if (customerFilter.trim()) {
       filtered = filtered.filter(item => item.customerId === customerFilter);
+      console.log('[FILTER-DEBUG] After customer filter:', filtered.length);
     }
     
     // Filter by search term
@@ -308,8 +359,23 @@ const SchedulePage = () => {
         (item.customerName && item.customerName.toLowerCase().includes(search)) ||
         (item.carPlate && item.carPlate.toLowerCase().includes(search))
       );
+      console.log('[FILTER-DEBUG] After search filter:', filtered.length);
     }
     
+    // Log CUST-047 items for debugging
+    const cust047Items = filtered.filter(item => item.customerId === 'CUST-047');
+    console.log('[FILTER-DEBUG] CUST-047 items:', cust047Items.length);
+    if (cust047Items.length > 0) {
+      console.log('[FILTER-DEBUG] CUST-047 details:', cust047Items.map(item => ({
+        day: item.day,
+        time: item.time,
+        villa: item.villa,
+        carPlate: item.carPlate,
+        washType: item.washType
+      })));
+    }
+    
+    console.log('[FILTER-DEBUG] Final filtered items:', filtered.length);
     return filtered;
   };
 

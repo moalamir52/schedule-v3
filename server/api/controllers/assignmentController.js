@@ -918,8 +918,31 @@ const getSchedule = async (req, res) => {
       isLocked: task.isLocked || 'FALSE',
       scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0],
       status: task.Status,
-      originalWashType: task.OriginalWashType
+      originalWashType: task.OriginalWashType,
+      customerStatus: task.customerStatus || 'Active'
     }));
+    
+    // Log manual appointments for debugging
+    const manualAppointments = assignments.filter(apt => apt.customerId && apt.customerId.startsWith('MANUAL_'));
+    console.log(`[GET-SCHEDULE] Total assignments: ${assignments.length}`);
+    console.log(`[GET-SCHEDULE] Manual appointments: ${manualAppointments.length}`);
+    if (manualAppointments.length > 0) {
+      console.log('[GET-SCHEDULE] Manual appointments found:', manualAppointments);
+    }
+    
+    // Log CUST-047 appointments for debugging
+    const cust047Appointments = assignments.filter(apt => apt.customerId === 'CUST-047');
+    console.log(`[GET-SCHEDULE] CUST-047 appointments found: ${cust047Appointments.length}`);
+    if (cust047Appointments.length > 0) {
+      console.log('[GET-SCHEDULE] CUST-047 appointments:', cust047Appointments.map(apt => ({
+        day: apt.day,
+        time: apt.time,
+        villa: apt.villa,
+        carPlate: apt.carPlate,
+        washType: apt.washType,
+        workerName: apt.workerName
+      })));
+    }
     
     const response = {
       success: true,
@@ -984,12 +1007,12 @@ const getAvailableWorkers = async (req, res) => {
 
 const addManualAppointment = async (req, res) => {
   try {
-    const { villa, day, time, workerName, washType, carPlate } = req.body;
+    const { customerName, villa, day, time, workerName, washType, carPlate } = req.body;
     
-    if (!villa || !day || !time || !workerName) {
+    if (!customerName || !villa || !day || !time || !workerName) {
       return res.status(400).json({ 
         success: false, 
-        error: 'Missing required fields: villa, day, time, workerName' 
+        error: 'Missing required fields: customerName, villa, day, time, workerName' 
       });
     }
     
@@ -1005,46 +1028,94 @@ const addManualAppointment = async (req, res) => {
     
     const existingTasks = await getScheduledTasks();
     
+    // Check if worker is busy with a DIFFERENT customer at this time
     const workerConflict = existingTasks.find(task => 
       task.WorkerName === workerName && 
       task.Day === day && 
-      task.Time === time
+      task.Time === time &&
+      task.CustomerName !== customerName // Allow same customer multiple cars
     );
     
     if (workerConflict) {
       return res.status(400).json({ 
         success: false, 
-        error: `Worker ${workerName} is already assigned at ${day} ${time}` 
+        error: `Worker ${workerName} is already assigned to ${workerConflict.CustomerName} at ${day} ${time}` 
       });
     }
     
-    const newAppointment = {
+    // Calculate appointment date based on day
+    const today = new Date();
+    const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const targetDayIndex = dayNames.indexOf(day);
+    
+    let appointmentDate = new Date(today);
+    let daysToAdd = targetDayIndex - currentDay;
+    if (daysToAdd <= 0) daysToAdd += 7; // Next week if day has passed
+    appointmentDate.setDate(today.getDate() + daysToAdd);
+    
+    const formattedDate = appointmentDate.toISOString().split('T')[0];
+    
+    // Create single appointment for one car
+    const customerId = `MANUAL_${Date.now()}`;
+    const appointment = {
       day,
-      appointmentDate: '',
+      appointmentDate: formattedDate,
       time,
-      customerId: `MANUAL_${Date.now()}`,
-      customerName: villa,
+      customerId,
+      customerName,
       villa,
       carPlate: carPlate || '',
       washType: washType || 'EXT',
       workerName,
       workerId: worker.WorkerID,
+      packageType: 'Manual Appointment',
       isLocked: 'TRUE',
-      scheduleDate: new Date().toISOString().split('T')[0]
+      scheduleDate: new Date().toISOString().split('T')[0],
+      customerStatus: 'Manual'
     };
     
-    await addRowToSheet('ScheduledTasks', [newAppointment]);
+    // Add appointment to the existing schedule
+    const existingSchedule = await getScheduledTasks();
+    const updatedSchedule = [...existingSchedule, appointment];
     
-    // Log the manual appointment (disabled temporarily)
-
+    // Save the complete updated schedule
+    const formattedSchedule = updatedSchedule.map(task => ({
+      day: task.day || task.Day,
+      appointmentDate: task.appointmentDate || task.AppointmentDate || '',
+      time: task.time || task.Time,
+      customerId: task.customerId || task.CustomerID,
+      customerName: task.customerName || task.CustomerName,
+      villa: task.villa || task.Villa,
+      carPlate: task.carPlate || task.CarPlate || '',
+      washType: task.washType || task.WashType || 'EXT',
+      workerName: task.workerName || task.WorkerName,
+      workerId: task.workerId || task.WorkerID,
+      packageType: task.packageType || task.PackageType || '',
+      isLocked: task.isLocked || 'FALSE',
+      scheduleDate: task.scheduleDate || task.ScheduleDate || new Date().toISOString().split('T')[0],
+      customerStatus: task.customerStatus || 'Active'
+    }));
+    
+    await clearAndWriteSheet('ScheduledTasks', formattedSchedule);
+    
+    // Clear cache after adding manual appointment
+    clearScheduleCache();
+    
+    console.log(`[MANUAL-APPOINTMENT] Successfully added manual appointment:`);
+    console.log(`[MANUAL-APPOINTMENT] Customer: ${customerName}, Villa: ${villa}, Day: ${day}, Time: ${time}, Worker: ${workerName}`);
+    console.log(`[MANUAL-APPOINTMENT] Car plate: ${carPlate}, Wash type: ${washType}`);
+    console.log(`[MANUAL-APPOINTMENT] Total schedule items after adding: ${formattedSchedule.length}`);
     
     res.json({
       success: true,
       message: 'Manual appointment added and locked successfully',
-      appointment: newAppointment
+      appointment: appointment,
+      totalScheduleItems: formattedSchedule.length
     });
     
   } catch (error) {
+    console.error('[MANUAL-APPOINTMENT] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -1782,11 +1853,26 @@ const deleteTask = async (req, res) => {
     
     const existingTasks = await getScheduledTasks();
     
-    // Find and remove only the specific task
+    console.log(`[DELETE-TASK] Attempting to delete: ${taskId}`);
+    console.log(`[DELETE-TASK] Total tasks before deletion: ${existingTasks.length}`);
+    
+    // Find and remove the specific task
     const updatedTasks = existingTasks.filter(task => {
-      const currentTaskId = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
-      return currentTaskId !== taskId;
+      if (taskId.startsWith('MANUAL_')) {
+        // For manual appointments, match by CustomerID (including multi-car variants)
+        const matches = task.CustomerID === taskId || task.CustomerID.startsWith(taskId.split('_CAR')[0]);
+        if (matches) {
+          console.log(`[DELETE-TASK] Found manual appointment to delete: ${task.CustomerID}`);
+        }
+        return !matches;
+      } else {
+        // For regular tasks, use the complex taskId format
+        const currentTaskId = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
+        return currentTaskId !== taskId;
+      }
     });
+    
+    console.log(`[DELETE-TASK] Total tasks after deletion: ${updatedTasks.length}`);
     
     if (updatedTasks.length === existingTasks.length) {
       return res.status(404).json({ 
@@ -1850,15 +1936,90 @@ const syncNewCustomers = async (req, res) => {
     console.log(`[SYNC-NEW] Active/Booked customers: ${activeCustomers.length}`);
     console.log(`[SYNC-NEW] Active customer IDs: ${activeCustomers.map(c => c.CustomerID).join(', ')}`);
     
-    // Find new customers not in existing schedule
-    const newCustomers = customers.filter(customer => 
-      (customer.Status === 'Active' || customer.Status === 'Booked') &&
-      !existingCustomerIds.has(customer.CustomerID)
-    );
+    // Check specifically for CUST-047
+    const cust047 = customers.find(c => c.CustomerID === 'CUST-047');
+    if (cust047) {
+      console.log(`[SYNC-NEW] CUST-047 found in database:`, {
+        CustomerID: cust047.CustomerID,
+        Name: cust047.Name,
+        Status: cust047.Status,
+        Days: cust047.Days,
+        Time: cust047.Time,
+        CarPlates: cust047.CarPlates,
+        Washman_Package: cust047.Washman_Package
+      });
+      
+      // Test appointment generation for CUST-047
+      console.log(`[SYNC-NEW] Testing appointment generation for CUST-047...`);
+      const testAppointments = await generateAllAppointments([cust047], allHistory, weekOffset, false);
+      const testCount = testAppointments.appointments ? testAppointments.appointments.length : testAppointments.length;
+      console.log(`[SYNC-NEW] CUST-047 should generate ${testCount} appointments`);
+      if (testCount > 0) {
+        const appointments = testAppointments.appointments || testAppointments;
+        console.log(`[SYNC-NEW] CUST-047 appointments:`, appointments.map(apt => ({
+          day: apt.day,
+          time: apt.time,
+          carPlate: apt.carPlate,
+          washType: apt.washType
+        })));
+      }
+    } else {
+      console.log(`[SYNC-NEW] CUST-047 NOT FOUND in database!`);
+    }
+    
+    // Find new customers not in existing schedule OR customers with incomplete appointments
+    const newCustomers = [];
+    
+    for (const customer of activeCustomers) {
+      if (customer.CustomerID === 'CUST-047') {
+        console.log(`[SYNC-NEW] Processing CUST-047:`);
+        console.log(`[SYNC-NEW] - Is in existing schedule: ${existingCustomerIds.has(customer.CustomerID)}`);
+        
+        if (!existingCustomerIds.has(customer.CustomerID)) {
+          console.log(`[SYNC-NEW] - CUST-047 is completely new, adding to newCustomers`);
+        } else {
+          const customerTasks = existingTasks.filter(task => task.CustomerID === customer.CustomerID);
+          console.log(`[SYNC-NEW] - CUST-047 existing tasks: ${customerTasks.length}`);
+          
+          const expectedAppointments = await generateAllAppointments([customer], allHistory, weekOffset, false);
+          const expectedCount = expectedAppointments.appointments ? expectedAppointments.appointments.length : expectedAppointments.length;
+          console.log(`[SYNC-NEW] - CUST-047 expected appointments: ${expectedCount}`);
+          
+          if (customerTasks.length < expectedCount) {
+            console.log(`[SYNC-NEW] - CUST-047 has incomplete appointments, adding to newCustomers`);
+          } else {
+            console.log(`[SYNC-NEW] - CUST-047 has complete appointments, skipping`);
+          }
+        }
+      }
+      
+      if (!existingCustomerIds.has(customer.CustomerID)) {
+        // Completely new customer
+        newCustomers.push(customer);
+        console.log(`[SYNC-NEW] Found new customer: ${customer.CustomerID}`);
+      } else {
+        // Check if customer has incomplete appointments (missing some days/times)
+        const customerTasks = existingTasks.filter(task => task.CustomerID === customer.CustomerID);
+        const expectedAppointments = await generateAllAppointments([customer], allHistory, weekOffset, false);
+        const expectedCount = expectedAppointments.appointments ? expectedAppointments.appointments.length : expectedAppointments.length;
+        
+        if (customerTasks.length < expectedCount) {
+          console.log(`[SYNC-NEW] Customer ${customer.CustomerID} has incomplete appointments: ${customerTasks.length}/${expectedCount}`);
+          newCustomers.push(customer);
+        }
+      }
+    }
     
     console.log(`[SYNC-NEW] New customers found: ${newCustomers.length}`);
     if (newCustomers.length > 0) {
       console.log(`[SYNC-NEW] New customer IDs: ${newCustomers.map(c => c.CustomerID).join(', ')}`);
+      console.log(`[SYNC-NEW] New customers details:`, newCustomers.map(c => ({ id: c.CustomerID, name: c.Name, villa: c.Villa, status: c.Status })));
+    } else {
+      console.log(`[SYNC-NEW] No new customers found. All active customers are already in schedule.`);
+      // Show which customers are already in schedule
+      const activeCustomerIds = activeCustomers.map(c => c.CustomerID);
+      const alreadyInSchedule = activeCustomerIds.filter(id => existingCustomerIds.has(id));
+      console.log(`[SYNC-NEW] Active customers already in schedule: ${alreadyInSchedule.join(', ')}`);
     }
     
     if (newCustomers.length === 0) {
@@ -1866,6 +2027,7 @@ const syncNewCustomers = async (req, res) => {
         success: true,
         message: 'No new customers found',
         newCustomersCount: 0,
+        newCustomers: [],
         assignments: existingTasks.map(formatExistingTask)
       });
     }
@@ -1917,6 +2079,7 @@ const syncNewCustomers = async (req, res) => {
       success: true,
       message: `Successfully added ${actualNewCustomersAdded} new customers`,
       newCustomersCount: actualNewCustomersAdded,
+      newCustomers: newCustomers.map(c => ({ CustomerID: c.CustomerID, Name: c.Name, Villa: c.Villa })),
       totalAppointments: combinedTasks.length,
       assignments: combinedTasks
     });
