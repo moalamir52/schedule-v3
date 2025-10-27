@@ -69,6 +69,9 @@ async function createClient(req, res) {
       clientData.Serves = servicesText;
     }
     
+    // Set default lock status for new clients
+    clientData.isLocked = 'FALSE';
+    
     console.log('[CREATE-CLIENT] Processing client data:', {
       customerId: clientData.CustomerID,
       name: clientData.Name,
@@ -93,6 +96,10 @@ async function updateClient(req, res) {
     const { id } = req.params;
     const decodedId = decodeURIComponent(id);
     const updatedData = req.body;
+    
+    // Mark as locked when manually updated
+    updatedData.isLocked = 'TRUE';
+    
     const result = await updateCustomer(decodedId, updatedData);
     res.status(200).json(result);
   } catch (error) {

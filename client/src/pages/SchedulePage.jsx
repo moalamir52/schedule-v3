@@ -152,17 +152,12 @@ const SchedulePage = () => {
     setError(null);
   };
   
+  // Smart Auto-Schedule - يحافظ على العملاء المحميين
   const handleGenerateNew = async () => {
-    const confirmed = window.confirm(
-      'This will generate a completely new schedule and overwrite any existing data. Are you sure?'
-    );
-    
-    if (!confirmed) return;
-    
     setIsLoading(true);
     setError(null);
     try {
-      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/${currentWeekOffset}`;
+      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/smart/${currentWeekOffset}`;
       
       const response = await fetch(url, {
         method: 'POST',
@@ -180,6 +175,42 @@ const SchedulePage = () => {
       
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
+        alert(`✅ Smart Auto-Schedule completed!\n\nProtected clients: ${data.protectedCount || 0}\nRescheduled clients: ${data.rescheduledCount || 0}`);
+      } else {
+        throw new Error(data.error || 'Invalid response format');
+      }
+    } catch (err) {
+      setError(err.message);
+      setAssignedSchedule([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Force Reset All - يمسح كل شيء ويبدأ من جديد
+  const handleForceReset = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/force-reset/${currentWeekOffset}`;
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ showAllSlots })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`);
+      }
+      
+      if (data.success && data.assignments) {
+        setAssignedSchedule(data.assignments);
+        alert(`✅ Force Reset completed!\n\nAll protection flags cleared\nNew schedule generated for all clients`);
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -415,7 +446,8 @@ const SchedulePage = () => {
         body: JSON.stringify({ 
           taskId, 
           newWorkerName: task.workerName,
-          newWashType 
+          newWashType,
+          keepCustomerTogether: true // إضافة flag للحفاظ على وحدة العميل
         })
       });
       
@@ -425,13 +457,19 @@ const SchedulePage = () => {
         throw new Error(data.error || 'Failed to update wash type');
       }
       
-      // Update the local state immediately
+      // Update all tasks for this customer to maintain unity
       setAssignedSchedule(prev => 
-        prev.map(task => 
-          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
-            ? { ...task, washType: newWashType, isLocked: 'TRUE' }
-            : task
-        )
+        prev.map(t => {
+          if (t.customerId === customerId && t.day === day) {
+            // Lock all cars of this customer on this day
+            return { ...t, isLocked: 'TRUE' };
+          }
+          if (`${t.customerId}-${t.day}-${t.time}-${t.carPlate}` === taskId) {
+            // Update the specific wash type
+            return { ...t, washType: newWashType, isLocked: 'TRUE' };
+          }
+          return t;
+        })
       );
       
     } catch (err) {
@@ -748,6 +786,7 @@ const SchedulePage = () => {
         onAutoAssign={handleAutoAssign}
         onSyncNewCustomers={handleSyncNewCustomers}
         onGenerateNew={handleGenerateNew}
+        onForceReset={handleForceReset}
         onToggleShowAllSlots={handleToggleShowAllSlots}
         showAllSlots={showAllSlots}
         onClear={handleClear}

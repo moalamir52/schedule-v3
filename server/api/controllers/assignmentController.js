@@ -1122,7 +1122,7 @@ const addManualAppointment = async (req, res) => {
 
 const updateTaskAssignment = async (req, res) => {
   try {
-    const { taskId, newWorkerName, newWashType, isSlotSwap, sourceDay, sourceTime, targetDay, targetTime, isWashTypeOnly } = req.body;
+    const { taskId, newWorkerName, newWashType, isSlotSwap, sourceDay, sourceTime, targetDay, targetTime, isWashTypeOnly, keepCustomerTogether } = req.body;
     
 
     
@@ -1264,7 +1264,15 @@ const updateTaskAssignment = async (req, res) => {
           existingTasks[taskIndex].WashType = newWashType;
         }
         
-
+        // If keepCustomerTogether is true, lock all cars of this customer
+        if (keepCustomerTogether) {
+          existingTasks.forEach(t => {
+            if ((t.CustomerID || t.customerId) === customerId && (t.Day || t.day) === day) {
+              t.isLocked = 'TRUE';
+            }
+          });
+        }
+        
       } else {
         // Drag and drop: Remove old tasks and create new ones at target location
         const sourceDay = taskIdParts[2];

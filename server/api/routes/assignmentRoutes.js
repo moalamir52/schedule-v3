@@ -17,6 +17,8 @@ router.delete('/:customerId', deleteTask);
 router.put('/batch-update', batchUpdateTasks);
 router.put('/batch-update-tasks', batchUpdateTasks); // Alternative endpoint name
 router.post('/force-generate/:weekOffset', autoAssignSchedule);
+router.post('/smart/:weekOffset', require('../controllers/autoScheduleController').smartAutoSchedule);
+router.post('/force-reset/:weekOffset', require('../controllers/autoScheduleController').forceResetAll);
 router.get('/wash-history/:customerId', getWashHistory);
 router.get('/history/:customerId', getWashHistory); // Alternative route
 

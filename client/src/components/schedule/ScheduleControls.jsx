@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FiChevronLeft, FiChevronRight, FiSettings, FiEye, FiBarChart, FiZap, FiPlus, FiDownload, FiAlertTriangle } from 'react-icons/fi';
 
-function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
+function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onForceReset, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
 
   useEffect(() => {
@@ -229,6 +229,30 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onT
                 setShowDropdown(false);
               }}
               onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#e3f2fd';
+                e.currentTarget.style.color = '#1565c0';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#495057';
+              }}
+            >
+              🔄 Smart Auto-Schedule
+            </div>
+            
+            <div 
+              style={dropdownItemStyle}
+              onClick={() => {
+                const confirmed = window.confirm(
+                  '⚠️ تحذير: Force Reset سيمسح جميع التعديلات اليدوية!\n\nهذا سيؤدي إلى:\n• مسح كل الجدول الحالي\n• إعادة تعيين جميع الحماية\n• إنشاء جدولة جديدة للكل\n\nهل أنت متأكد؟'
+                );
+                if (confirmed) {
+                  // Call force reset function
+                  onForceReset();
+                }
+                setShowDropdown(false);
+              }}
+              onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = '#ffebee';
                 e.currentTarget.style.color = '#c62828';
               }}
@@ -237,7 +261,7 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onT
                 e.currentTarget.style.color = '#495057';
               }}
             >
-              ⚡ Generate New Schedule
+              💥 Force Reset All
             </div>
 
             <div 
