@@ -268,15 +268,29 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
   });
   const [vatRate, setVatRate] = useState(0);
 
-  const previewRefNumber = () => {
+  const previewRefNumber = async () => {
     if (existingRef) return existingRef;
     
-    const now = new Date();
-    const year = now.getFullYear().toString().slice(-2);
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
-    const monthKey = `${year}${month}`;
-    
-    return `GLOGO-${monthKey}001`;
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/get-number`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerID: clientData.customerID || 'ONE_TIME',
+          customerName: clientData.name || 'Walk-in Customer',
+          villa: clientData.villa || 'N/A',
+          preview: true // إضافة flag للمعاينة فقط
+        })
+      });
+      const data = await response.json();
+      return data.success ? data.invoiceNumber : 'GLOGO-PREVIEW';
+    } catch (error) {
+      console.error('Error getting preview number:', error);
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2);
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+      return `GLOGO-${year}${month}XXX`;
+    }
   };
 
   const generateRefNumber = async () => {
@@ -289,14 +303,15 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         body: JSON.stringify({
           customerID: clientData.customerID || 'ONE_TIME',
           customerName: clientData.name || 'Walk-in Customer',
-          villa: clientData.villa || 'N/A'
+          villa: clientData.villa || 'N/A',
+          forceNew: true // إجبار إنشاء رقم جديد حتى لو كان في حجز
         })
       });
       const data = await response.json();
       return data.success ? data.invoiceNumber : nextRefNumber;
     } catch (error) {
       console.error('Error getting invoice number:', error);
-      return nextRefNumber || previewRefNumber();
+      return nextRefNumber || (await previewRefNumber());
     }
   };
 
@@ -423,9 +438,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     
     setIsGenerating(true);
     try {
-      const actualRef = await generateRefNumber();
-      
-      // Save invoice to Google Sheets
+      // Skip the reservation step and create invoice directly
       const isRegularCustomer = clientData.customerID && !clientData.customerID.startsWith('ONE_TIME');
       
       const invoiceData = isRegularCustomer ? {
@@ -434,9 +447,9 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         paymentStatus: clientData.payment || 'pending',
         paymentMethod: clientData.paymentMethod || 'Cash',
         dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB'),
-        notes: `Package: ${clientData.washmanPackage}, Vehicle: ${clientData.typeOfCar}`
+        notes: `Package: ${clientData.washmanPackage}, Vehicle: ${clientData.typeOfCar}`,
+        skipReservation: true // تجاوز خطوة الحجز
       } : {
-        ref: actualRef,
         clientName: clientData.name || 'Walk-in Customer',
         villa: clientData.villa || 'N/A',
         phone: clientData.phone || 'N/A',
@@ -445,38 +458,54 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         serves: clientData.serves || 'One-time car wash service',
         amount: clientData.fee || 0,
         paymentStatus: clientData.payment || 'pending',
-        startDate: clientData.startDate || new Date().toLocaleDateString('en-GB')
+        startDate: clientData.startDate || new Date().toLocaleDateString('en-GB'),
+        skipReservation: true // تجاوز خطوة الحجز
       };
       
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/create`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...invoiceData,
+          ref: nextRefNumber,
           subject: clientData.subject || clientData.serves || clientData.washmanPackage
         })
       });
       
       if (!response.ok) {
-        throw new Error('Failed to save invoice');
+        const errorText = await response.text();
+        console.error('Backend error:', response.status, errorText);
+        
+        // Handle specific error cases
+        if (errorText.includes('already has an invoice for this month')) {
+          const existingInvoiceMatch = errorText.match(/GLOGO-\d+/);
+          const existingRef = existingInvoiceMatch ? existingInvoiceMatch[0] : 'existing invoice';
+          throw new Error(`Customer already has an invoice for this month: ${existingRef}\n\nWould you like to reprint the existing invoice instead?`);
+        }
+        
+        throw new Error(`Server error (${response.status}): ${errorText}`);
       }
       
       const responseData = await response.json();
       
       // Update clientData with backend response data
-      if (responseData.success && responseData.invoice) {
-        const backendInvoice = responseData.invoice;
-        setConfirmedRef(backendInvoice.invoiceId);
+      if (responseData.success) {
+        const invoiceRef = responseData.invoice?.invoiceId || nextRefNumber || 'INVOICE-CREATED';
+        setConfirmedRef(invoiceRef);
         
         // Update clientData with backend calculated values
-        if (backendInvoice.serviceDate) {
-          clientData.serviceDate = backendInvoice.serviceDate;
+        if (responseData.serviceDate) {
+          clientData.serviceDate = responseData.serviceDate;
         }
-        if (backendInvoice.invoiceDate) {
-          clientData.invoiceDate = backendInvoice.invoiceDate;
+        if (responseData.invoiceDate) {
+          clientData.invoiceDate = responseData.invoiceDate;
+        }
+
+        if (onInvoiceCreated) {
+          onInvoiceCreated({ ref: invoiceRef, clientName: clientData.name });
         }
       } else {
-        setConfirmedRef(actualRef);
+        throw new Error(responseData.error || 'Failed to create invoice');
       }
       
       setShowRefConfirmDialog(false);
@@ -486,14 +515,24 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
       const isPaidStatus = paymentStatus.toLowerCase().includes('yes/') || paymentStatus === 'PAID' || paymentStatus.toLowerCase() === 'paid';
       setIsPaid(isPaidStatus);
       
-      if (onInvoiceCreated) {
-        onInvoiceCreated({ ref: confirmedRef || actualRef, clientName: clientData.name });
-      }
-      
       setShowInvoice(true);
     } catch (error) {
       console.error('Error creating invoice:', error);
-      alert('Error creating invoice. Please try again.');
+      
+      if (error.message.includes('already has an invoice for this month')) {
+        const shouldReprint = confirm(error.message + '\n\nClick OK to use Test Invoice instead, or Cancel to close.');
+        if (shouldReprint) {
+          // Use test mode instead
+          setIsTestMode(true);
+          setConfirmedRef('TEST-INVOICE');
+          setIsPaid(clientData.payment?.toLowerCase().includes('yes/') || false);
+          setShowInvoice(true);
+          setShowRefConfirmDialog(false);
+          return;
+        }
+      } else {
+        alert(`Error creating invoice: ${error.message}\n\nPlease check the console for more details.`);
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -577,10 +616,20 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
               🧪 Test Invoice (No Number)
             </button>
             <button 
-              onClick={() => {
+              onClick={async () => {
                 if (isGenerating) return;
-                setNextRefNumber(previewRefNumber());
-                setShowRefConfirmDialog(true);
+                setIsGenerating(true);
+                try {
+                  const refNumber = await previewRefNumber();
+                  setNextRefNumber(refNumber);
+                  setShowRefConfirmDialog(true);
+                } catch (error) {
+                  console.error('Error getting ref number:', error);
+                  setNextRefNumber('GLOGO-ERROR');
+                  setShowRefConfirmDialog(true);
+                } finally {
+                  setIsGenerating(false);
+                }
               }}
               disabled={isGenerating}
               style={{
@@ -589,7 +638,7 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
                 cursor: isGenerating ? 'not-allowed' : 'pointer'
               }}
             >
-              {isGenerating ? '⏳ Generating...' : '📄 Generate & Print Invoice'}
+              {isGenerating ? '⏳ Getting Number...' : '📄 Generate & Print Invoice'}
             </button>
             <button onClick={onClose} style={styles.cancelButton}>
               Cancel

@@ -313,6 +313,9 @@ const InvoicesPage = () => {
     } catch (error) {
       console.error('Failed to reload invoice data:', error);
     }
+
+    // Find the customer data from the loaded customers list
+    const customerData = customers.find(c => c.CustomerID === invoice.CustomerID);
     
     // Build serviceDate from Start and End columns
     let serviceDate = null;
@@ -322,27 +325,30 @@ const InvoicesPage = () => {
       serviceDate = invoice.Start;
     }
     
-    // Extract phone from Notes for one-time invoices
+    // Extract phone from Notes for one-time invoices, with fallback to customer data
     let phone = 'N/A';
     if (invoice.Notes && invoice.Notes.includes('Phone:')) {
       const phoneMatch = invoice.Notes.match(/Phone: ([^,]+)/);
       if (phoneMatch) phone = phoneMatch[1];
     }
+    if (phone === 'N/A' && customerData?.Phone) {
+      phone = customerData.Phone;
+    }
     
     const clientDataForPrint = {
-      name: invoice.CustomerName,
-      villa: invoice.Villa,
+      name: customerData?.Name || invoice.CustomerName,
+      villa: customerData?.Villa || invoice.Villa,
       phone: phone,
-      fee: invoice.TotalAmount,
-      washmanPackage: invoice.PackageID || 'Standard Service',
-      typeOfCar: invoice.Vehicle || 'N/A',
-      serves: invoice.Services || invoice.PackageID || '',
+      fee: invoice.TotalAmount || customerData?.Fee,
+      washmanPackage: invoice.PackageID || customerData?.Washman_Package || customerData?.Package || 'Standard Service',
+      typeOfCar: invoice.Vehicle || customerData?.CarPlates || customerData?.TypeOfCar || 'N/A',
+      serves: invoice.Services || customerData?.Serves || '',
       payment: invoice.Status === 'Paid' ? 'yes/cash' : 'pending',
       invoiceDate: invoice.InvoiceDate,
       serviceDate: serviceDate,
       customerID: invoice.CustomerID,
       existingRef: invoice.Ref || invoice.InvoiceID,
-      subject: invoice.Subject || invoice.Services || '',
+      subject: invoice.Subject || customerData?.Serves || '',
       isReprint: true
     };
     
@@ -1094,7 +1100,7 @@ const InvoicesPage = () => {
               </thead>
               <tbody>
                 {getFilteredInvoices().map((invoice, index) => (
-                  <tr key={invoice.InvoiceID} style={{
+                  <tr key={`${invoice.InvoiceID}-${index}`} style={{
                     backgroundColor: index % 2 === 0 ? '#f0f8f0' : '#e8f5e8',
                     borderBottom: '1px solid #c3e6c3'
                   }}>

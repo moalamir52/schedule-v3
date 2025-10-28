@@ -40,6 +40,11 @@ const createInvoice = async (req, res) => {
       const existingInvoice = existingInvoices.find(invoice => {
         if (invoice.CustomerID !== customerID) return false;
         
+        // Ignore reserved entries, which are not actual invoices
+        if (invoice.Status && invoice.Status.toUpperCase() === 'RESERVED') {
+            return false;
+        }
+        
         const invoiceDate = new Date(invoice.InvoiceDate || invoice.CreatedAt);
         const invoiceMonth = invoiceDate.getMonth() + 1;
         const invoiceYear = invoiceDate.getFullYear();
