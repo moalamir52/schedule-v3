@@ -2244,7 +2244,7 @@ const InvoicesPage = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
                 <div>
                   <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Phone</label>
                   <input
@@ -2279,6 +2279,24 @@ const InvoicesPage = () => {
                     <option value="60 days">60 days</option>
                     <option value="90 days">90 days</option>
                   </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: '5px', fontWeight: '600' }}>Original Amount (AED)</label>
+                  <input
+                    type="number"
+                    value={editingInvoice.TotalAmount || ''}
+                    onChange={(e) => setEditingInvoice({...editingInvoice, TotalAmount: e.target.value})}
+                    placeholder="Original Amount"
+                    min="0"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      border: '1px solid #ddd',
+                      MozAppearance: 'textfield'
+                    }}
+                    onWheel={(e) => e.target.blur()}
+                  />
                 </div>
               </div>
 
@@ -2405,7 +2423,10 @@ const InvoicesPage = () => {
                 ))}
                 
                 <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#f8f9fa', borderRadius: '4px' }}>
-                  <strong>Total: AED {(editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong>Services Total: AED {(editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                    <strong style={{ color: '#28a745' }}>Final Amount: AED {editingInvoice.TotalAmount || (editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0)}</strong>
+                  </div>
                 </div>
               </div>
 
@@ -2487,7 +2508,9 @@ const InvoicesPage = () => {
                 <button
                   onClick={async () => {
                     try {
-                      const totalAmount = (editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0);
+                      // Use manually entered amount if available, otherwise calculate from services
+                      const servicesTotal = (editingInvoice.selectedServices || []).reduce((sum, service) => sum + (parseFloat(service.price) || 0), 0);
+                      const totalAmount = editingInvoice.TotalAmount ? parseFloat(editingInvoice.TotalAmount) : servicesTotal;
                       
                       // Determine service category for subject
                       const getServiceCategory = (services) => {
@@ -2514,6 +2537,8 @@ const InvoicesPage = () => {
                       
                       const servicesText = (editingInvoice.selectedServices || []).map((s, index) => `${index + 1}. ${s.name} (AED ${s.price})`).join('\n');
                       const subject = getServiceCategory(editingInvoice.selectedServices || []);
+                      
+                      console.log('Updating invoice with totalAmount:', totalAmount, 'servicesTotal:', servicesTotal);
                       
                       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/invoices/update/${editingInvoice.InvoiceID}`, {
                         method: 'PUT',
@@ -2570,7 +2595,7 @@ const InvoicesPage = () => {
                     fontWeight: 'bold'
                   }}
                 >
-                  ✏️ Update & Print Invoice
+                  ✏️ Update Invoice
                 </button>
               </div>
             </div>

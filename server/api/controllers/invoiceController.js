@@ -182,8 +182,11 @@ const updateInvoice = async (req, res) => {
       phone,
       payment,
       notes,
-      subject
+      subject,
+      duration
     } = req.body;
+    
+    console.log('Updating invoice:', id, 'with totalAmount:', totalAmount);
     
     if (status && !customerName) {
       await updateInvoiceStatus(id, status, paymentMethod);
@@ -203,7 +206,8 @@ const updateInvoice = async (req, res) => {
         Phone: phone,
         Payment: payment,
         Notes: notes,
-        Subject: subject
+        Subject: subject,
+        Duration: duration
       });
     }
     
