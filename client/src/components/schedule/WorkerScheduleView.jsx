@@ -808,9 +808,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                   {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : 
                                    appointment.originalWashType || appointment.washType}
                                 </div>
-                                <div className="worker-name" style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>
-                                  👷 {appointment.workerName}
-                                </div>
+
                                 
 
                               </div>
