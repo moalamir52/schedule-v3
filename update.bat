@@ -1,6 +1,7 @@
 @echo off
-echo Adding all files to Git...
+echo Adding files to Git (excluding database)...
 git add .
+git reset server/database/database.db
 
 set /p commitMessage="Enter a short description for your update: "
 

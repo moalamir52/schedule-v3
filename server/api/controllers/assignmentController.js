@@ -952,18 +952,18 @@ function validateAndFixSchedule(schedule) {
     }
   });
   
-  // Step 2: Fix worker double-booking conflicts
-  const workerSlotMap = new Map(); // worker-day-time -> task
+  // Step 2: Fix worker double-booking conflicts (allow same customer multi-car)
+  const workerSlotMap = new Map(); // worker-day-time -> customer -> tasks
   const finalTasks = [];
   
   Array.from(tasksByKey.values()).forEach(task => {
     const workerName = normalize(task.workerName);
     const day = normalize(task.day);
     const time = normalize(task.time);
+    const customerId = normalize(task.customerId);
     const isLocked = (task.isLocked || '').toString() === 'TRUE';
     
     if (!workerName) {
-      // No worker assigned, keep task
       finalTasks.push(task);
       return;
     }
@@ -971,43 +971,51 @@ function validateAndFixSchedule(schedule) {
     const workerSlotKey = `${workerName}||${day}||${time}`;
     
     if (!workerSlotMap.has(workerSlotKey)) {
-      // Worker is free at this slot
-      workerSlotMap.set(workerSlotKey, task);
+      const customerMap = new Map();
+      customerMap.set(customerId, [task]);
+      workerSlotMap.set(workerSlotKey, customerMap);
       finalTasks.push(task);
     } else {
-      // Worker conflict - choose which task to keep
-      const existingTask = workerSlotMap.get(workerSlotKey);
-      const existingLocked = (existingTask.isLocked || '').toString() === 'TRUE';
+      const customerMap = workerSlotMap.get(workerSlotKey);
       
-      if (isLocked && !existingLocked) {
-        // Replace existing with locked task
-        const existingIndex = finalTasks.findIndex(t => t === existingTask);
-        if (existingIndex !== -1) {
-          finalTasks[existingIndex] = task;
-          workerSlotMap.set(workerSlotKey, task);
-          console.log(`[VALIDATE] Worker conflict: Replaced unlocked with locked task for ${workerName} at ${day} ${time}`);
-        }
-      } else if (!isLocked && !existingLocked) {
-        // Both unlocked - clear worker from new task to avoid conflict
-        task.workerName = '';
-        task.workerId = '';
+      if (customerMap.has(customerId)) {
+        // Same customer, same worker, same slot - allowed for multi-car
+        customerMap.get(customerId).push(task);
         finalTasks.push(task);
-        console.log(`[VALIDATE] Worker conflict: Cleared worker from duplicate assignment for ${workerName} at ${day} ${time}`);
       } else {
-        // Keep existing (locked has priority)
-        if (!isLocked) {
+        // Different customer - real conflict
+        const existingCustomerId = Array.from(customerMap.keys())[0];
+        const existingTasks = customerMap.get(existingCustomerId);
+        const existingTask = existingTasks[0];
+        const existingLocked = (existingTask.isLocked || '').toString() === 'TRUE';
+        
+        if (isLocked && !existingLocked) {
+          existingTasks.forEach(t => {
+            const existingIndex = finalTasks.findIndex(ft => ft === t);
+            if (existingIndex !== -1) finalTasks.splice(existingIndex, 1);
+          });
+          customerMap.clear();
+          customerMap.set(customerId, [task]);
+          finalTasks.push(task);
+        } else if (!isLocked && !existingLocked) {
           task.workerName = '';
           task.workerId = '';
+          finalTasks.push(task);
+          console.log(`[VALIDATE] Worker conflict: Cleared worker from duplicate assignment for ${workerName} at ${day} ${time}`);
+        } else {
+          if (!isLocked) {
+            task.workerName = '';
+            task.workerId = '';
+          }
+          finalTasks.push(task);
         }
-        finalTasks.push(task);
-        console.log(`[VALIDATE] Worker conflict: Kept existing task for ${workerName} at ${day} ${time}`);
+        
+        conflicts.workerDoubleBooking.push({ 
+          worker: workerName, 
+          slot: `${day} ${time}`, 
+          reason: `Worker assigned to multiple customers: ${existingCustomerId} vs ${customerId}` 
+        });
       }
-      
-      conflicts.workerDoubleBooking.push({ 
-        worker: workerName, 
-        slot: `${day} ${time}`, 
-        reason: 'Worker double-booked' 
-      });
     }
   });
 
