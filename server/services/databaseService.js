@@ -23,22 +23,16 @@ const formatTime = (time) => {
   return time;
 };
 
-const DB_PATH = path.join(__dirname, '../database/database.db');
-
 class DatabaseService {
   constructor() {
-    this.db = null;
+    this.pool = null;
     this.init();
   }
 
   init() {
-    // Create database directory if it doesn't exist
-    const dbDir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-
-    this.db = new sqlite3.Database(DB_PATH, (err) => {
+    // SQLite connection
+    const dbPath = path.join(__dirname, '../database/database.db');
+    this.db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('Error opening database:', err);
       } else {
@@ -48,72 +42,189 @@ class DatabaseService {
     });
   }
 
-  createTables() {
-    const schemaPath = path.join(__dirname, '../database/schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
-    
-    // Replace CREATE TABLE with CREATE TABLE IF NOT EXISTS
-    const modifiedSchema = schema.replace(/CREATE TABLE /g, 'CREATE TABLE IF NOT EXISTS ');
-    
-    this.db.exec(modifiedSchema, (err) => {
-      if (err) {
-        console.error('Error creating tables:', err);
-      } else {
-        console.log('Database tables verified successfully');
-        this.seedCustomers();
-      }
-    });
-  }
-
-  seedCustomers() {
-    // Check if customers already exist
-    this.db.get('SELECT COUNT(*) as count FROM customers', (err, row) => {
-      if (err) {
-        console.error('Error checking customers:', err);
-        return;
+  async createTables() {
+    try {
+      // SQLite schema - execute each table separately
+      const tables = [
+        `CREATE TABLE IF NOT EXISTS customers (
+          CustomerID TEXT PRIMARY KEY,
+          Name TEXT NOT NULL,
+          Villa TEXT,
+          CarPlates TEXT,
+          Washman_Package TEXT,
+          Days TEXT,
+          Time TEXT,
+          Status TEXT DEFAULT 'Active',
+          Phone TEXT,
+          Email TEXT,
+          Notes TEXT,
+          Fee REAL,
+          "Number of car" INTEGER,
+          "start date" TEXT
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS wash_history (
+          WashID TEXT PRIMARY KEY,
+          CustomerID TEXT,
+          CarPlate TEXT,
+          WashDate TEXT,
+          PackageType TEXT,
+          Villa TEXT,
+          WashTypePerformed TEXT,
+          VisitNumberInWeek INTEGER,
+          WeekInCycle INTEGER,
+          Status TEXT,
+          WorkerName TEXT
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS workers (
+          WorkerID TEXT,
+          Name TEXT NOT NULL,
+          Phone TEXT,
+          Status TEXT DEFAULT 'Active',
+          Specialization TEXT,
+          HourlyRate REAL
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS ScheduledTasks (
+          Day TEXT,
+          AppointmentDate TEXT,
+          Time TEXT,
+          CustomerID TEXT,
+          CustomerName TEXT,
+          Villa TEXT,
+          CarPlate TEXT,
+          WashType TEXT,
+          WorkerName TEXT,
+          WorkerID TEXT,
+          PackageType TEXT,
+          isLocked TEXT DEFAULT 'FALSE',
+          ScheduleDate TEXT
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS invoices (
+          InvoiceID TEXT PRIMARY KEY,
+          Ref TEXT UNIQUE,
+          CustomerID TEXT,
+          CustomerName TEXT,
+          Villa TEXT,
+          InvoiceDate TEXT,
+          DueDate TEXT,
+          TotalAmount REAL,
+          Status TEXT DEFAULT 'Pending',
+          PaymentMethod TEXT,
+          Start TEXT,
+          End TEXT,
+          Vehicle TEXT,
+          PackageID TEXT,
+          Services TEXT,
+          Notes TEXT,
+          CreatedBy TEXT,
+          CreatedAt TEXT,
+          SubTotal REAL,
+          Phone TEXT,
+          Payment TEXT,
+          Subject TEXT
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS Users (
+          UserID TEXT PRIMARY KEY,
+          Username TEXT UNIQUE NOT NULL,
+          Password TEXT NOT NULL,
+          PlainPassword TEXT,
+          Role TEXT NOT NULL,
+          Status TEXT DEFAULT 'Active',
+          CreatedAt TEXT
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS Services (
+          ServiceID TEXT,
+          ServiceName TEXT NOT NULL,
+          Price REAL,
+          Description TEXT,
+          Status TEXT DEFAULT 'Active'
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS WashRules (
+          RuleId TEXT PRIMARY KEY,
+          RuleName TEXT NOT NULL,
+          SingleCarPattern TEXT,
+          MultiCarSettings TEXT,
+          BiWeeklySettings TEXT,
+          CreatedDate TEXT,
+          Status TEXT DEFAULT 'Active'
+        )`,
+        
+        `CREATE TABLE IF NOT EXISTS assignments (
+          taskId TEXT PRIMARY KEY,
+          customerName TEXT,
+          carPlate TEXT,
+          washDay TEXT,
+          washTime TEXT,
+          washType TEXT,
+          assignedWorker TEXT,
+          villa TEXT,
+          isLocked TEXT DEFAULT 'FALSE',
+          scheduleDate TEXT
+        )`
+      ];
+      
+      for (const table of tables) {
+        await this.run(table);
       }
       
-      if (row.count === 0) {
-        // Load seed data
-        const seedPath = path.join(__dirname, '../database/seed-customers.sql');
-        if (fs.existsSync(seedPath)) {
-          const seedData = fs.readFileSync(seedPath, 'utf8');
-          this.db.exec(seedData, (err) => {
-            if (err) {
-              console.error('Error seeding customers:', err);
-            } else {
-              console.log('Sample customers data loaded successfully');
-            }
-          });
-        }
+      await this.run(schema);
+      console.log('Database tables verified successfully');
+      this.seedCustomers();
+    } catch (err) {
+      console.error('Error creating tables:', err);
+    }
+  }
+
+  async seedCustomers() {
+    try {
+      const result = await this.pool.query('SELECT COUNT(*) as count FROM customers');
+      if (parseInt(result.rows[0].count) === 0) {
+        console.log('No existing customers found, database ready for data');
       }
-    });
+    } catch (err) {
+      console.error('Error checking customers:', err);
+    }
   }
 
   // Generic query methods
-  run(sql, params = []) {
+  async run(sql, params = []) {
     return new Promise((resolve, reject) => {
       this.db.run(sql, params, function(err) {
-        if (err) reject(err);
-        else resolve({ id: this.lastID, changes: this.changes });
+        if (err) {
+          reject(err);
+        } else {
+          resolve({ id: this.lastID, changes: this.changes });
+        }
       });
     });
   }
 
-  get(sql, params = []) {
+  async get(sql, params = []) {
     return new Promise((resolve, reject) => {
       this.db.get(sql, params, (err, row) => {
-        if (err) reject(err);
-        else resolve(row);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(row || null);
+        }
       });
     });
   }
 
-  all(sql, params = []) {
+  async all(sql, params = []) {
     return new Promise((resolve, reject) => {
       this.db.all(sql, params, (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows || []);
+        }
       });
     });
   }
