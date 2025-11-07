@@ -1,8 +1,8 @@
-const { getWorkers } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 const getAllWorkers = async (req, res) => {
   try {
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     const activeWorkers = workers.filter(worker => worker.Status === 'Active');
     res.status(200).json(activeWorkers);
   } catch (error) {

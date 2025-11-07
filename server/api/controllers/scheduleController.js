@@ -62,9 +62,30 @@ async function updateTask(req, res) {
   }
 }
 
+// Batch update for drag & drop
+async function batchUpdate(req, res) {
+  try {
+    const db = require('../../services/databaseService');
+    const changes = req.body;
+    
+    console.log('[BATCH-UPDATE] Received changes:', changes.length);
+    
+    for (const change of changes) {
+      await db.saveAssignment(change);
+      console.log('[BATCH-UPDATE] Saved:', change.customerName, change.carPlate, change.assignedWorker);
+    }
+    
+    res.status(200).json({ message: 'Changes saved successfully' });
+  } catch (error) {
+    console.error('[BATCH-UPDATE] Error:', error);
+    res.status(500).json({ error: 'Failed to save changes' });
+  }
+}
+
 module.exports = {
   getWeeklySchedule,
   refreshSchedule,
   saveSchedule,
-  updateTask
+  updateTask,
+  batchUpdate
 };

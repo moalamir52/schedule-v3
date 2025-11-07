@@ -1,0 +1,22 @@
+-- Insert sample customers data
+INSERT OR REPLACE INTO customers (CustomerID, Name, Villa, CarPlates, Washman_Package, Days, Time, Status, Phone, Notes, Fee, `Number of car`, `start date`) VALUES
+('CUST-001', 'Ahmed Ali', 'Villa 101', 'ABC-123', '3 EXT 1 INT', 'Monday', '8:00 AM', 'Active', '050-123-4567', 'Regular customer', 150.0, 1, '1-Oct-24'),
+('CUST-002', 'Sara Mohammed', 'Villa 102', 'DEF-456', '2 EXT 1 INT', 'Tuesday', '9:00 AM', 'Active', '050-234-5678', 'Prefers morning slots', 120.0, 1, '1-Oct-24'),
+('CUST-003', 'Omar Hassan', 'Villa 103', 'GHI-789', '3 EXT Only', 'Wednesday', '10:00 AM', 'Active', '050-345-6789', 'Exterior only', 90.0, 1, '1-Oct-24'),
+('CUST-004', 'Fatima Al-Zahra', 'Villa 104', 'JKL-012', '2 EXT 1 INT bi week', 'Thursday', '11:00 AM', 'Active', '050-456-7890', 'Bi-weekly package', 120.0, 1, '1-Oct-24'),
+('CUST-005', 'Khalid Ibrahim', 'Villa 105', 'MNO-345', '4 EXT 1 INT', 'Friday', '12:00 PM', 'Active', '050-567-8901', 'Premium package', 200.0, 1, '1-Oct-24'),
+('CUST-006', 'Aisha Mahmoud', 'Villa 106', 'PQR-678, STU-901', '3 EXT 1 INT', 'Saturday', '1:00 PM', 'Active', '050-678-9012', 'Two cars', 300.0, 2, '1-Oct-24'),
+('CUST-007', 'Youssef Ahmed', 'Villa 107', 'VWX-234', '2 EXT Only', 'Sunday', '2:00 PM', 'Active', '050-789-0123', 'Weekend only', 60.0, 1, '1-Oct-24'),
+('CUST-008', 'Mariam Saleh', 'Villa 108', 'YZA-567', '3 EXT 1 INT bi week', 'Monday', '3:00 PM', 'Active', '050-890-1234', 'Bi-weekly premium', 150.0, 1, '1-Oct-24'),
+('CUST-009', 'Hassan Ali', 'Villa 109', 'BCD-890', '2 EXT 1 INT', 'Tuesday', '4:00 PM', 'Active', '050-901-2345', 'Afternoon preferred', 120.0, 1, '1-Oct-24'),
+('CUST-010', 'Nour Abdel', 'Villa 110', 'EFG-123', '4 EXT Only', 'Wednesday', '5:00 PM', 'Active', '050-012-3456', 'Large package', 120.0, 1, '1-Oct-24'),
+('CUST-011', 'Rami Khaled', 'Villa 111', 'HIJ-456', '3 EXT 1 INT', 'Thursday', '6:00 PM', 'Active', '050-123-4567', 'Evening slots', 150.0, 1, '1-Oct-24'),
+('CUST-012', 'Layla Omar', 'Villa 112', 'KLM-789', '2 EXT 1 INT bi week', 'Friday', '7:00 PM', 'Active', '050-234-5678', 'Late evening', 120.0, 1, '1-Oct-24'),
+('CUST-013', 'Tariq Saeed', 'Villa 113', 'NOP-012', '3 EXT Only', 'Saturday', '8:00 AM', 'Active', '050-345-6789', 'Early morning', 90.0, 1, '1-Oct-24'),
+('CUST-014', 'Hala Nasser', 'Villa 114', 'QRS-345', '2 EXT 1 INT', 'Sunday', '9:00 AM', 'Active', '050-456-7890', 'Sunday morning', 120.0, 1, '1-Oct-24'),
+('CUST-015', 'Amjad Fouad', 'Villa 115', 'TUV-678', '4 EXT 1 INT bi week', 'Monday', '10:00 AM', 'Active', '050-567-8901', 'Premium bi-weekly', 200.0, 1, '1-Oct-24'),
+('CUST-016', 'Dina Rashid', 'Villa 116', 'WXY-901', '3 EXT 1 INT', 'Tuesday', '11:00 AM', 'Active', '050-678-9012', 'Mid-morning', 150.0, 1, '1-Oct-24'),
+('CUST-017', 'Sami Youssef', 'Villa 117', 'ZAB-234', '2 EXT 1 INT', 'Wednesday', '12:00 PM', 'Active', '050-789-0123', 'Lunch time', 120.0, 1, '1-Oct-24'),
+('CUST-018', 'Rana Mahmoud', 'Villa 118', 'CDE-567', '3 EXT Only', 'Thursday', '1:00 PM', 'Active', '050-890-1234', 'Afternoon wash', 90.0, 1, '1-Oct-24'),
+('CUST-019', 'Walid Farouk', 'Villa 119', 'FGH-890', '2 EXT 1 INT bi week', 'Friday', '2:00 PM', 'Active', '050-901-2345', 'Friday afternoon', 120.0, 1, '1-Oct-24'),
+('CUST-020', 'Mona Adel', 'Villa 120', 'IJK-123', '4 EXT 1 INT', 'Saturday', '3:00 PM', 'Active', '050-012-3456', 'Weekend premium', 200.0, 1, '1-Oct-24');

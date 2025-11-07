@@ -1,4 +1,10 @@
-const { getUsers, updateUser, deleteUser } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
+
+// Helper functions
+const getUsers = () => db.getUsers();
+const findUserByUsername = (username) => db.findUserByUsername(username);
+const updateUser = (userId, data) => db.run('UPDATE Users SET ' + Object.keys(data).map(key => `${key} = ?`).join(', ') + ' WHERE UserID = ?', [...Object.values(data), userId]);
+const deleteUser = (userId) => db.run('DELETE FROM Users WHERE UserID = ?', [userId]);
 
 const getAllUsers = async (req, res) => {
   try {
@@ -64,7 +70,7 @@ const resetUserPassword = async (req, res) => {
 const changeMyPassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
-    const { findUserByUsername } = require('../../services/googleSheetsService');
+    // User lookup handled by database service
     const bcrypt = require('bcryptjs');
     
     // Get user from token (you'll need to implement JWT middleware)

@@ -24,12 +24,26 @@ const autoScheduleRoutes = require('./api/routes/autoScheduleRoutes');
 const washRulesRoutes = require('./api/routes/washRulesRoutes');
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5001;
 
 app.use(cors());
 app.use(express.text());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`\n🌐 [${new Date().toISOString()}] ${req.method} ${req.url}`);
+  if (req.url.includes('batch-update')) {
+    console.log('🚨🚨🚨 [BATCH-UPDATE-REQUEST] FOUND BATCH-UPDATE REQUEST!');
+    console.log('📦 Headers:', req.headers);
+    console.log('📦 Body:', JSON.stringify(req.body, null, 2));
+  }
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+  }
+  next();
+});
 app.use((req, res, next) => {
   if (req.headers['content-type'] === 'text/plain' && req.body) {
     try {
@@ -41,19 +55,44 @@ app.use((req, res, next) => {
   next();
 });
 
+// Add simple test endpoint
+app.get('/api/test-server', (req, res) => {
+  console.log('🚀 [TEST] Server test endpoint hit!');
+  res.json({ success: true, message: 'Server is working!', timestamp: new Date().toISOString() });
+});
+
+// Add test route before assignment routes
+app.put('/api/schedule/assign/batch-update', (req, res) => {
+  console.log('\n' + '='.repeat(80));
+  console.log('🚨 [DIRECT-ROUTE] BATCH-UPDATE PUT HIT DIRECTLY!');
+  console.log('🚨 [DIRECT-ROUTE] Method:', req.method);
+  console.log('🚨 [DIRECT-ROUTE] Body:', JSON.stringify(req.body, null, 2));
+  console.log('='.repeat(80) + '\n');
+  
+  // Call the actual function
+  const { batchUpdateTasks } = require('./api/controllers/assignmentController');
+  batchUpdateTasks(req, res);
+});
+
+// Add GET test for batch-update
+app.get('/api/schedule/assign/batch-update', (req, res) => {
+  console.log('🚀 [TEST] Batch-update GET endpoint hit!');
+  res.json({ success: true, message: 'Batch-update endpoint is reachable!', method: 'GET' });
+});
+
 app.use('/api/schedule/assign', assignmentRoutes);
 app.use('/api/schedule/overview', overviewRoutes);
 app.use('/api/schedule', scheduleRoutes);
-app.use('/api/clients', clientRoutes);
+app.use('/api/clients', clientsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/worker', workerRoutes);
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/invoices', invoiceRoutes);
-app.use('/api/clients', clientsRoutes);
 app.use('/api/workers', workersRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/customers', clientRoutes);
+app.use('/api/clients', clientRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/debug', debugRoutes);
@@ -86,6 +125,25 @@ app.get('/api/wash-history/:customerId', async (req, res) => {
   }
 });
 
+// Direct clear all route as fallback
+app.delete('/api/clear-all-schedule', async (req, res) => {
+  try {
+    const { clearAllScheduleData } = require('./api/controllers/assignmentController');
+    await clearAllScheduleData(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.post('/api/clear-all-schedule', async (req, res) => {
+  try {
+    const { clearAllScheduleData } = require('./api/controllers/assignmentController');
+    await clearAllScheduleData(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Version check endpoint
 app.get('/api/version', (req, res) => {
   res.json({
@@ -110,10 +168,17 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 app.listen(PORT, () => {
+  console.log('\n' + '='.repeat(80));
+  console.log('🚀 SCHEDULE V3 SERVER STARTED SUCCESSFULLY!');
+  console.log('='.repeat(80));
   console.log(`✅ Schedule v3 Server running on port ${PORT}`);
   console.log(`🌐 Server URL: http://localhost:${PORT}`);
   console.log(`📊 Version: 2.1.0`);
   console.log(`⏰ Started at: ${new Date().toISOString()}`);
+  console.log(`🔧 Available endpoints:`);
+  console.log(`   - PUT /api/schedule/assign/batch-update`);
+  console.log(`   - GET /api/schedule/assign/current`);
+  console.log('='.repeat(80) + '\n');
   
   // Start cron service
   try {

@@ -1,4 +1,4 @@
-const { findUserByUsername, addUser } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 

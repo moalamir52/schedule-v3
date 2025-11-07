@@ -1,11 +1,15 @@
-const { getCustomers } = require('../../services/googleSheetsService');
-const { getInvoices } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
+const { getCustomers, getInvoices } = require('../../services/googleSheetsService');
 
 const getAvailableClients = async (req, res) => {
   try {
+    console.log('[CLIENTS] Fetching available clients...');
     const customers = await getCustomers();
+    console.log('[CLIENTS] Found', customers.length, 'customers');
     const invoices = await getInvoices();
+    console.log('[CLIENTS] Found', invoices.length, 'invoices');
     const activeCustomers = customers.filter(customer => customer.Status === 'Active');
+    console.log('[CLIENTS] Found', activeCustomers.length, 'active customers');
     
     // Get current month invoices
     const currentMonth = new Date().getMonth() + 1;
@@ -27,6 +31,9 @@ const getAvailableClients = async (req, res) => {
     const availableClients = activeCustomers.filter(customer => !invoicedCustomerIDs.includes(customer.CustomerID));
     const invoicedClients = activeCustomers.filter(customer => invoicedCustomerIDs.includes(customer.CustomerID));
     
+    console.log('[CLIENTS] Available clients:', availableClients.length);
+    console.log('[CLIENTS] Invoiced clients:', invoicedClients.length);
+    
     res.json({
       success: true,
       availableClients,
@@ -34,6 +41,8 @@ const getAvailableClients = async (req, res) => {
     });
     
   } catch (error) {
+    console.error('[CLIENTS] Error getting available clients:', error);
+    console.error('[CLIENTS] Stack trace:', error.stack);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -41,15 +50,16 @@ const getAvailableClients = async (req, res) => {
 const getCustomerById = async (req, res) => {
   try {
     const { customerId } = req.params;
-    const customers = await getCustomers();
     
+    // Get all customers from Google Sheets
+    const customers = await getCustomers();
     const customer = customers.find(c => c.CustomerID === customerId);
     
     if (!customer) {
       return res.status(404).json({ success: false, error: 'Customer not found' });
     }
     
-    console.log('Customer data:', customer); // Debug log
+    console.log('Customer data:', customer);
     res.json(customer);
     
   } catch (error) {

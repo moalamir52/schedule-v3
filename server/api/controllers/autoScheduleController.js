@@ -1,5 +1,5 @@
 const { autoAssignSchedule } = require('./assignmentController');
-const { getCustomers, updateCustomer } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 const checkAndGenerateNewWeek = async (req, res) => {
   try {
@@ -29,7 +29,7 @@ const smartAutoSchedule = async (req, res) => {
     console.log(`[SMART-SCHEDULE] Starting smart schedule for week offset: ${targetWeekOffset}`);
     
     // Get all customers to check protection status
-    const customers = await getCustomers();
+    const customers = await db.getCustomers();
     const protectedCustomers = customers.filter(c => c.isLocked === 'TRUE');
     const unprotectedCustomers = customers.filter(c => c.isLocked !== 'TRUE');
     
@@ -84,14 +84,14 @@ const forceResetAll = async (req, res) => {
     console.log(`[FORCE-RESET] Starting force reset for week offset: ${targetWeekOffset}`);
     
     // Get all customers and reset their protection flags
-    const customers = await getCustomers();
+    const customers = await db.getCustomers();
     const protectedCustomers = customers.filter(c => c.isLocked === 'TRUE');
     
     console.log(`[FORCE-RESET] Resetting protection for ${protectedCustomers.length} customers`);
     
     // Reset all protection flags
     for (const customer of protectedCustomers) {
-      await updateCustomer(customer.CustomerID, { isLocked: 'FALSE' });
+      await db.updateCustomer(customer.CustomerID, { isLocked: 'FALSE' });
     }
     
     console.log(`[FORCE-RESET] All protection flags reset`);

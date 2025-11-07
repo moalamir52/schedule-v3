@@ -1,4 +1,4 @@
-const { getCustomers, getWorkers, getScheduledTasks } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 const logger = require('../../services/logger');
 const { validateAndFixSchedule } = require('./assignmentController');
 

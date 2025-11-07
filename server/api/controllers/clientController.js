@@ -1,19 +1,14 @@
-const { 
-  getCustomers, 
-  addCustomer, 
-  updateCustomer, 
-  deleteCustomer, 
-  restoreCustomer, 
-  searchCustomers 
-} = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 async function getAllClients(req, res) {
   try {
-    const clients = await getCustomers();
+    console.log('[GET-CLIENTS] Starting to fetch clients...');
+    const clients = await db.getCustomers();
+    console.log('[GET-CLIENTS] Found', clients.length, 'clients');
     res.status(200).json(clients);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal Server Error' });
+    console.error('[GET-CLIENTS] Error:', error);
+    res.status(500).json({ error: 'Internal Server Error: ' + error.message });
   }
 }
 
@@ -83,7 +78,7 @@ async function createClient(req, res) {
       formattedDate: clientData['start date']
     });
     
-    const newClient = await addCustomer(clientData);
+    const newClient = await db.addCustomer(clientData);
     res.status(201).json(newClient);
   } catch (error) {
     console.error('[CREATE-CLIENT] Error:', error);
@@ -97,14 +92,26 @@ async function updateClient(req, res) {
     const decodedId = decodeURIComponent(id);
     const updatedData = req.body;
     
-    // Mark as locked when manually updated
-    updatedData.isLocked = 'TRUE';
+    // Map frontend field names to database field names
+    const mappedData = {};
+    if (updatedData.CustomerName || updatedData.Name) mappedData.Name = updatedData.CustomerName || updatedData.Name;
+    if (updatedData.Villa) mappedData.Villa = updatedData.Villa;
+    if (updatedData.Phone) mappedData.Phone = updatedData.Phone;
+    if (updatedData.CarPlates) mappedData.CarPlates = updatedData.CarPlates;
+    if (updatedData.Washman_Package) mappedData.Washman_Package = updatedData.Washman_Package;
+    if (updatedData.WashDay || updatedData.Days) mappedData.Days = updatedData.WashDay || updatedData.Days;
+    if (updatedData.WashTime || updatedData.Time) mappedData.Time = updatedData.WashTime || updatedData.Time;
+    if (updatedData.Status) mappedData.Status = updatedData.Status;
+    if (updatedData.Notes) mappedData.Notes = updatedData.Notes;
+    if (updatedData.Fee !== undefined) mappedData.Fee = updatedData.Fee;
+    if (updatedData['Number of car'] !== undefined) mappedData['Number of car'] = updatedData['Number of car'];
+    if (updatedData['start date']) mappedData['start date'] = updatedData['start date'];
     
-    const result = await updateCustomer(decodedId, updatedData);
+    const result = await db.updateCustomer(decodedId, mappedData);
     res.status(200).json(result);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to update client' });
+    console.error('Update client error:', error);
+    res.status(500).json({ error: 'Failed to update client: ' + error.message });
   }
 }
 
@@ -112,7 +119,7 @@ async function deleteClient(req, res) {
   try {
     const { id } = req.params;
     const decodedId = decodeURIComponent(id);
-    const deletedData = await deleteCustomer(decodedId);
+    const deletedData = await db.deleteCustomer(decodedId);
     res.status(200).json({ message: 'Client deleted', data: deletedData });
   } catch (error) {
     console.error(error);
@@ -123,7 +130,7 @@ async function deleteClient(req, res) {
 async function restoreClient(req, res) {
   try {
     const clientData = req.body;
-    const restoredClient = await restoreCustomer(clientData);
+    const restoredClient = await db.addCustomer(clientData);
     res.status(200).json(restoredClient);
   } catch (error) {
     console.error(error);
@@ -134,7 +141,7 @@ async function restoreClient(req, res) {
 async function searchClients(req, res) {
   try {
     const { q } = req.query;
-    const clients = await searchCustomers(q);
+    const clients = await db.searchCustomers(q);
     res.status(200).json(clients);
   } catch (error) {
     console.error(error);
@@ -144,24 +151,9 @@ async function searchClients(req, res) {
 
 async function getNextCustomerId(req, res) {
   try {
-    const clients = await getCustomers();
-    
-    // Find the highest customer ID number
-    let maxId = 0;
-    clients.forEach(client => {
-      if (client.CustomerID) {
-        const match = client.CustomerID.match(/CUST-(\d+)/);
-        if (match) {
-          const num = parseInt(match[1]);
-          if (num > maxId) {
-            maxId = num;
-          }
-        }
-      }
-    });
-    
-    // Generate next ID
-    const nextId = `CUST-${String(maxId + 1).padStart(3, '0')}`;
+    const clients = await db.all('SELECT COUNT(*) as count FROM customers');
+    const nextNum = clients[0].count + 1;
+    const nextId = `CUST-${String(nextNum).padStart(3, '0')}`;
     
     res.status(200).json({ success: true, nextId });
   } catch (error) {

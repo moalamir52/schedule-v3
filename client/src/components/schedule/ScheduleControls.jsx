@@ -133,7 +133,7 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
           onMouseEnter={(e) => e.target.style.backgroundColor = '#0056b3'}
           onMouseLeave={(e) => e.target.style.backgroundColor = '#007bff'}
         >
-          🔄 Auto
+          🔄 Update
         </button>
         <button 
           style={navButtonStyle}
@@ -244,7 +244,7 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
               style={dropdownItemStyle}
               onClick={() => {
                 const confirmed = window.confirm(
-                  '⚠️ تحذير: Force Reset سيمسح جميع التعديلات اليدوية!\n\nهذا سيؤدي إلى:\n• مسح كل الجدول الحالي\n• إعادة تعيين جميع الحماية\n• إنشاء جدولة جديدة للكل\n\nهل أنت متأكد؟'
+                  '⚠️ WARNING: This will permanently delete ALL schedule data!\n\nThis action will:\n• Clear the entire schedule database\n• Remove all appointments and assignments\n• Cannot be undone\n\nAre you absolutely sure?'
                 );
                 if (confirmed) {
                   // Call force reset function
@@ -261,7 +261,7 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
                 e.currentTarget.style.color = '#495057';
               }}
             >
-              💥 Force Reset All
+              🗑️ Clear All Data
             </div>
 
             <div 

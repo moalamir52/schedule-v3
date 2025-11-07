@@ -39,7 +39,7 @@ class UpdateQueue {
   }
 
   async batchUpdate(updates) {
-    const { clearAndWriteSheet, getScheduledTasks } = require('../services/googleSheetsService');
+    const db = require('../services/databaseService');
     
     // Get current schedule
     const currentTasks = await getScheduledTasks();

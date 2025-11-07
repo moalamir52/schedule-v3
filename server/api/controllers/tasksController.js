@@ -1,4 +1,10 @@
-const { getScheduledTasks, addHistoryRecord, getCustomers, clearAndWriteSheet, getAllHistory } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
+const { getAllHistory } = require('../../services/googleSheetsService');
+
+// Helper functions
+const getScheduledTasks = () => db.getScheduledTasks();
+const addHistoryRecord = (record) => db.addHistoryRecord(record);
+const clearAndWriteSheet = (sheetName, data) => db.clearAndWriteSchedule(data);
 
 const getAllTasks = async (req, res) => {
   try {

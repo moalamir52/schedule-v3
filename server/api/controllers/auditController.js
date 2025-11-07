@@ -1,4 +1,4 @@
-const { getAuditLogs } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 const getAuditReport = async (req, res) => {
   try {

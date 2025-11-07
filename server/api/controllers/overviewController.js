@@ -1,13 +1,13 @@
-const { getCustomers, getWorkers } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 const getScheduleOverview = async (req, res) => {
   try {
     // Fetch active workers to determine total capacity
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     const totalCapacity = workers.filter(worker => worker.Status === 'Active').length;
     
     // Fetch all customers
-    const customers = await getCustomers();
+    const customers = await db.getCustomers();
     
     // Initialize data structures
     const appointments = [];

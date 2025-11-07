@@ -1,3 +1,5 @@
+const db = require('../services/databaseService');
+
 // Schedule cache with manual refresh
 class ScheduleCache {
   constructor() {
@@ -28,23 +30,23 @@ class ScheduleCache {
     });
   }
 
-  // Load fresh data from API
+  // Load fresh data from database
   async refresh() {
-    const { getScheduledTasks } = require('../services/googleSheetsService');
-    this.scheduleData = await getScheduledTasks();
+    this.scheduleData = await db.getScheduledTasks();
     this.pendingChanges.clear();
     this.lastSync = new Date();
     return this.scheduleData;
   }
 
-  // Save all pending changes to API
+  // Save all pending changes to database
   async save() {
     if (this.pendingChanges.size === 0) return;
     
-    const { clearAndWriteSheet } = require('../services/googleSheetsService');
+    // Get updated schedule with pending changes
     const updatedSchedule = this.getSchedule();
     
-    await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
+    // Save to database
+    await db.clearAndWriteSchedule(updatedSchedule);
     this.scheduleData = updatedSchedule;
     this.pendingChanges.clear();
     this.lastSync = new Date();

@@ -1,4 +1,5 @@
-const { addRowToSheet, getInvoices, addInvoiceRecord, deleteInvoiceRecord, getCustomers, updateInvoiceStatus, getOrCreateInvoiceNumber, detectDuplicateInvoices } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
+const { getCustomers, getInvoices, addInvoiceRecord, updateInvoiceStatus, updateInvoiceRecord, deleteInvoiceRecord, getOrCreateInvoiceNumber, detectDuplicateInvoices } = require('../../services/googleSheetsService');
 
 const createInvoice = async (req, res) => {
   try {
@@ -45,7 +46,7 @@ const createInvoice = async (req, res) => {
             return false;
         }
         
-        const invoiceDate = new Date(invoice.InvoiceDate || invoice.CreatedAt);
+        const invoiceDate = new Date(invoice.CreatedAt || invoice.InvoiceDate);
         const invoiceMonth = invoiceDate.getMonth() + 1;
         const invoiceYear = invoiceDate.getFullYear();
         
@@ -154,13 +155,16 @@ const createInvoice = async (req, res) => {
 
 const getAllInvoices = async (req, res) => {
   try {
+    console.log('[INVOICES] Fetching all invoices...');
     const invoices = await getInvoices();
+    console.log('[INVOICES] Found', invoices.length, 'invoices');
     res.json({
       success: true,
       invoices: invoices
     });
   } catch (error) {
-    console.error('Error getting invoices:', error);
+    console.error('[INVOICES] Error getting invoices:', error);
+    console.error('[INVOICES] Stack trace:', error.stack);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -191,7 +195,7 @@ const updateInvoice = async (req, res) => {
     if (status && !customerName) {
       await updateInvoiceStatus(id, status, paymentMethod);
     } else {
-      const { updateInvoiceRecord } = require('../../services/googleSheetsService');
+      // Invoice update handled by database service
       await updateInvoiceRecord(id, {
         CustomerName: customerName,
         Villa: villa,
@@ -264,7 +268,7 @@ const getInvoiceStats = async (req, res) => {
     const currentYear = now.getFullYear();
     
     const thisMonthInvoices = invoices.filter(invoice => {
-      const invoiceDate = new Date(invoice.InvoiceDate);
+      const invoiceDate = new Date(invoice.CreatedAt || invoice.InvoiceDate);
       return invoiceDate.getMonth() === currentMonth && invoiceDate.getFullYear() === currentYear;
     });
     

@@ -1,6 +1,17 @@
-const { getCustomers, getWorkers, getAllHistory, getScheduledTasks, clearAndWriteSheet, addRowToSheet, addAuditLog, updateTaskInSheet, getSheetData } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 const { determineIntCarForCustomer, checkIfFirstWeekOfBiWeekCycle } = require('../../services/logicService');
 const logger = require('../../services/logger');
+
+// Use database as the data source
+const dataSource = db; 
+
+// Import data access functions from the selected source
+const getCustomers = () => dataSource.getCustomers();
+const getWorkers = () => dataSource.getWorkers();
+const getAllHistory = () => dataSource.getAllHistory();
+const getScheduledTasks = () => dataSource.getScheduledTasks();
+const getWashRulesFromDb = async () => dataSource.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+const clearAndWriteScheduleToDb = (tasks) => dataSource.clearAndWriteSchedule(tasks);
 
 // Rate limiting for Google Sheets API
 let lastApiCall = 0;
@@ -20,11 +31,12 @@ const rateLimitedApiCall = async (apiFunction) => {
   return await apiFunction();
 };
 
-// Get wash rules from Google Sheets
+// Get wash rules from database
 const getWashRules = async () => {
   try {
-    const washRulesData = await getSheetData('WashRules');
-    if (!washRulesData || washRulesData.length === 0) {
+    const washRulesData = await getWashRulesFromDb();
+    const activeRules = washRulesData.filter(rule => rule.Status === 'Active');
+    if (!activeRules || activeRules.length === 0) {
       // Return default rules if sheet doesn't exist
       return [
         {
@@ -49,7 +61,7 @@ const getWashRules = async () => {
       ];
     }
     
-    const rules = washRulesData.map(row => ({
+    const rules = activeRules.map(row => ({
       name: row.RuleName,
       singleCar: JSON.parse(row.SingleCarPattern || '["EXT"]'),
       multiCar: JSON.parse(row.MultiCarSettings || '{"visit1": {"car1": "EXT", "car2": "EXT"}}'),
@@ -138,27 +150,80 @@ const determineNextVisitFromHistory = (recentHistory, patternLength) => {
 
 const autoAssignSchedule = async (req, res) => {
   const weekOffset = parseInt(req.params.weekOffset) || 0;
-  const showAllSlots = req.body.showAllSlots === true;
+  const showAllSlots = req.body && req.body.showAllSlots === true;
   
   const today = new Date();
   
   try {
     // 1. Fetch All Data with rate limiting
+
     console.log('[API-LIMIT] Fetching data with rate limiting...');
-    const customers = await rateLimitedApiCall(() => getCustomers());
-    const workers = await rateLimitedApiCall(() => getWorkers());
-    const allHistory = await rateLimitedApiCall(() => getAllHistory());
-    const existingSchedule = await rateLimitedApiCall(() => getScheduledTasks());
+    const customers = await getCustomers();
+    const workers = await getWorkers();
+    const allHistory = await getAllHistory();
+    const existingSchedule = await getScheduledTasks();
     
-    // 2. Filter customers based on mode
-    let activeCustomers;
+    // Find specific customers for tracking
+    const p1019Customer = customers.find(c => c.Villa === 'P1 019');
+    const cust006Customer = customers.find(c => c.CustomerID === 'CUST-006');
+    
+    // Get existing tasks for tracking
+    const p1019ExistingTasks = existingSchedule.filter(task => task.Villa === 'P1 019' || (p1019Customer && task.CustomerID === p1019Customer.CustomerID));
+    const cust006ExistingTasks = existingSchedule.filter(task => task.CustomerID === 'CUST-006');
+    
+    // 2. Filter customers based on mode and existing schedule
+    let allActiveCustomers;
     if (showAllSlots === true || showAllSlots === 'true') {
       // Show all active and booked customers for capacity planning
-      activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
+      allActiveCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
     } else {
       // Normal mode: include Active and Booked customers, filter out completed tasks
-      activeCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
+      allActiveCustomers = customers.filter(c => c.Status === 'Active' || c.Status === 'Booked');
     }
+    
+    // Get existing customer IDs from scheduled tasks for this week
+    const targetWeekStart = getCurrentWeekStart(weekOffset);
+    const targetWeekEnd = getCurrentWeekEnd(weekOffset);
+    
+
+    
+    const existingCustomerIds = new Set(
+      existingSchedule
+        .filter(task => {
+          if (!task.AppointmentDate) return false;
+          const taskDate = new Date(task.AppointmentDate);
+          return taskDate >= targetWeekStart && taskDate <= targetWeekEnd;
+        })
+        .map(task => task.CustomerID)
+    );
+    
+    console.log(`\n[AUTO-ASSIGN] Found ${existingCustomerIds.size} customers with existing appointments for week ${weekOffset}`);
+    console.log(`[AUTO-ASSIGN] Existing customer IDs: ${Array.from(existingCustomerIds).join(', ')}`);
+    
+    // Check if customers are in existing schedule
+    const p1019InExisting = p1019Customer && existingCustomerIds.has(p1019Customer.CustomerID);
+    const cust006InExisting = cust006Customer && existingCustomerIds.has(cust006Customer.CustomerID);
+    
+    // Only generate appointments for customers who don't have appointments yet (unless showAllSlots or smart mode)
+    let activeCustomers;
+    if (showAllSlots || (req.body && req.body.smartMode) || (req.body && req.body.forceReset)) {
+      // Show all slots mode or smart mode: include all customers
+      activeCustomers = allActiveCustomers;
+      console.log(`[AUTO-ASSIGN] ${showAllSlots ? 'Show all slots' : (req.body && req.body.smartMode) ? 'Smart' : 'Force reset'} mode: including all ${activeCustomers.length} customers`);
+    } else {
+      // Normal mode: only customers without existing appointments
+      activeCustomers = allActiveCustomers.filter(customer => 
+        !existingCustomerIds.has(customer.CustomerID)
+      );
+      console.log(`[AUTO-ASSIGN] Normal mode: ${activeCustomers.length} customers need new appointments (${allActiveCustomers.length - activeCustomers.length} already have appointments)`);
+      if (activeCustomers.length > 0) {
+        console.log(`[AUTO-ASSIGN] Customers needing appointments: ${activeCustomers.map(c => c.CustomerID).join(', ')}`);
+      }
+    }
+    
+    // Check if customers will be processed
+    const p1019WillBeProcessed = activeCustomers.some(c => c.Villa === 'P1 019');
+    const cust006WillBeProcessed = activeCustomers.some(c => c.CustomerID === 'CUST-006');
     
 
     
@@ -204,17 +269,27 @@ const autoAssignSchedule = async (req, res) => {
         isLocked: task.isLocked || 'FALSE',
         scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
       }));
-      await rateLimitedApiCall(() => clearAndWriteSheet('ScheduledTasks', cleanedTasks));
+      await clearAndWriteScheduleToDb(cleanedTasks);
 
     }
     
-    // 4. Identify Locked Tasks
+    // 4. Identify Locked Tasks (manual edits that should be preserved)
     const lockedTasks = cleanedSchedule.filter(task => task.isLocked === 'TRUE');
+    console.log(`[AUTO-ASSIGN] Found ${lockedTasks.length} locked tasks (manual edits) to preserve`);
+    if (lockedTasks.length > 0) {
+      console.log('[AUTO-ASSIGN] Locked tasks:', lockedTasks.map(t => `${t.CustomerID}-${t.Day}-${t.Time} (${t.WorkerName}, ${t.WashType})`));
+    }
     
-    // 4. Generate All Potential New Appointments
+    // 4. Generate All Potential New Appointments (only for customers that need them)
     const appointmentResult = await generateAllAppointments(activeCustomers, allHistory, weekOffset, showAllSlots);
     const potentialAppointments = appointmentResult.appointments || appointmentResult;
     const manualInputCustomers = appointmentResult.manualInputRequired || [];
+    
+    console.log(`[AUTO-ASSIGN] Generated ${potentialAppointments.length} potential appointments for ${activeCustomers.length} customers`);
+    
+    // Track new appointments for specific customers
+    const p1019NewAppointments = potentialAppointments.filter(apt => apt.villa === 'P1 019' || (p1019Customer && apt.customerId === p1019Customer.CustomerID));
+    const cust006NewAppointments = potentialAppointments.filter(apt => apt.customerId === 'CUST-006');
     
     // Add actual dates to appointments
     const appointmentsWithDates = addActualDatesToAppointments(potentialAppointments, weekOffset);
@@ -271,6 +346,19 @@ const autoAssignSchedule = async (req, res) => {
       ...completedTasksForDisplay
     ];
     
+    console.log(`[AUTO-ASSIGN] Combined schedule: ${lockedTasks.length} locked + ${assignedUnlockedTasks.length} new + ${completedTasksForDisplay.length} completed = ${combinedSchedule.length} total`);
+    
+    // Track combined schedule for specific customers
+    const p1019InCombined = combinedSchedule.filter(task => task.villa === 'P1 019' || (p1019Customer && task.customerId === p1019Customer.CustomerID));
+    const cust006InCombined = combinedSchedule.filter(task => task.customerId === 'CUST-006');
+    
+    // Log some locked tasks to verify they're preserved
+    const preservedLocked = combinedSchedule.filter(task => task.isLocked === 'TRUE' && !task.isCompleted);
+    console.log(`[AUTO-ASSIGN] Preserved ${preservedLocked.length} locked tasks in final schedule`);
+    if (preservedLocked.length > 0) {
+      console.log('[AUTO-ASSIGN] Sample preserved tasks:', preservedLocked.slice(0, 3).map(t => `${t.customerId}-${t.day}-${t.time} (${t.workerName}, ${t.washType})`));
+    }
+    
 
     
     // 7. Remove Duplicates - Enhanced logic to prevent customer duplication
@@ -279,6 +367,7 @@ const autoAssignSchedule = async (req, res) => {
     const tasksByKey = new Map();
     
     // First pass: collect all tasks by key and prioritize locked tasks
+    // IMPORTANT: Use full key including car plate to allow multiple cars per customer per time slot
     combinedSchedule.forEach(task => {
       const key = `${task.customerId}-${task.day}-${task.time}-${task.carPlate || 'NOPLATE'}`;
       
@@ -289,8 +378,10 @@ const autoAssignSchedule = async (req, res) => {
         const existingTask = tasksByKey.get(key);
         if (task.isLocked === 'TRUE' && existingTask.isLocked !== 'TRUE') {
           tasksByKey.set(key, task);
+          console.log(`[DUPLICATE-REMOVAL] Replaced unlocked with locked task: ${key}`);
+        } else {
+          console.log(`[DUPLICATE-REMOVAL] Keeping existing task: ${key}`);
         }
-        // If both are locked or both are unlocked, keep the first one
       }
     });
     
@@ -301,6 +392,8 @@ const autoAssignSchedule = async (req, res) => {
         finalSchedule.push(task);
       }
     });
+    
+    console.log(`[AUTO-ASSIGN] Removed ${combinedSchedule.length - finalSchedule.length} duplicate tasks`);
     
 
     
@@ -325,8 +418,15 @@ const autoAssignSchedule = async (req, res) => {
     }));
     
   // Validate and fix schedule before saving to prevent duplicates/conflicts caused by manual edits or race conditions
+  console.log(`[AUTO-ASSIGN] Before validation: ${scheduleForSaving.length} tasks`);
   const validatedSchedule = validateAndFixSchedule(scheduleForSaving);
-  await clearAndWriteSheet('ScheduledTasks', validatedSchedule);
+  console.log(`[AUTO-ASSIGN] After validation: ${validatedSchedule.length} tasks`);
+  
+  // Get final tasks for tracking
+  const p1019FinalTasks = validatedSchedule.filter(t => t.villa === 'P1 019' || (p1019Customer && t.customerId === p1019Customer.CustomerID));
+  const cust006FinalTasks = validatedSchedule.filter(t => t.customerId === 'CUST-006');
+  
+  await clearAndWriteScheduleToDb(validatedSchedule);
     
     // Clear cache after update
     clearScheduleCache();
@@ -336,13 +436,20 @@ const autoAssignSchedule = async (req, res) => {
     const endTime = new Date();
 
     
-    let message = showAllSlots 
-      ? `[TESTING] Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments, ${completedTasksForDisplay.length} completed/cancelled tasks`
-      : `[TESTING] Schedule updated successfully. ${assignedUnlockedTasks.length} new appointments added, ${lockedTasks.length} locked tasks preserved, ${completedTasksThisWeek?.length || 0} completed tasks excluded.`;
+    let message;
+    if (showAllSlots) {
+      message = `[TESTING] Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments, ${completedTasksForDisplay.length} completed/cancelled tasks`;
+    } else if (activeCustomers.length === 0) {
+      message = `[SUCCESS] No new appointments needed - all active customers already have appointments for week ${weekOffset > 0 ? '+' : ''}${weekOffset}.`;
+    } else {
+      message = `[SUCCESS] Schedule updated successfully. ${assignedUnlockedTasks.length} new appointments added for ${activeCustomers.length} customers, ${lockedTasks.length} locked tasks preserved, ${completedTasksThisWeek?.length || 0} completed tasks excluded.`;
+    }
     
     if (manualInputCustomers.length > 0) {
       message += ` Note: ${manualInputCustomers.length} customers require manual wash type input due to incomplete bi-weekly cycle data.`;
     }
+    
+
     
 
     
@@ -355,7 +462,25 @@ const autoAssignSchedule = async (req, res) => {
       completedTasks: showAllSlots ? completedTasksForDisplay.length : (completedTasksThisWeek?.length || 0),
       showAllSlots,
       manualInputRequired: manualInputCustomers,
-      assignments: finalSchedule
+      assignments: finalSchedule,
+      customersProcessed: activeCustomers.length,
+      customersAlreadyScheduled: allActiveCustomers.length - activeCustomers.length,
+      p1019Tracked: {
+        found: !!p1019Customer,
+        existingTasks: p1019ExistingTasks.length,
+        inExistingWeek: p1019InExisting,
+        willBeProcessed: p1019WillBeProcessed,
+        newAppointments: p1019NewAppointments.length,
+        finalTasks: p1019FinalTasks.length
+      },
+      cust006Tracked: {
+        found: !!cust006Customer,
+        existingTasks: cust006ExistingTasks.length,
+        inExistingWeek: cust006InExisting,
+        willBeProcessed: cust006WillBeProcessed,
+        newAppointments: cust006NewAppointments.length,
+        finalTasks: cust006FinalTasks.length
+      }
     });
     
   } catch (error) {
@@ -457,7 +582,7 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
                 day,
                 time: carTime.time,
                 customerId: customer.CustomerID,
-                customerName: customer.Name,
+                customerName: customer.CustomerName || customer.Name || 'Unknown Customer',
                 villa: customer.Villa,
                 carPlate: matchingCarPlate,
                 washType,
@@ -499,7 +624,7 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
               day: dayTime.day,
               time: dayTime.time,
               customerId: customer.CustomerID,
-              customerName: customer.Name,
+              customerName: customer.CustomerName || customer.Name || 'Unknown Customer',
               villa: customer.Villa,
               carPlate,
               washType,
@@ -547,7 +672,7 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
                     day,
                     time,
                     customerId: customer.CustomerID,
-                    customerName: customer.Name,
+                    customerName: customer.CustomerName || customer.Name || 'Unknown Customer',
                     villa: customer.Villa,
                     carPlate,
                     washType,
@@ -593,7 +718,7 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
             day: appointment.day,
             time: appointment.time,
             customerId: customer.CustomerID,
-            customerName: customer.Name,
+            customerName: customer.CustomerName || customer.Name || 'Unknown Customer',
             villa: customer.Villa,
             carPlate,
             washType,
@@ -634,43 +759,54 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
 }
 
 function filterUnlockedAppointments(potentialAppointments, lockedTasks, completedTasks = []) {
+  const lockedKeys = new Set();
+  
+  // Build set of locked appointment keys with normalized time format
+  // IMPORTANT: Include ALL cars for each locked task, not just one
+  lockedTasks.forEach(task => {
+    // Normalize time format to match new appointments
+    let normalizedTime = task.Time;
+    if (normalizedTime && !normalizedTime.includes('AM') && !normalizedTime.includes('PM')) {
+      const timeParts = normalizedTime.split(':');
+      if (timeParts.length >= 2) {
+        const hour = parseInt(timeParts[0]);
+        const minutes = timeParts[1];
+        if (!isNaN(hour)) {
+          if (hour >= 6 && hour <= 11) {
+            normalizedTime = `${hour}:${minutes} AM`;
+          } else if (hour === 12) {
+            normalizedTime = `${hour}:${minutes} PM`;
+          } else if (hour >= 13 && hour <= 23) {
+            normalizedTime = `${hour - 12}:${minutes} PM`;
+          } else if (hour >= 1 && hour <= 5) {
+            normalizedTime = `${hour}:${minutes} PM`;
+          }
+        }
+      }
+    }
+    // Create key for this specific car plate
+    const key = `${task.CustomerID}-${task.Day}-${normalizedTime}-${task.CarPlate || 'NOPLATE'}`;
+    lockedKeys.add(key);
+  });
   
   return potentialAppointments.filter(appointment => {
-    // Check if this appointment is already covered by a locked task
-    const isLocked = lockedTasks.some(lockedTask => 
-      lockedTask.CustomerID === appointment.customerId &&
-      lockedTask.Day === appointment.day &&
-      lockedTask.Time === appointment.time &&
-      lockedTask.CarPlate === appointment.carPlate
-    );
+    const key = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate || 'NOPLATE'}`;
     
-    if (isLocked) {
+    // Skip if this exact appointment (customer + car + time) is locked
+    if (lockedKeys.has(key)) {
+      console.log(`[FILTER] Skipping locked: ${key}`);
       return false;
     }
     
-    // Check if this specific appointment is already completed
+    // Skip if completed
     const isCompleted = completedTasks.some(completedTask => {
-      const matchesCustomer = completedTask.CustomerID === appointment.customerId;
-      const matchesCar = completedTask.CarPlate === appointment.carPlate;
-      
-      if (!appointment.actualDate) {
-        return false;
-      }
-      
+      if (!appointment.actualDate) return false;
       const completedDate = parseHistoryDate(completedTask.WashDate);
       const appointmentDate = new Date(appointment.actualDate);
-      const matchesDate = completedDate.toDateString() === appointmentDate.toDateString();
-      
-
-      
-      if (matchesCustomer && matchesCar && matchesDate) {
-        return true;
-      }
-      
-      return false;
+      return completedTask.CustomerID === appointment.customerId &&
+             completedTask.CarPlate === appointment.carPlate &&
+             completedDate.toDateString() === appointmentDate.toDateString();
     });
-    
-
     
     return !isCompleted;
   });
@@ -786,101 +922,105 @@ function formatLockedTask(lockedTask) {
 function validateAndFixSchedule(schedule) {
   if (!Array.isArray(schedule)) return schedule;
 
-  const slotMap = new Map(); // slotKey -> array of tasks
+  const cleaned = [];
   const conflicts = { customerDuplicates: [], workerDoubleBooking: [] };
 
   const normalize = v => (v === undefined || v === null) ? '' : String(v).trim();
 
-  // Group tasks by slot
+  // Step 1: Remove customer+car+slot duplicates, prefer locked tasks
+  const tasksByKey = new Map();
+  
   schedule.forEach(task => {
-    const slotKey = `${normalize(task.appointmentDate) || normalize(task.day)}||${normalize(task.time)}`;
-    if (!slotMap.has(slotKey)) slotMap.set(slotKey, []);
-    slotMap.get(slotKey).push(task);
+    const cid = normalize(task.customerId);
+    const day = normalize(task.day);
+    const time = normalize(task.time);
+    const car = normalize(task.carPlate || '');
+    const key = `${cid}||${day}||${time}||${car}`;
+    const isLocked = (task.isLocked || '').toString() === 'TRUE';
+    
+    if (!tasksByKey.has(key)) {
+      tasksByKey.set(key, task);
+    } else {
+      const existing = tasksByKey.get(key);
+      const existingLocked = (existing.isLocked || '').toString() === 'TRUE';
+      
+      if (isLocked && !existingLocked) {
+        tasksByKey.set(key, task);
+        console.log(`[VALIDATE] Replaced unlocked with locked task: ${key}`);
+      }
+      conflicts.customerDuplicates.push({ key, reason: 'Duplicate customer+car+slot' });
+    }
+  });
+  
+  // Step 2: Fix worker double-booking conflicts
+  const workerSlotMap = new Map(); // worker-day-time -> task
+  const finalTasks = [];
+  
+  Array.from(tasksByKey.values()).forEach(task => {
+    const workerName = normalize(task.workerName);
+    const day = normalize(task.day);
+    const time = normalize(task.time);
+    const isLocked = (task.isLocked || '').toString() === 'TRUE';
+    
+    if (!workerName) {
+      // No worker assigned, keep task
+      finalTasks.push(task);
+      return;
+    }
+    
+    const workerSlotKey = `${workerName}||${day}||${time}`;
+    
+    if (!workerSlotMap.has(workerSlotKey)) {
+      // Worker is free at this slot
+      workerSlotMap.set(workerSlotKey, task);
+      finalTasks.push(task);
+    } else {
+      // Worker conflict - choose which task to keep
+      const existingTask = workerSlotMap.get(workerSlotKey);
+      const existingLocked = (existingTask.isLocked || '').toString() === 'TRUE';
+      
+      if (isLocked && !existingLocked) {
+        // Replace existing with locked task
+        const existingIndex = finalTasks.findIndex(t => t === existingTask);
+        if (existingIndex !== -1) {
+          finalTasks[existingIndex] = task;
+          workerSlotMap.set(workerSlotKey, task);
+          console.log(`[VALIDATE] Worker conflict: Replaced unlocked with locked task for ${workerName} at ${day} ${time}`);
+        }
+      } else if (!isLocked && !existingLocked) {
+        // Both unlocked - clear worker from new task to avoid conflict
+        task.workerName = '';
+        task.workerId = '';
+        finalTasks.push(task);
+        console.log(`[VALIDATE] Worker conflict: Cleared worker from duplicate assignment for ${workerName} at ${day} ${time}`);
+      } else {
+        // Keep existing (locked has priority)
+        if (!isLocked) {
+          task.workerName = '';
+          task.workerId = '';
+        }
+        finalTasks.push(task);
+        console.log(`[VALIDATE] Worker conflict: Kept existing task for ${workerName} at ${day} ${time}`);
+      }
+      
+      conflicts.workerDoubleBooking.push({ 
+        worker: workerName, 
+        slot: `${day} ${time}`, 
+        reason: 'Worker double-booked' 
+      });
+    }
   });
 
-  const cleaned = [];
-
-  // Process each slot independently
-  for (const [slotKey, tasks] of slotMap.entries()) {
-    // 1) Allow multiple cars per customer, but ensure unique customer+car combinations
-    const byCustomerCar = new Map(); // customerId+carPlate -> task kept
-
-    for (const t of tasks) {
-      const cid = normalize(t.customerId);
-      const carPlate = normalize(t.carPlate || t.CarPlate || 'NOPLATE');
-      const customerCarKey = `${cid}||${carPlate}`;
-
-      if (!byCustomerCar.has(customerCarKey)) {
-        byCustomerCar.set(customerCarKey, t);
-      } else {
-        const existing = byCustomerCar.get(customerCarKey);
-        // Prefer locked task
-        const existingLocked = (existing.isLocked || '').toString() === 'TRUE';
-        const currentLocked = (t.isLocked || '').toString() === 'TRUE';
-        
-        // Log the conflict - same customer+car has multiple appointments in same slot
-        conflicts.customerDuplicates.push({ 
-          slot: slotKey, 
-          customerId: cid, 
-          carPlate: carPlate,
-          error: 'Same customer+car cannot have multiple appointments in same time slot',
-          kept: { 
-            workerId: normalize(existing.workerId), 
-            locked: existingLocked 
-          }, 
-          removed: { 
-            workerId: normalize(t.workerId)
-          } 
-        });
-        
-        // Only replace if current is locked and existing isn't
-        if (currentLocked && !existingLocked) {
-          byCustomerCar.set(customerCarKey, t);
-        }
-      }
-    }
-
-    // 2) Ensure worker not assigned twice in same slot
-    const workerSeen = new Map(); // workerId -> task
-
-    for (const [custCarKey, task] of byCustomerCar.entries()) {
-      const wid = normalize(task.workerId) || normalize(task.workerName) || '';
-      if (!wid) {
-        // unassigned task, keep as is
-        cleaned.push(task);
-        continue;
-      }
-
-      if (!workerSeen.has(wid)) {
-        workerSeen.set(wid, task);
-        cleaned.push(task);
-      } else {
-        const kept = workerSeen.get(wid);
-        // If the existing assignment with this worker is for the same customer, allow multiple car assignments
-        const existingCustomer = normalize(kept.customerId);
-        const currentCustomer = normalize(task.customerId);
-        if (existingCustomer === currentCustomer) {
-          // Same customer, different car -> allow assignment
-          cleaned.push(task);
-        } else {
-          // Worker already assigned to a different customer in same slot -> clear this task's worker fields
-          conflicts.workerDoubleBooking.push({ slot: slotKey, workerId: wid, keptCustomer: existingCustomer, removedCustomer: currentCustomer, removedCar: normalize(task.carPlate || task.CarPlate || '') });
-          // Clear assignment on the conflicting task so it becomes unassigned
-          task.workerId = '';
-          task.workerName = '';
-          // keep the task (unassigned) so it can be re-assigned later
-          cleaned.push(task);
-        }
-      }
-    }
-  }
-
   // Log conflicts for debugging
+  if (conflicts.customerDuplicates.length > 0 || conflicts.workerDoubleBooking.length > 0) {
+    console.log(`[VALIDATE] Fixed ${conflicts.customerDuplicates.length} customer duplicates and ${conflicts.workerDoubleBooking.length} worker conflicts`);
+  }
+  
   try {
-    logger.assignment({ type: 'validate-schedule', totalInput: schedule.length, totalOutput: cleaned.length, conflicts, timestamp: new Date().toISOString() });
+    logger.assignment({ type: 'validate-schedule', totalInput: schedule.length, totalOutput: finalTasks.length, conflicts, timestamp: new Date().toISOString() });
   } catch (e) { /* swallow logger errors */ }
 
-  return cleaned;
+  return finalTasks;
 }
 
 // Keep existing functions for other endpoints
@@ -901,47 +1041,71 @@ const getSchedule = async (req, res) => {
       return res.json(scheduleCache.data);
     }
     
-    const scheduledTasks = await rateLimitedApiCall(() => getScheduledTasks());
+    const scheduledTasks = await db.getScheduledTasks();
     
-    const assignments = scheduledTasks.map(task => ({
-      day: task.Day,
-      appointmentDate: task.AppointmentDate || '',
-      time: task.Time,
-      customerId: task.CustomerID,
-      customerName: task.CustomerName,
-      villa: task.Villa,
-      carPlate: task.CarPlate,
-      washType: (typeof task.WashType === 'string' && task.WashType !== '[object Promise]') ? task.WashType : 'EXT',
-      workerName: task.WorkerName,
-      workerId: task.WorkerID,
-      packageType: task.PackageType || '',
-      isLocked: task.isLocked || 'FALSE',
-      scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0],
-      status: task.Status,
-      originalWashType: task.OriginalWashType,
-      customerStatus: task.customerStatus || 'Active'
-    }));
+    // Log database column names
+    if (scheduledTasks.length > 0) {
+      console.log('[DB-COLUMNS] ScheduledTasks columns:', Object.keys(scheduledTasks[0]));
+      console.log('[DB-COLUMNS] Sample task:', scheduledTasks[0]);
+    }
+    
+    console.log('[GET-SCHEDULE] Sample raw task from DB:', scheduledTasks[0]);
+    
+    const assignments = scheduledTasks.map(task => {
+      // Normalize task first
+      const normalizedTask = normalizeTask(task);
+      
+      // Convert time format from "10:00" to "10:00 AM"
+      let formattedTime = normalizedTask.Time.toString().trim();
+      if (formattedTime && !formattedTime.includes('AM') && !formattedTime.includes('PM')) {
+        const timeParts = formattedTime.split(':');
+        if (timeParts.length >= 2) {
+          const hour = parseInt(timeParts[0]);
+          const minutes = timeParts[1];
+          if (!isNaN(hour)) {
+            if (hour >= 1 && hour <= 12) {
+              formattedTime = `${hour}:${minutes} ${hour >= 6 ? 'AM' : 'PM'}`;
+            } else if (hour === 0) {
+              formattedTime = `12:${minutes} AM`;
+            } else if (hour > 12) {
+              formattedTime = `${hour - 12}:${minutes} PM`;
+            }
+          }
+        }
+      }
+      
+      return {
+        day: normalizedTask.Day,
+        appointmentDate: normalizedTask.AppointmentDate,
+        time: formattedTime,
+        customerId: normalizedTask.CustomerID,
+        customerName: normalizedTask.CustomerName,
+        villa: normalizedTask.Villa,
+        carPlate: normalizedTask.CarPlate,
+        washType: (typeof normalizedTask.WashType === 'string' && normalizedTask.WashType !== '[object Promise]') ? normalizedTask.WashType : 'EXT',
+        workerName: normalizedTask.WorkerName,
+        workerId: normalizedTask.WorkerID,
+        packageType: normalizedTask.PackageType,
+        isLocked: normalizedTask.isLocked,
+        scheduleDate: normalizedTask.ScheduleDate,
+        status: task.Status,
+        originalWashType: task.OriginalWashType,
+        customerStatus: task.customerStatus || 'Active'
+      };
+    });
+    
+    console.log('[GET-SCHEDULE] Sample mapped assignment:', assignments[0]);
     
     // Log manual appointments for debugging
     const manualAppointments = assignments.filter(apt => apt.customerId && apt.customerId.startsWith('MANUAL_'));
     console.log(`[GET-SCHEDULE] Total assignments: ${assignments.length}`);
     console.log(`[GET-SCHEDULE] Manual appointments: ${manualAppointments.length}`);
-    if (manualAppointments.length > 0) {
-      console.log('[GET-SCHEDULE] Manual appointments found:', manualAppointments);
-    }
     
-    // Log CUST-047 appointments for debugging
-    const cust047Appointments = assignments.filter(apt => apt.customerId === 'CUST-047');
-    console.log(`[GET-SCHEDULE] CUST-047 appointments found: ${cust047Appointments.length}`);
-    if (cust047Appointments.length > 0) {
-      console.log('[GET-SCHEDULE] CUST-047 appointments:', cust047Appointments.map(apt => ({
-        day: apt.day,
-        time: apt.time,
-        villa: apt.villa,
-        carPlate: apt.carPlate,
-        washType: apt.washType,
-        workerName: apt.workerName
-      })));
+    // Check for workerId/workerName in assignments
+    const withWorkers = assignments.filter(apt => apt.workerId && apt.workerName);
+    console.log(`[GET-SCHEDULE] Tasks with workers: ${withWorkers.length}/${assignments.length}`);
+    if (withWorkers.length > 0) {
+      console.log('[GET-SCHEDULE] Sample task with worker:', withWorkers[0]);
     }
     
     const response = {
@@ -982,9 +1146,9 @@ const getAvailableWorkers = async (req, res) => {
       });
     }
     
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     const activeWorkers = workers.filter(worker => worker.Status === 'Active');
-    const existingTasks = await getScheduledTasks();
+    const existingTasks = await db.getScheduledTasks();
     
     const busyWorkers = existingTasks
       .filter(task => task.Day === day && task.Time === time)
@@ -1016,7 +1180,7 @@ const addManualAppointment = async (req, res) => {
       });
     }
     
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     const worker = workers.find(w => w.Name === workerName && w.Status === 'Active');
     
     if (!worker) {
@@ -1026,7 +1190,7 @@ const addManualAppointment = async (req, res) => {
       });
     }
     
-    const existingTasks = await getScheduledTasks();
+    const existingTasks = await db.getScheduledTasks();
     
     // Check if worker is busy with a DIFFERENT customer at this time
     const workerConflict = existingTasks.find(task => 
@@ -1076,7 +1240,7 @@ const addManualAppointment = async (req, res) => {
     };
     
     // Add appointment to the existing schedule
-    const existingSchedule = await getScheduledTasks();
+    const existingSchedule = await db.getScheduledTasks();
     const updatedSchedule = [...existingSchedule, appointment];
     
     // Save the complete updated schedule
@@ -1097,7 +1261,7 @@ const addManualAppointment = async (req, res) => {
       customerStatus: task.customerStatus || 'Active'
     }));
     
-    await clearAndWriteSheet('ScheduledTasks', formattedSchedule);
+    await db.clearAndWriteSchedule(formattedSchedule);
     
     // Clear cache after adding manual appointment
     clearScheduleCache();
@@ -1121,10 +1285,28 @@ const addManualAppointment = async (req, res) => {
 };
 
 const updateTaskAssignment = async (req, res) => {
+  console.log('\n' + '='.repeat(80));
+  console.log('🚨 [UPDATE-TASK] DRAG & DROP REQUEST RECEIVED! 🚨');
+  console.log('='.repeat(80));
+  console.log('[UPDATE-TASK] 🚀 REQUEST RECEIVED AT:', new Date().toISOString());
+  console.log('[UPDATE-TASK] 📨 Request body:', JSON.stringify(req.body, null, 2));
+  console.log('[UPDATE-TASK] 🌐 Request method:', req.method);
+  console.log('[UPDATE-TASK] 📍 Request URL:', req.url);
+  console.log('='.repeat(80) + '\n');
+  
   try {
+    
     const { taskId, newWorkerName, newWashType, isSlotSwap, sourceDay, sourceTime, targetDay, targetTime, isWashTypeOnly, keepCustomerTogether } = req.body;
     
-
+    console.log('[UPDATE-TASK] 📋 Parsed parameters:', {
+      taskId,
+      newWorkerName,
+      isSlotSwap,
+      sourceDay,
+      sourceTime,
+      targetDay,
+      targetTime
+    });
     
     if (!taskId || !newWorkerName) {
       return res.status(400).json({ 
@@ -1133,7 +1315,7 @@ const updateTaskAssignment = async (req, res) => {
       });
     }
     
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     const newWorker = workers.find(w => w.Name === newWorkerName && w.Status === 'Active');
     
     if (!newWorker) {
@@ -1143,7 +1325,7 @@ const updateTaskAssignment = async (req, res) => {
       });
     }
     
-    const existingTasks = await getScheduledTasks();
+    const existingTasks = await db.getScheduledTasks();
     
     if (isSlotSwap && sourceDay && sourceTime && targetDay && targetTime) {
 
@@ -1282,7 +1464,8 @@ const updateTaskAssignment = async (req, res) => {
         const targetDay = req.body.targetDay || sourceDay;
         const targetTime = req.body.targetTime || sourceTime;
         
-        console.log(`[DRAG-DROP] Moving ${customerId} from ${sourceDay} ${sourceTime} to ${targetDay} ${targetTime}`);
+        console.log(`[DRAG-DROP] 🚀 Moving ${customerId} from ${sourceDay} ${sourceTime} to ${targetDay} ${targetTime}`);
+        console.log(`[DRAG-DROP] 📊 Total tasks before move: ${existingTasks.length}`);
         
         // Find all customer tasks at source location
         const customerTasksToMove = existingTasks.filter(t => 
@@ -1291,7 +1474,14 @@ const updateTaskAssignment = async (req, res) => {
           (t.Time || t.time) === sourceTime
         );
         
-        console.log(`[DRAG-DROP] Found ${customerTasksToMove.length} tasks to move`);
+        console.log(`[DRAG-DROP] 📦 Found ${customerTasksToMove.length} tasks to move`);
+        console.log(`[DRAG-DROP] 📦 Tasks to move:`, customerTasksToMove.map(t => ({
+          id: t.CustomerID || t.customerId,
+          day: t.Day || t.day,
+          time: t.Time || t.time,
+          worker: t.WorkerName || t.workerName,
+          car: t.CarPlate || t.carPlate
+        })));
         
         // Remove old tasks from source location
         const tasksWithoutOld = existingTasks.filter(t => {
@@ -1301,21 +1491,38 @@ const updateTaskAssignment = async (req, res) => {
           return !isTaskToMove;
         });
         
-        console.log(`[DRAG-DROP] Removed ${existingTasks.length - tasksWithoutOld.length} old tasks`);
+        console.log(`[DRAG-DROP] ❌ Removed ${existingTasks.length - tasksWithoutOld.length} old tasks`);
+        console.log(`[DRAG-DROP] 📊 Tasks remaining after removal: ${tasksWithoutOld.length}`);
         
         // Create new tasks at target location
         const newTasks = customerTasksToMove.map(oldTask => ({
           ...oldTask,
           Day: targetDay,
+          day: targetDay,
           Time: targetTime,
+          time: targetTime,
           WorkerName: newWorkerName,
+          workerName: newWorkerName,
           WorkerID: newWorker.WorkerID,
+          workerId: newWorker.WorkerID,
           isLocked: 'TRUE'
         }));
+        
+        console.log(`[DRAG-DROP] ✅ Created ${newTasks.length} new tasks for target location`);
+        console.log(`[DRAG-DROP] ✅ New tasks:`, newTasks.map(t => ({
+          id: t.CustomerID || t.customerId,
+          day: t.Day || t.day,
+          time: t.Time || t.time,
+          worker: t.WorkerName || t.workerName,
+          car: t.CarPlate || t.carPlate
+        })));
         
         // Replace existingTasks with updated array
         existingTasks.length = 0;
         existingTasks.push(...tasksWithoutOld, ...newTasks);
+        
+        console.log(`[DRAG-DROP] 🔄 Updated existingTasks array: ${existingTasks.length} total tasks`);
+        console.log(`[DRAG-DROP] 🔄 Sample updated task:`, existingTasks.find(t => (t.CustomerID || t.customerId) === customerId));
         
         console.log(`[DRAG-DROP] Added ${newTasks.length} new tasks at target location`);
       }
@@ -1358,11 +1565,50 @@ const updateTaskAssignment = async (req, res) => {
     // Clear cache before saving
     clearScheduleCache();
     
-  // Validate updated schedule before saving
-  const validatedUpdated = validateAndFixSchedule(updatedSchedule);
-  await clearAndWriteSheet('ScheduledTasks', validatedUpdated);
+    console.log(`[UPDATE-TASK] 💾 About to save ${updatedSchedule.length} tasks to database`);
+    console.log(`[UPDATE-TASK] 📋 Sample task being saved:`, JSON.stringify(updatedSchedule[0], null, 2));
     
-    console.log(`[UPDATE-TASK] Successfully saved ${updatedSchedule.length} tasks to Google Sheets`);
+    // Validate updated schedule before saving
+    const validatedUpdated = validateAndFixSchedule(updatedSchedule);
+    console.log(`[UPDATE-TASK] ✅ After validation: ${validatedUpdated.length} tasks`);
+    
+    // Log the specific task that was moved
+    const movedTask = validatedUpdated.find(t => t.customerId === (req.body.taskId?.split('-')[0] + '-' + req.body.taskId?.split('-')[1]));
+    if (movedTask) {
+      console.log(`[UPDATE-TASK] 🎯 Found moved task in validated data:`, JSON.stringify(movedTask, null, 2));
+    }
+    
+    console.log(`[UPDATE-TASK] 🚀 Starting database write operation...`);
+    await db.clearAndWriteSchedule(validatedUpdated);
+    console.log(`[UPDATE-TASK] ✅ Database write completed successfully`);
+    
+    // Verify the data was actually saved by reading it back
+    console.log(`[UPDATE-TASK] 🔍 Verifying data was saved - reading back from database...`);
+    const savedTasks = await db.getScheduledTasks();
+    console.log(`[UPDATE-TASK] 📊 Read back ${savedTasks.length} tasks from database`);
+    
+    const verifyTask = savedTasks.find(t => (t.CustomerID || t.customerId) === (req.body.taskId?.split('-')[0] + '-' + req.body.taskId?.split('-')[1]));
+    if (verifyTask) {
+      console.log(`[UPDATE-TASK] ✅ Verified moved task exists in database:`, JSON.stringify({
+        CustomerID: verifyTask.CustomerID,
+        Day: verifyTask.Day,
+        Time: verifyTask.Time,
+        WorkerName: verifyTask.WorkerName,
+        CarPlate: verifyTask.CarPlate,
+        isLocked: verifyTask.isLocked
+      }, null, 2));
+    } else {
+      console.log(`[UPDATE-TASK] ❌ ERROR: Moved task NOT FOUND in database after save!`);
+    }
+    
+    console.log(`[UPDATE-TASK] 🎉 Task update completed successfully`);
+    
+    // Force clear cache to ensure fresh data
+    clearScheduleCache();
+    
+    console.log('\n' + '='.repeat(80));
+    console.log('✅ [UPDATE-TASK] DRAG & DROP COMPLETED SUCCESSFULLY! ✅');
+    console.log('='.repeat(80) + '\n');
     
     res.json({
       success: true,
@@ -1370,7 +1616,8 @@ const updateTaskAssignment = async (req, res) => {
     });
     
   } catch (error) {
-
+    console.error('[UPDATE-TASK] ❌ CRITICAL ERROR:', error);
+    console.error('[UPDATE-TASK] ❌ Stack trace:', error.stack);
     res.status(500).json({ success: false, error: error.message, stack: error.stack });
   }
 };
@@ -1391,7 +1638,7 @@ const getCachedWashRules = async () => {
     return washRulesCache.data;
   }
   
-  const washRulesData = await getSheetData('WashRules');
+  const washRulesData = await db.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
   washRulesCache = {
     data: washRulesData || [],
     timestamp: now,
@@ -1406,7 +1653,7 @@ async function calculateHistoryBasedWashType(customer, carPlate, allHistory, vis
     const packageType = customer.Washman_Package || '';
     const customerId = customer.CustomerID;
     
-    // Load wash rules from cache
+    // Load wash rules from database
     const washRulesData = await getCachedWashRules();
     if (!washRulesData || washRulesData.length === 0) {
       return 'EXT';
@@ -1778,16 +2025,18 @@ function getCurrentWeekStart(weekOffset) {
   const today = new Date();
   const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
   
-  // Calculate days to subtract to get to Monday
-  let daysToMonday;
-  if (currentDay === 0) { // Sunday
-    daysToMonday = 6; // Go back 6 days to get Monday
-  } else {
-    daysToMonday = currentDay - 1; // Go back to Monday
+  // Find Monday of current week
+  let mondayOfWeek = new Date(today);
+  if (currentDay === 0) { // Sunday - go to next Monday
+    mondayOfWeek.setDate(today.getDate() + 1);
+  } else if (currentDay === 1) { // Monday
+    // Already Monday
+  } else { // Tuesday-Saturday - go back to Monday
+    mondayOfWeek.setDate(today.getDate() - currentDay + 1);
   }
   
-  const mondayOfWeek = new Date(today);
-  mondayOfWeek.setDate(today.getDate() - daysToMonday + (weekOffset * 7));
+  // Add week offset
+  mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
   mondayOfWeek.setHours(0, 0, 0, 0);
   
   return mondayOfWeek;
@@ -1859,7 +2108,7 @@ const deleteTask = async (req, res) => {
       });
     }
     
-    const existingTasks = await getScheduledTasks();
+    const existingTasks = await db.getScheduledTasks();
     
     console.log(`[DELETE-TASK] Attempting to delete: ${taskId}`);
     console.log(`[DELETE-TASK] Total tasks before deletion: ${existingTasks.length}`);
@@ -1906,7 +2155,7 @@ const deleteTask = async (req, res) => {
       scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
     }));
     
-    await clearAndWriteSheet('ScheduledTasks', formattedTasks);
+    await db.clearAndWriteSchedule(formattedTasks);
     clearScheduleCache();
     
     console.log(`[DELETE-TASK] Successfully deleted task: ${taskId}`);
@@ -1927,16 +2176,16 @@ const syncNewCustomers = async (req, res) => {
     const { weekOffset = 0 } = req.body;
     
     // Get existing schedule
-    const existingTasks = await getScheduledTasks();
+    const existingTasks = await db.getScheduledTasks();
     const existingCustomerIds = new Set(existingTasks.map(task => task.CustomerID));
     
     console.log(`[SYNC-NEW] Existing customer IDs in schedule: ${Array.from(existingCustomerIds).join(', ')}`);
     
     // Get all customers from database
     const [customers, workers, allHistory] = await Promise.all([
-      getCustomers(),
-      getWorkers(),
-      getAllHistory()
+      db.getCustomers(),
+      db.getWorkers(),
+      db.getAllHistory()
     ]);
     
     console.log(`[SYNC-NEW] Total customers in database: ${customers.length}`);
@@ -1975,68 +2224,72 @@ const syncNewCustomers = async (req, res) => {
       console.log(`[SYNC-NEW] CUST-047 NOT FOUND in database!`);
     }
     
-    // Find new customers not in existing schedule OR customers with incomplete appointments
+    // Filter existing customer IDs for the target week only
+    const targetWeekStart = getCurrentWeekStart(weekOffset);
+    const targetWeekEnd = getCurrentWeekEnd(weekOffset);
+    
+    const weeklyExistingCustomerIds = new Set(
+      existingTasks
+        .filter(task => {
+          if (!task.AppointmentDate) return false;
+          const taskDate = new Date(task.AppointmentDate);
+          return taskDate >= targetWeekStart && taskDate <= targetWeekEnd;
+        })
+        .map(task => task.CustomerID)
+    );
+    
+    console.log(`[SYNC-NEW] Week ${weekOffset} existing customer IDs: ${Array.from(weeklyExistingCustomerIds).join(', ')}`);
+    
+    // Find new customers not in existing schedule for this specific week
     const newCustomers = [];
     
     for (const customer of activeCustomers) {
-      if (customer.CustomerID === 'CUST-047') {
-        console.log(`[SYNC-NEW] Processing CUST-047:`);
-        console.log(`[SYNC-NEW] - Is in existing schedule: ${existingCustomerIds.has(customer.CustomerID)}`);
-        
-        if (!existingCustomerIds.has(customer.CustomerID)) {
-          console.log(`[SYNC-NEW] - CUST-047 is completely new, adding to newCustomers`);
-        } else {
-          const customerTasks = existingTasks.filter(task => task.CustomerID === customer.CustomerID);
-          console.log(`[SYNC-NEW] - CUST-047 existing tasks: ${customerTasks.length}`);
-          
-          const expectedAppointments = await generateAllAppointments([customer], allHistory, weekOffset, false);
-          const expectedCount = expectedAppointments.appointments ? expectedAppointments.appointments.length : expectedAppointments.length;
-          console.log(`[SYNC-NEW] - CUST-047 expected appointments: ${expectedCount}`);
-          
-          if (customerTasks.length < expectedCount) {
-            console.log(`[SYNC-NEW] - CUST-047 has incomplete appointments, adding to newCustomers`);
-          } else {
-            console.log(`[SYNC-NEW] - CUST-047 has complete appointments, skipping`);
-          }
-        }
-      }
-      
-      if (!existingCustomerIds.has(customer.CustomerID)) {
-        // Completely new customer
+      if (!weeklyExistingCustomerIds.has(customer.CustomerID)) {
+        // Customer has no appointments for this week
         newCustomers.push(customer);
-        console.log(`[SYNC-NEW] Found new customer: ${customer.CustomerID}`);
+        console.log(`[SYNC-NEW] Found customer needing appointments for week ${weekOffset}: ${customer.CustomerID}`);
       } else {
-        // Check if customer has incomplete appointments (missing some days/times)
-        const customerTasks = existingTasks.filter(task => task.CustomerID === customer.CustomerID);
+        // Customer has some appointments - check if they're complete
+        const customerWeekTasks = existingTasks.filter(task => {
+          if (task.CustomerID !== customer.CustomerID) return false;
+          if (!task.AppointmentDate) return false;
+          const taskDate = new Date(task.AppointmentDate);
+          return taskDate >= targetWeekStart && taskDate <= targetWeekEnd;
+        });
+        
         const expectedAppointments = await generateAllAppointments([customer], allHistory, weekOffset, false);
         const expectedCount = expectedAppointments.appointments ? expectedAppointments.appointments.length : expectedAppointments.length;
         
-        if (customerTasks.length < expectedCount) {
-          console.log(`[SYNC-NEW] Customer ${customer.CustomerID} has incomplete appointments: ${customerTasks.length}/${expectedCount}`);
+        if (customerWeekTasks.length < expectedCount) {
+          console.log(`[SYNC-NEW] Customer ${customer.CustomerID} has incomplete appointments for week ${weekOffset}: ${customerWeekTasks.length}/${expectedCount}`);
           newCustomers.push(customer);
+        } else {
+          console.log(`[SYNC-NEW] Customer ${customer.CustomerID} has complete appointments for week ${weekOffset}: ${customerWeekTasks.length}/${expectedCount}`);
         }
       }
     }
     
-    console.log(`[SYNC-NEW] New customers found: ${newCustomers.length}`);
+    console.log(`[SYNC-NEW] Customers needing appointments for week ${weekOffset}: ${newCustomers.length}`);
     if (newCustomers.length > 0) {
-      console.log(`[SYNC-NEW] New customer IDs: ${newCustomers.map(c => c.CustomerID).join(', ')}`);
-      console.log(`[SYNC-NEW] New customers details:`, newCustomers.map(c => ({ id: c.CustomerID, name: c.Name, villa: c.Villa, status: c.Status })));
+      console.log(`[SYNC-NEW] Customer IDs needing appointments: ${newCustomers.map(c => c.CustomerID).join(', ')}`);
+      console.log(`[SYNC-NEW] Customer details:`, newCustomers.map(c => ({ id: c.CustomerID, name: c.Name, villa: c.Villa, status: c.Status })));
     } else {
-      console.log(`[SYNC-NEW] No new customers found. All active customers are already in schedule.`);
-      // Show which customers are already in schedule
+      console.log(`[SYNC-NEW] No customers need new appointments for week ${weekOffset}. All active customers already have complete schedules.`);
+      // Show which customers are already scheduled for this week
       const activeCustomerIds = activeCustomers.map(c => c.CustomerID);
-      const alreadyInSchedule = activeCustomerIds.filter(id => existingCustomerIds.has(id));
-      console.log(`[SYNC-NEW] Active customers already in schedule: ${alreadyInSchedule.join(', ')}`);
+      const alreadyScheduledThisWeek = activeCustomerIds.filter(id => weeklyExistingCustomerIds.has(id));
+      console.log(`[SYNC-NEW] Active customers already scheduled for week ${weekOffset}: ${alreadyScheduledThisWeek.join(', ')}`);
     }
     
     if (newCustomers.length === 0) {
       return res.json({
         success: true,
-        message: 'No new customers found',
+        message: `No customers need new appointments for week ${weekOffset > 0 ? '+' : ''}${weekOffset}`,
         newCustomersCount: 0,
         newCustomers: [],
-        assignments: existingTasks.map(formatExistingTask)
+        assignments: existingTasks.map(formatExistingTask),
+        weekOffset,
+        customersAlreadyScheduled: weeklyExistingCustomerIds.size
       });
     }
     
@@ -2077,7 +2330,7 @@ const syncNewCustomers = async (req, res) => {
     
   // Validate combined schedule before saving when syncing new customers
   const validatedCombined = validateAndFixSchedule(scheduleForSaving);
-  await clearAndWriteSheet('ScheduledTasks', validatedCombined);
+  await db.clearAndWriteSchedule(validatedCombined);
     clearScheduleCache();
     
     // Count actual new customers added (from original newCustomers list)
@@ -2119,9 +2372,40 @@ function formatExistingTask(task) {
   };
 }
 
+// Helper function to normalize task fields
+const normalizeTask = (task) => {
+  return {
+    CustomerID: task.CustomerID || task.customerId,
+    Day: task.Day || task.day,
+    Time: task.Time || task.time,
+    CarPlate: task.CarPlate || task.carPlate || '',
+    WashType: task.WashType || task.washType || 'EXT',
+    WorkerName: task.WorkerName || task.workerName || '',
+    WorkerID: task.WorkerID || task.workerId || '',
+    CustomerName: task.CustomerName || task.customerName,
+    Villa: task.Villa || task.villa,
+    PackageType: task.PackageType || task.packageType || '',
+    AppointmentDate: task.AppointmentDate || task.appointmentDate || '',
+    isLocked: task.isLocked || 'FALSE',
+    ScheduleDate: task.ScheduleDate || task.scheduleDate || new Date().toISOString().split('T')[0]
+  };
+};
+
 const batchUpdateTasks = async (req, res) => {
+  console.log('\n' + '='.repeat(50));
+  console.log('🚀 [BATCH-UPDATE] FUNCTION ENTRY POINT!');
+  console.log('='.repeat(50));
+  console.log('🚀 [BATCH-UPDATE] Function called!');
+  console.log('🚀 [BATCH-UPDATE] Request method:', req.method);
+  console.log('🚀 [BATCH-UPDATE] Request URL:', req.url);
+  console.log('🚀 [BATCH-UPDATE] Request body:', JSON.stringify(req.body, null, 2));
   try {
     const { changes } = req.body;
+    
+    console.log('[BATCH-UPDATE] Received changes:', JSON.stringify(changes, null, 2));
+    console.log('[BATCH-UPDATE] Request headers:', req.headers);
+    console.log('[BATCH-UPDATE] Request method:', req.method);
+    console.log('[BATCH-UPDATE] Request URL:', req.url);
     
     if (!changes || !Array.isArray(changes) || changes.length === 0) {
       return res.status(400).json({ 
@@ -2130,8 +2414,8 @@ const batchUpdateTasks = async (req, res) => {
       });
     }
     
-    const existingTasks = await getScheduledTasks();
-    let updatedTasks = [...existingTasks];
+    const existingTasks = await db.getScheduledTasks();
+    let updatedTasks = existingTasks.map(normalizeTask);
     let processedChanges = 0;
     
     // Process each change
@@ -2146,170 +2430,187 @@ const batchUpdateTasks = async (req, res) => {
         const carPlate = taskIdParts.slice(4).join('-') || '';
         
         const taskIndex = updatedTasks.findIndex(task => 
-          (task.CustomerID || task.customerId) === customerId &&
-          (task.Day || task.day) === day &&
-          ((task.CarPlate || task.carPlate) || 'NOPLATE') === (carPlate === 'NOPLATE' ? '' : carPlate)
+          task.CustomerID === customerId &&
+          task.Day === day &&
+          (task.CarPlate || 'NOPLATE') === (carPlate === 'NOPLATE' ? '' : carPlate)
         );
         
         if (taskIndex !== -1) {
-          if (updatedTasks[taskIndex].WashType !== undefined) {
-            updatedTasks[taskIndex].WashType = newWashType;
-            updatedTasks[taskIndex].isLocked = 'TRUE';
-          } else {
-            updatedTasks[taskIndex].washType = newWashType;
-            updatedTasks[taskIndex].isLocked = 'TRUE';
-          }
+          updatedTasks[taskIndex].WashType = newWashType;
+          updatedTasks[taskIndex].isLocked = 'TRUE';
           processedChanges++;
+          console.log(`[BATCH-UPDATE] Updated wash type for ${customerId} to ${newWashType}`);
+        } else {
+          console.log(`[BATCH-UPDATE] Task not found for wash type change: ${customerId}-${day}-${carPlate}`);
         }
       } 
       else if (type === 'dragDrop') {
-        // Handle drag and drop change
-        const workers = await getWorkers();
+        console.log(`[BATCH-UPDATE] Processing worker change for ${taskId}`);
+        console.log(`[BATCH-UPDATE] Change details:`, change);
+        
+        const workers = await db.getWorkers();
         const newWorker = workers.find(w => w.Name === newWorkerName && w.Status === 'Active');
         
         if (!newWorker) {
+          console.log(`[BATCH-UPDATE] Target worker ${newWorkerName} not found, skipping`);
           continue;
         }
         
         const taskIdParts = taskId.split('-');
         const customerId = `${taskIdParts[0]}-${taskIdParts[1]}`;
+        const day = taskIdParts[2];
+        const carPlate = taskIdParts.slice(4).join('-') || '';
         
-        if (isSlotSwap && sourceDay && sourceTime && targetDay && targetTime) {
-          // Handle slot swap
-          const sourceWorkerName = updatedTasks.find(t => 
-            (t.CustomerID || t.customerId) === customerId &&
-            (t.Day || t.day) === sourceDay &&
-            (t.Time || t.time) === sourceTime
-          )?.WorkerName || updatedTasks.find(t => 
-            (t.CustomerID || t.customerId) === customerId &&
-            (t.Day || t.day) === sourceDay &&
-            (t.Time || t.time) === sourceTime
-          )?.workerName;
+        console.log(`[BATCH-UPDATE] Changing worker for ${customerId} (${carPlate}) to ${newWorker.Name}`);
+        console.log(`[BATCH-UPDATE] Looking for task with: CustomerID=${customerId}, Day=${day}, CarPlate=${carPlate}`);
+        console.log(`[BATCH-UPDATE] Total tasks to search: ${updatedTasks.length}`);
+        
+        // Log first few tasks for debugging
+        console.log(`[BATCH-UPDATE] Sample tasks:`);
+        updatedTasks.slice(0, 3).forEach((task, i) => {
+          console.log(`[BATCH-UPDATE] Task ${i}: CustomerID=${task.CustomerID}, Day=${task.Day}, CarPlate=${task.CarPlate || 'EMPTY'}`);
+        });
+        
+        // Find and update the specific task
+        const taskIndex = updatedTasks.findIndex(task => 
+          task.CustomerID === customerId &&
+          task.Day === day &&
+          (task.CarPlate || 'NOPLATE') === (carPlate === 'NOPLATE' ? '' : carPlate)
+        );
+        
+        console.log(`[BATCH-UPDATE] Task search result: index=${taskIndex}`);
+        
+        if (taskIndex !== -1) {
+          console.log(`[BATCH-UPDATE] Found task at index ${taskIndex}, updating worker`);
+          updatedTasks[taskIndex].WorkerName = newWorker.Name;
+          updatedTasks[taskIndex].WorkerID = newWorker.WorkerID;
+          updatedTasks[taskIndex].isLocked = 'TRUE';
           
-          const sourceWorker = workers.find(w => w.Name === sourceWorkerName);
-          
-          updatedTasks.forEach(task => {
-            const taskWorkerName = task.WorkerName || task.workerName;
-            const taskDay = task.Day || task.day;
-            const taskTime = task.Time || task.time;
-            
-            // Swap source slot tasks to target worker
-            if (taskWorkerName === sourceWorkerName && 
-                taskDay === sourceDay && 
-                taskTime === sourceTime) {
-              if (task.WorkerName !== undefined) {
-                task.WorkerName = newWorkerName;
-                task.WorkerID = newWorker.WorkerID;
-                task.isLocked = 'TRUE';
-              } else {
-                task.workerName = newWorkerName;
-                task.workerId = newWorker.WorkerID;
-                task.isLocked = 'TRUE';
-              }
-            }
-            // Swap target slot tasks to source worker
-            else if (taskWorkerName === newWorkerName && 
-                     taskDay === targetDay && 
-                     taskTime === targetTime) {
-              if (task.WorkerName !== undefined) {
-                task.WorkerName = sourceWorkerName;
-                task.WorkerID = sourceWorker?.WorkerID || '';
-                task.isLocked = 'TRUE';
-              } else {
-                task.workerName = sourceWorkerName;
-                task.workerId = sourceWorker?.WorkerID || '';
-                task.isLocked = 'TRUE';
-              }
-            }
-          });
-        } else {
-          // Handle simple drag and drop
-          const sourceDay = change.sourceDay || taskIdParts[2];
-          const sourceTime = change.sourceTime || taskIdParts[3];
-          const targetDay = change.targetDay || sourceDay;
-          const targetTime = change.targetTime || sourceTime;
-          
-          console.log(`[BATCH-UPDATE] Moving ${customerId} from ${sourceDay} ${sourceTime} to ${targetDay} ${targetTime}`);
-          
-          // Remove old tasks from source location
-          const tasksToMove = updatedTasks.filter(task => 
-            (task.CustomerID || task.customerId) === customerId &&
-            (task.Day || task.day) === sourceDay &&
-            (task.Time || task.time) === sourceTime
+          // For multi-car customers, assign same worker to ALL cars
+          const allCustomerTasks = updatedTasks.filter(t => 
+            t.CustomerID === customerId && t.Day === day
           );
           
-          // Remove old tasks
-          updatedTasks = updatedTasks.filter(task => {
-            const isTaskToMove = (task.CustomerID || task.customerId) === customerId &&
-                                (task.Day || task.day) === sourceDay &&
-                                (task.Time || task.time) === sourceTime;
-            return !isTaskToMove;
-          });
+          if (allCustomerTasks.length > 1) {
+            console.log(`[MULTI-CAR-FIX] Found ${allCustomerTasks.length} cars for customer ${customerId}, assigning same worker`);
+            allCustomerTasks.forEach(t => {
+              t.WorkerName = newWorker.Name;
+              t.WorkerID = newWorker.WorkerID;
+              t.isLocked = 'TRUE';
+            });
+          }
           
-          // Create new tasks at target location
-          const newTasks = tasksToMove.map(oldTask => {
-            if (oldTask.WorkerName !== undefined) {
-              return {
-                ...oldTask,
-                WorkerName: newWorkerName,
-                WorkerID: newWorker.WorkerID,
-                Day: targetDay,
-                Time: targetTime,
-                isLocked: 'TRUE'
-              };
-            } else {
-              return {
-                ...oldTask,
-                workerName: newWorkerName,
-                workerId: newWorker.WorkerID,
-                day: targetDay,
-                time: targetTime,
-                isLocked: 'TRUE'
-              };
+          // Fix time format to match new appointments (add AM/PM if missing)
+          let currentTime = updatedTasks[taskIndex].Time;
+          if (currentTime && !currentTime.includes('AM') && !currentTime.includes('PM')) {
+            const timeParts = currentTime.split(':');
+            if (timeParts.length >= 2) {
+              const hour = parseInt(timeParts[0]);
+              const minutes = timeParts[1];
+              if (!isNaN(hour)) {
+                if (hour >= 6 && hour <= 11) {
+                  updatedTasks[taskIndex].Time = `${hour}:${minutes} AM`;
+                } else if (hour === 12) {
+                  updatedTasks[taskIndex].Time = `${hour}:${minutes} PM`;
+                } else if (hour >= 13 && hour <= 23) {
+                  updatedTasks[taskIndex].Time = `${hour - 12}:${minutes} PM`;
+                } else if (hour >= 1 && hour <= 5) {
+                  updatedTasks[taskIndex].Time = `${hour}:${minutes} PM`;
+                }
+              }
             }
-          });
-          
-          // Add new tasks
-          updatedTasks.push(...newTasks);
-          
-          console.log(`[BATCH-UPDATE] Moved ${tasksToMove.length} tasks from ${sourceDay} ${sourceTime} to ${targetDay} ${targetTime}`);
+          }
+          processedChanges++;
+          console.log(`[BATCH-UPDATE] ✅ Updated worker for ${customerId} to ${newWorker.Name}`);
+        } else {
+          console.log(`[BATCH-UPDATE] ❌ Task not found for ${customerId}-${day}-${carPlate}`);
         }
-        processedChanges++;
       }
     }
     
-    // Remove duplicates before saving
+    // Enhanced duplicate removal - keep all unique customer+car+slot combinations
     const uniqueTasks = [];
     const seenKeys = new Set();
+    
     updatedTasks.forEach(task => {
-      const key = `${task.CustomerID || task.customerId}-${task.Day || task.day}-${task.Time || task.time}-${(task.CarPlate || task.carPlate) || 'NOPLATE'}`;
+      // IMPORTANT: Include car plate to allow multiple cars per customer per slot
+      const key = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || ''}`;
+      
       if (!seenKeys.has(key)) {
         seenKeys.add(key);
         uniqueTasks.push(task);
+      } else {
+        console.log(`[BATCH-UPDATE] Removing duplicate task: ${key}`);
       }
     });
     
-    // Save all changes to Google Sheets
+    // Save all changes to database - use normalized format
     const formattedTasks = uniqueTasks.map(task => ({
-      day: task.Day || task.day,
-      appointmentDate: task.AppointmentDate || task.appointmentDate || '',
-      time: task.Time || task.time,
-      customerId: task.CustomerID || task.customerId,
-      customerName: task.CustomerName || task.customerName,
-      villa: task.Villa || task.villa,
-      carPlate: (task.CarPlate || task.carPlate) || '',
-      washType: (task.WashType || task.washType) || 'EXT',
-      workerName: (task.WorkerName || task.workerName) || '',
-      workerId: (task.WorkerID || task.workerId) || '',
-      packageType: (task.PackageType || task.packageType) || '',
-      isLocked: task.isLocked || 'FALSE',
-      scheduleDate: (task.ScheduleDate || task.scheduleDate) || new Date().toISOString().split('T')[0],
+      day: task.Day,
+      appointmentDate: task.AppointmentDate,
+      time: task.Time,
+      customerId: task.CustomerID,
+      customerName: task.CustomerName,
+      villa: task.Villa,
+      carPlate: task.CarPlate,
+      washType: task.WashType,
+      workerName: task.WorkerName,
+      workerId: task.WorkerID,
+      packageType: task.PackageType,
+      isLocked: task.isLocked,
+      scheduleDate: task.ScheduleDate,
       customerStatus: task.customerStatus || 'Active'
     }));
     
     console.log(`[BATCH-UPDATE] Removed ${updatedTasks.length - uniqueTasks.length} duplicate tasks before saving`);
+    console.log(`[BATCH-UPDATE] Saving ${formattedTasks.length} tasks to database`);
     
-    await clearAndWriteSheet('ScheduledTasks', formattedTasks);
+    // Log sample task being saved
+    if (formattedTasks.length > 0) {
+      console.log(`[BATCH-UPDATE] Sample task being saved:`, JSON.stringify(formattedTasks[0], null, 2));
+    }
+    
+    await db.clearAndWriteSchedule(formattedTasks);
+    console.log(`[BATCH-UPDATE] Successfully saved to database`);
+    
+    // Clear cache to ensure fresh data
+    clearScheduleCache();
+    
+    // Force a small delay to ensure database write is complete
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    // Verify save by reading back
+    const verifyTasks = await db.getScheduledTasks();
+    console.log(`[BATCH-UPDATE] Verification: Read back ${verifyTasks.length} tasks from database`);
+    
+    // Check for any duplicates in saved data
+    const duplicateCheck = new Map();
+    let duplicatesFound = 0;
+    verifyTasks.forEach(task => {
+      const key = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
+      if (duplicateCheck.has(key)) {
+        duplicatesFound++;
+        console.log(`[BATCH-UPDATE] WARNING: Duplicate found in database: ${key}`);
+      } else {
+        duplicateCheck.set(key, true);
+      }
+    });
+    
+    if (duplicatesFound > 0) {
+      console.log(`[BATCH-UPDATE] WARNING: ${duplicatesFound} duplicates found in database after save!`);
+    }
+    
+    // Check if our changes are actually there
+    const changedTaskIds = changes.map(c => c.taskId);
+    const foundChanges = verifyTasks.filter(task => {
+      const taskId = `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate || 'NOPLATE'}`;
+      return changedTaskIds.includes(taskId);
+    });
+    console.log(`[BATCH-UPDATE] Found ${foundChanges.length} of ${changedTaskIds.length} changed tasks in database`);
+    
+    if (foundChanges.length > 0) {
+      console.log(`[BATCH-UPDATE] Sample verified task:`, JSON.stringify(foundChanges[0], null, 2));
+    }
     
     // Clear cache after update
     clearScheduleCache();
@@ -2343,10 +2644,11 @@ const getWashHistory = async (req, res) => {
       });
     }
     
-    const allHistory = await getAllHistory();
+    const allHistory = await db.getAllHistory();
     
     // Filter history for this customer and sort by date (newest first)
-    const customerHistory = allHistory
+   
+ const customerHistory = allHistory
       .filter(record => record.CustomerID === customerId)
       .sort((a, b) => {
         const parseDate = (dateStr) => {
@@ -2385,6 +2687,29 @@ const getWashHistory = async (req, res) => {
   }
 };
 
+const clearAllScheduleData = async (req, res) => {
+  try {
+    console.log('[CLEAR-ALL] Starting to clear all schedule data...');
+    
+    // Clear the schedule database
+    await db.clearAndWriteSchedule([]);
+    
+    // Clear cache
+    clearScheduleCache();
+    
+    console.log('[CLEAR-ALL] All schedule data cleared successfully');
+    
+    res.json({
+      success: true,
+      message: 'All schedule data cleared successfully'
+    });
+    
+  } catch (error) {
+    console.error('[CLEAR-ALL] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = { 
   autoAssignSchedule, 
   getSchedule,
@@ -2395,6 +2720,7 @@ module.exports = {
   batchUpdateTasks,
   syncNewCustomers,
   getWashHistory,
+  clearAllScheduleData,
   clearScheduleCache
 };
 // Export validator for external use (dry-run validation)

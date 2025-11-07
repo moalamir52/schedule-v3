@@ -1,5 +1,26 @@
-const { clearAndWriteSheet } = require('../../services/googleSheetsService');
-const { getSheetData } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
+
+// Helper functions
+const getSheetData = async (sheetName) => {
+  if (sheetName === 'WashRules') {
+    return await db.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+  }
+  return [];
+};
+
+const clearAndWriteSheet = async (sheetName, data) => {
+  if (sheetName === 'WashRules') {
+    // Clear existing rules
+    await db.run('DELETE FROM WashRules');
+    // Insert new rules
+    for (const rule of data) {
+      await db.run(
+        'INSERT INTO WashRules (RuleId, RuleName, SingleCarPattern, MultiCarSettings, BiWeeklySettings, CreatedDate, Status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [rule.RuleId, rule.RuleName, rule.SingleCarPattern, rule.MultiCarSettings, rule.BiWeeklySettings, rule.CreatedDate, rule.Status]
+      );
+    }
+  }
+};
 
 const getWashRules = async (req, res) => {
   try {

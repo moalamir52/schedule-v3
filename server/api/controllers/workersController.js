@@ -1,8 +1,8 @@
-const { getWorkers, addWorkerToSheet, deleteWorkerFromSheet } = require('../../services/googleSheetsService');
+const db = require('../../services/databaseService');
 
 const getWorkersAPI = async (req, res) => {
   try {
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     res.json(workers);
   } catch (error) {
     console.error('Error getting workers:', error);
@@ -21,7 +21,7 @@ const addWorker = async (req, res) => {
     }
 
     console.log('[CONTROLLER] Getting existing workers...');
-    const workers = await getWorkers();
+    const workers = await db.getWorkers();
     console.log('[CONTROLLER] Found', workers.length, 'existing workers');
     
     // Check if worker already exists
@@ -52,8 +52,8 @@ const addWorker = async (req, res) => {
     };
     
     console.log('[CONTROLLER] New worker object:', newWorker);
-    console.log('[CONTROLLER] Calling addWorkerToSheet...');
-    await addWorkerToSheet(newWorker);
+    console.log('[CONTROLLER] Calling addWorker...');
+    await db.addWorker(newWorker);
     console.log('[CONTROLLER] Worker added successfully!');
     
     res.json({ success: true, worker: newWorker, message: 'Worker added successfully' });
@@ -71,7 +71,7 @@ const deleteWorker = async (req, res) => {
       return res.status(400).json({ error: 'Worker name is required' });
     }
 
-    await deleteWorkerFromSheet(name);
+    await db.deleteWorker(name);
     
     res.json({ success: true, message: 'Worker deleted successfully' });
   } catch (error) {

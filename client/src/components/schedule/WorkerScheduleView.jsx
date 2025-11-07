@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../Modal';
 import WeekPatternModal from './WeekPatternModal';
 
-const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate, onCustomerFilter, customerFilter, currentWeekOffset = 0 }) => {
+const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate, onCustomerFilter, customerFilter, currentWeekOffset = 0 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
   const [showOverrideMenu, setShowOverrideMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null });
   const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
-  const [pendingChanges, setPendingChanges] = useState([]);
-  const [isSaving, setIsSaving] = useState(false);
+
   const [weekPatternModal, setWeekPatternModal] = useState({ isOpen: false, customerInfo: null, changedAppointment: null, weekAppointments: [] });
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -46,65 +45,43 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
   }, [currentWeekOffset]);
   // --- END OF REFACTORED DATE CALCULATION ---
 
-  // Save all pending changes to server
-  const saveToServer = async () => {
-    if (pendingChanges.length === 0) {
-      alert('No changes to save!');
-      return;
-    }
-    
 
-    setIsSaving(true);
-    
-    try {
-      // Send all changes in one batch
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
-          'X-User-Name': localStorage.getItem('userName') || 'Web User'
-        },
-        body: JSON.stringify({ changes: pendingChanges })
-      });
-      
-
-      
-      if (!response.ok) {
-        const data = await response.json();
-
-        throw new Error(data.error || 'Failed to save changes');
-      }
-      
-      const responseData = await response.json();
-
-      
-      // Clear pending changes
-      setPendingChanges([]);
-      
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'Success',
-        message: `Successfully saved ${pendingChanges.length} changes to server!`
-      });
-      
-    } catch (error) {
-      setModal({
-        isOpen: true,
-        type: 'error',
-        title: 'Error',
-        message: `Error saving changes: ${error.message}`
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
   
 
   
   // Auto-refresh disabled for better performance - use manual refresh button instead
   
+  // Memoize appointment lookup to prevent redundant filtering
+  const appointmentLookup = useMemo(() => {
+    if (!assignedSchedule || assignedSchedule.length === 0) {
+      return {};
+    }
+    const lookup = {};
+    assignedSchedule.forEach(appointment => {
+      const key = `${appointment.workerId}-${appointment.day}-${appointment.time}`;
+      if (!lookup[key]) {
+        lookup[key] = [];
+      }
+      lookup[key].push(appointment);
+    });
+    return lookup;
+  }, [assignedSchedule]);
+
+  const getAppointmentsForWorkerDayTime = useCallback((workerId, day, time) => {
+    const key = `${workerId}-${day}-${time}`;
+    return appointmentLookup[key] || [];
+  }, [appointmentLookup]);
+
+  const handleDragStart = useCallback((e, customerId, day, time, workerId) => {
+    const dragData = { customerId, day, time, workerId };
+    setDraggedItem(dragData);
+    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
+  }, []);
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault();
+  }, []);
+
   // Close override menu when clicking outside
   React.useEffect(() => {
     const handleClickOutside = () => {
@@ -117,7 +94,17 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     }
   }, [showOverrideMenu]);
   
-  if (!workers || workers.length === 0) {
+  // Sort workers by WorkerID to ensure consistent order
+  const sortedWorkers = useMemo(() => {
+    if (!workers || workers.length === 0) return [];
+    return [...workers].sort((a, b) => {
+      const idA = a.WorkerID || a.Name;
+      const idB = b.WorkerID || b.Name;
+      return idA.localeCompare(idB);
+    });
+  }, [workers]);
+  
+  if (!sortedWorkers || sortedWorkers.length === 0) {
     return <div className="text-center" style={{ padding: '2rem', color: '#666' }}>Loading workers...</div>;
   }
   
@@ -129,27 +116,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       </div>
     );
   }
-
-  const getAppointmentsForWorkerDayTime = (workerId, day, time) => {
-    const appointments = assignedSchedule.filter(appointment => 
-      appointment.workerId === workerId && 
-      appointment.day === day && 
-      appointment.time === time
-    );
-    
-
-    return appointments;
-  };
-
-  const handleDragStart = (e, customerId, day, time, workerId) => {
-    const dragData = { customerId, day, time, workerId };
-    setDraggedItem(dragData);
-    e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-  };
 
   const handleOverrideClick = (e, appointment) => {
     e.stopPropagation();
@@ -169,6 +135,75 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       setMenuPosition({ x, y: rect.top });
       setShowOverrideMenu(taskId);
     }
+  };
+
+  const handleWorkerChange = async (appointment, newWorkerName) => {
+    console.log('🔧 [WORKER-CHANGE] Starting worker change...');
+    console.log('🔧 [WORKER-CHANGE] Appointment:', appointment);
+    console.log('🔧 [WORKER-CHANGE] New worker:', newWorkerName);
+    
+    const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
+    console.log('🔧 [WORKER-CHANGE] Task ID:', taskId);
+    
+    // Update UI immediately
+    if (onScheduleUpdate) {
+      console.log('🔧 [WORKER-CHANGE] Updating UI...');
+      const updatedSchedule = assignedSchedule.map(task => 
+        `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+          ? { ...task, workerName: newWorkerName, isLocked: 'TRUE' }
+          : task
+      );
+      onScheduleUpdate(updatedSchedule);
+      console.log('🔧 [WORKER-CHANGE] UI updated');
+    }
+    
+    // Save immediately to server using batch update
+    try {
+      const changeData = {
+        type: 'dragDrop',
+        taskId,
+        newWorkerName,
+        sourceDay: appointment.day,
+        sourceTime: appointment.time,
+        targetDay: appointment.day,
+        targetTime: appointment.time,
+        isSlotSwap: false,
+        timestamp: Date.now()
+      };
+      
+      console.log('🔧 [WORKER-CHANGE] Sending request with data:', changeData);
+      console.log('🔧 [WORKER-CHANGE] API URL:', `${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`);
+      
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+          'X-User-Name': localStorage.getItem('userName') || 'Web User'
+        },
+        body: JSON.stringify({ changes: [changeData] })
+      });
+      
+      console.log('🔧 [WORKER-CHANGE] Response status:', response.status);
+      
+      if (!response.ok) {
+        const data = await response.json();
+        console.log('🔧 [WORKER-CHANGE] Error response:', data);
+        throw new Error(data.error || 'Failed to update worker');
+      }
+      
+      const responseData = await response.json();
+      console.log('🔧 [WORKER-CHANGE] Success response:', responseData);
+      
+      console.log('🔧 [WORKER-CHANGE] Worker change completed successfully!');
+      // Success - no alert needed
+      
+    } catch (error) {
+      console.error('🔧 [WORKER-CHANGE] Error:', error);
+      alert(`❌ Error changing worker: ${error.message}`);
+    }
+    
+    setShowOverrideMenu(null);
   };
 
   const handleWashTypeChange = async (appointment, newWashType) => {
@@ -224,7 +259,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       onScheduleUpdate(updatedSchedule);
     }
     
-    // Add to pending changes
+    // Prepare change data for auto-save
     const changeData = {
       type: 'washType',
       taskId,
@@ -233,13 +268,34 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       timestamp: Date.now()
     };
     
-    setPendingChanges(prev => {
-      // Remove any existing change for this task
-      const filtered = prev.filter(change => change.taskId !== taskId);
-      const newChanges = [...filtered, changeData];
-
-      return newChanges;
-    });
+    console.log('[WASH-TYPE] Preparing to save wash type change:', changeData);
+    
+    // Auto-save wash type change immediately
+    setTimeout(async () => {
+      console.log('[WASH-TYPE] Auto-saving wash type change...');
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+            'X-User-Name': localStorage.getItem('userName') || 'Web User'
+          },
+          body: JSON.stringify({ changes: [changeData] })
+        });
+        
+        if (response.ok) {
+          console.log('[WASH-TYPE] ✅ Wash type saved successfully!');
+          // Success - no alert needed
+        } else {
+          console.error('[WASH-TYPE] ❌ Failed to save wash type');
+        }
+      } catch (error) {
+        console.error('[WASH-TYPE] ❌ Error saving:', error);
+      }
+    }, 100);
+    
+    console.log('[WASH-TYPE] Change will be saved automatically.');
     
     setShowOverrideMenu(null);
   };
@@ -277,7 +333,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       onScheduleUpdate(updatedSchedule);
     }
     
-    // Add all changes to pending changes
+    // Auto-save all week pattern changes
     const allChanges = [
       {
         type: 'washType',
@@ -293,14 +349,27 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       }))
     ];
     
-    setPendingChanges(prev => {
-      let filtered = [...prev];
-      // Remove existing changes for these tasks
-      allChanges.forEach(change => {
-        filtered = filtered.filter(existing => existing.taskId !== change.taskId);
-      });
-      return [...filtered, ...allChanges];
-    });
+    // Save all changes immediately
+    setTimeout(async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+            'X-User-Name': localStorage.getItem('userName') || 'Web User'
+          },
+          body: JSON.stringify({ changes: allChanges })
+        });
+        
+        if (response.ok) {
+          console.log('[WEEK-PATTERN] ✅ Week pattern changes saved successfully!');
+          // Success - no alert needed
+        }
+      } catch (error) {
+        console.error('[WEEK-PATTERN] ❌ Error saving:', error);
+      }
+    }, 100);
   };
 
   const handleCustomerNameClick = async (customerId) => {
@@ -387,12 +456,19 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     e.preventDefault();
     
     if (!draggedItem) {
+      console.log('[DRAG-DROP] ⚠️ No dragged item found');
       return;
     }
+    
+    console.log('[DRAG-DROP] 📦 Drop started:', {
+      draggedItem,
+      target: { targetDay, targetTime, targetWorkerId }
+    });
     
     const { customerId, day: sourceDay, time: sourceTime, workerId: sourceWorkerId } = draggedItem;
     
     if (sourceDay === targetDay && sourceTime === targetTime && sourceWorkerId === targetWorkerId) {
+      console.log('[DRAG-DROP] ⚠️ Same position drop - ignoring');
       setDraggedItem(null);
       return;
     }
@@ -406,9 +482,12 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     );
 
     if (customerAppointments.length === 0) {
+      console.log('[DRAG-DROP] ⚠️ No customer appointments found');
       setDraggedItem(null);
       return;
     }
+    
+    console.log('[DRAG-DROP] 📋 Found appointments:', customerAppointments.length);
 
     // Check if target slot has existing appointments (for swapping)
     const existingAppointments = assignedSchedule.filter(appointment => 
@@ -417,7 +496,10 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
       appointment.time === targetTime
     );
 
-    const targetWorkerName = workers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
+    const targetWorkerName = sortedWorkers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
+    
+    console.log('[DRAG-DROP] 👷 Target worker:', targetWorkerName);
+    console.log('[DRAG-DROP] 🔄 Existing appointments at target:', existingAppointments.length);
     
     // Update UI immediately for better UX
     let updatedSchedule;
@@ -443,7 +525,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         if (appointment.workerId === targetWorkerId && 
             appointment.day === targetDay && 
             appointment.time === targetTime) {
-          const sourceWorkerName = workers.find(w => (w.WorkerID || w.Name) === sourceWorkerId)?.Name || sourceWorkerId;
+          const sourceWorkerName = sortedWorkers.find(w => (w.WorkerID || w.Name) === sourceWorkerId)?.Name || sourceWorkerId;
           return {
             ...appointment,
             day: sourceDay,
@@ -477,34 +559,99 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
 
 
     if (onScheduleUpdate) {
+      console.log('[DRAG-DROP] 🔄 Updating UI with new schedule');
       onScheduleUpdate(updatedSchedule);
     }
     
     setDraggedItem(null);
 
-    // Add drag & drop change to pending changes
+    // Add drag & drop change to pending changes (same as wash type changes)
     const firstAppointment = customerAppointments[0];
     const taskId = `${customerId}-${sourceDay}-${sourceTime}-${firstAppointment.carPlate}`;
     
+    console.log('[DRAG-DROP] 📤 Adding to pending changes:', {
+      taskId,
+      targetWorkerName,
+      targetWorkerId,
+      sourceDay,
+      sourceTime,
+      targetDay,
+      targetTime,
+      isSlotSwap: existingAppointments.length > 0
+    });
+    
+    console.log('[DRAG-DROP] 🔍 Worker details:', {
+      targetWorker: sortedWorkers.find(w => (w.WorkerID || w.Name) === targetWorkerId),
+      allWorkers: sortedWorkers.map(w => ({ id: w.WorkerID, name: w.Name }))
+    });
+    
+    // Get source worker info for proper swapping
+    const sourceWorker = sortedWorkers.find(w => (w.WorkerID || w.Name) === sourceWorkerId);
+    
+    // Add to pending changes and save automatically
     const changeData = {
       type: 'dragDrop',
       taskId,
       newWorkerName: targetWorkerName,
+      newWorkerId: targetWorkerId,
       sourceDay,
       sourceTime,
       targetDay,
       targetTime,
       isSlotSwap: existingAppointments.length > 0,
+      sourceWorkerName: sourceWorker?.Name || '',
+      sourceWorkerId: sourceWorker?.WorkerID || sourceWorker?.Name || '',
       timestamp: Date.now()
     };
     
-    setPendingChanges(prev => {
-      // Remove any existing change for this task
-      const filtered = prev.filter(change => change.taskId !== taskId);
-      const newChanges = [...filtered, changeData];
-
-      return newChanges;
-    });
+    console.log('[DRAG-DROP] Preparing to save drag & drop change:', changeData);
+    
+    // Auto-save drag & drop change immediately
+    setTimeout(async () => {
+      console.log('[DRAG-DROP] Auto-saving drag & drop change...');
+      
+      const changes = [changeData];
+      
+      // If there are existing appointments at target (swap case), add swap changes
+      if (existingAppointments.length > 0) {
+        existingAppointments.forEach(existingApt => {
+          const swapTaskId = `${existingApt.customerId}-${targetDay}-${targetTime}-${existingApt.carPlate}`;
+          const swapChangeData = {
+            type: 'dragDrop',
+            taskId: swapTaskId,
+            newWorkerName: sourceWorker?.Name || '',
+            sourceDay: targetDay,
+            sourceTime: targetTime,
+            targetDay: sourceDay,
+            targetTime: sourceTime,
+            isSlotSwap: true,
+            timestamp: Date.now()
+          };
+          changes.push(swapChangeData);
+        });
+      }
+      
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+            'X-User-Name': localStorage.getItem('userName') || 'Web User'
+          },
+          body: JSON.stringify({ changes })
+        });
+        
+        if (response.ok) {
+          console.log('[DRAG-DROP] ✅ Drag & drop saved successfully!');
+          // Success - no alert needed
+        } else {
+          console.error('[DRAG-DROP] ❌ Failed to save drag & drop');
+        }
+      } catch (error) {
+        console.error('[DRAG-DROP] ❌ Error saving:', error);
+      }
+    }, 100);
     
 
 
@@ -512,53 +659,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
 
   return (
     <>
-    {/* Control Buttons */}
-    <div style={{
-      position: 'absolute',
-      top: '20px',
-      right: '20px',
-      zIndex: 9999
-    }}>
-      {/* Save to Server Button */}
-      <div style={{
-        background: pendingChanges.length > 0 ? '#28a745' : '#6c757d',
-        color: 'white',
-        padding: '15px 25px',
-        borderRadius: '10px',
-        boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
-        cursor: pendingChanges.length > 0 ? 'pointer' : 'default',
-        fontSize: '16px',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        opacity: pendingChanges.length > 0 ? 1 : 0.6
-      }}
-      onClick={pendingChanges.length > 0 ? saveToServer : undefined}
-      >
-        {isSaving ? (
-          <>
-            <div style={{
-              width: '20px',
-              height: '20px',
-              border: '2px solid white',
-              borderTop: '2px solid transparent',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }}></div>
-            Saving...
-          </>
-        ) : (
-          <>
-            💾 Save to Server {pendingChanges.length > 0 ? `(${pendingChanges.length})` : ''}
-          </>
-        )}
-      </div>
-      
 
-      
-
-    </div>
     
     <table className="timetable" key={`week-${currentWeekOffset}-${weekStartDate.getTime()}`}>
       <thead>
@@ -576,7 +677,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
 
             
             return (
-              <th key={day} colSpan={workers.length}>
+              <th key={day} colSpan={sortedWorkers.length}>
                 <div style={{ textAlign: 'center' }}>
                   <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{day}</div>
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{displayDate}</div>
@@ -587,10 +688,10 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         </tr>
         <tr>
           {days.map((day, dayIndex) => 
-            workers.map((worker, workerIndex) => (
+            sortedWorkers.map((worker, workerIndex) => (
               <th 
                 key={`${day}-${worker.WorkerID || worker.Name}`}
-                className={workerIndex === workers.length - 1 ? 'day-separator' : ''}
+                className={workerIndex === sortedWorkers.length - 1 ? 'day-separator' : ''}
                 style={{ fontSize: '11px' }}
               >
                 {worker.Name}
@@ -600,14 +701,14 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
         </tr>
       </thead>
       <tbody>
-        {timeSlots.map(time => (
+        {timeSlots.map((time, timeIndex) => (
           <tr key={time}>
             <td className="time-slot">{time}</td>
             {days.map((day, dayIndex) => 
-              workers.map((worker, workerIndex) => (
+              sortedWorkers.map((worker, workerIndex) => (
                 <td 
                   key={`${day}-${worker.WorkerID || worker.Name}-${time}`}
-                  className={`${workerIndex === workers.length - 1 ? 'day-separator' : ''} drop-zone`}
+                  className={`${workerIndex === sortedWorkers.length - 1 ? 'day-separator' : ''} drop-zone`}
                   style={{ padding: '4px', width: '120px' }}
                   onDragOver={(e) => handleDragOver(e)}
                   onDrop={(e) => {
@@ -616,18 +717,22 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                   }}
                 >
                   {(() => {
-                    const appointments = getAppointmentsForWorkerDayTime(worker.WorkerID || worker.Name, day, time);
+                    const workerId = worker.WorkerID || worker.Name;
+                    const appointments = getAppointmentsForWorkerDayTime(workerId, day, time);
+                    
+
                     const groupedByCustomer = appointments.reduce((groups, appointment) => {
-                      const customerId = appointment.customerId;
-                      if (!groups[customerId]) {
-                        groups[customerId] = [];
+                      const customerKey = `${appointment.customerId}-${appointment.carPlate}`;
+                      if (!groups[customerKey]) {
+                        groups[customerKey] = [];
                       }
-                      groups[customerId].push(appointment);
+                      groups[customerKey].push(appointment);
                       return groups;
                     }, {});
                     
-                    return Object.entries(groupedByCustomer).map(([customerId, customerAppointments]) => {
-                      const groupKey = `${worker.WorkerID || worker.Name}-${day}-${time}-${customerId}`;
+                    return Object.entries(groupedByCustomer).map(([customerKey, customerAppointments]) => {
+                      const groupKey = `${worker.WorkerID || worker.Name}-${day}-${time}-${customerKey}`;
+                      const customerId = customerAppointments[0]?.customerId;
                       return (
                         <div 
                           key={groupKey} 
@@ -702,6 +807,9 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
                                 >
                                   {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : 
                                    appointment.originalWashType || appointment.washType}
+                                </div>
+                                <div className="worker-name" style={{ fontSize: '10px', color: '#666', marginTop: '2px' }}>
+                                  👷 {appointment.workerName}
                                 </div>
                                 
 
@@ -780,6 +888,7 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
           >
             🧽 EXT + INT
           </button>
+
           <button
             style={{
               display: 'block',
@@ -840,6 +949,10 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
             </button>
           </div>
           <div className="customer-info-body">
+            <div className="info-row">
+              <span className="info-label">Customer ID:</span>
+              <span className="info-value">{customerInfo.data?.CustomerID || 'N/A'}</span>
+            </div>
             <div className="info-row">
               <span className="info-label">Name:</span>
               <span className="info-value">{customerInfo.data?.Name || 'N/A'}</span>
@@ -913,6 +1026,6 @@ const WorkerScheduleView = ({ workers, assignedSchedule, onScheduleUpdate, onDel
     />
     </>
   );
-};
+});
 
 export default WorkerScheduleView;
