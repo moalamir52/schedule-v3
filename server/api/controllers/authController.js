@@ -5,41 +5,19 @@ const jwt = require('jsonwebtoken');
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log(`[AUTH] Login attempt: ${username}`);
+    console.log(`[AUTH] No security - allowing login for: ${username}`);
     
-    const user = await db.findUserByUsername(username);
-    console.log(`[AUTH] User found:`, user ? 'YES' : 'NO');
-    if (user) {
-      console.log(`[AUTH] User status: ${user.Status}`);
-      console.log(`[AUTH] User password exists: ${!!user.Password}`);
-    }
-    
-    if (!user || user.Status !== 'Active') {
-      console.log(`[AUTH] Login failed: User not found or inactive`);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
-    // Temporary bypass for testing
-    const isPasswordValid = await bcrypt.compare(password, user.Password) || 
-                           (username === 'admin' && password === 'admin123') ||
-                           (username === 'Marwan' && password === 'marwan123');
-    console.log(`[AUTH] Password valid: ${isPasswordValid}`);
-    
-    if (!isPasswordValid) {
-      console.log(`[AUTH] Login failed: Invalid password`);
-      return res.status(401).json({ message: 'Invalid credentials' });
-    }
-    
+    // No authentication - allow any login
     const token = jwt.sign(
       { 
-        userId: user.UserID, 
-        username: user.Username,
-        role: user.Role 
+        userId: 'USER-TEMP', 
+        username: username,
+        role: 'Admin' 
       },
       'YOUR_SECRET_KEY'
     );
     
-    console.log(`[AUTH] Login successful for ${username}`);
+    console.log(`[AUTH] Login successful (no auth) for ${username}`);
     res.status(200).json({ token });
   } catch (error) {
     console.error('[AUTH] Login error:', error);
