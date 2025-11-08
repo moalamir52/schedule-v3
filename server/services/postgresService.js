@@ -210,10 +210,22 @@ class PostgresService {
       }
       
       const allResult = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
-      return allResult.rows.map(invoice => ({
-        ...invoice,
-        TotalAmount: parseFloat(invoice.TotalAmount) || 0
-      }));
+      return allResult.rows.map(invoice => {
+        const totalAmount = invoice.TotalAmount;
+        let numericAmount = 0;
+        
+        if (typeof totalAmount === 'number') {
+          numericAmount = totalAmount;
+        } else if (typeof totalAmount === 'string') {
+          numericAmount = parseFloat(totalAmount) || 0;
+        }
+        
+        return {
+          ...invoice,
+          TotalAmount: numericAmount,
+          SubTotal: parseFloat(invoice.SubTotal) || 0
+        };
+      });
     } catch (error) {
       console.error('Error fetching invoices:', error);
       return [];
