@@ -5,16 +5,25 @@ const jwt = require('jsonwebtoken');
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
+    console.log(`[AUTH] Login attempt: ${username}`);
     
     const user = await db.findUserByUsername(username);
+    console.log(`[AUTH] User found:`, user ? 'YES' : 'NO');
+    if (user) {
+      console.log(`[AUTH] User status: ${user.Status}`);
+      console.log(`[AUTH] User password exists: ${!!user.Password}`);
+    }
     
     if (!user || user.Status !== 'Active') {
+      console.log(`[AUTH] Login failed: User not found or inactive`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
     const isPasswordValid = await bcrypt.compare(password, user.Password);
+    console.log(`[AUTH] Password valid: ${isPasswordValid}`);
     
     if (!isPasswordValid) {
+      console.log(`[AUTH] Login failed: Invalid password`);
       return res.status(401).json({ message: 'Invalid credentials' });
     }
     
@@ -27,8 +36,10 @@ const login = async (req, res) => {
       'YOUR_SECRET_KEY'
     );
     
+    console.log(`[AUTH] Login successful for ${username}`);
     res.status(200).json({ token });
   } catch (error) {
+    console.error('[AUTH] Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
