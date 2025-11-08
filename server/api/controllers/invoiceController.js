@@ -185,43 +185,17 @@ const updateInvoice = async (req, res) => {
       paymentMethod, 
       customerName, 
       villa, 
-      totalAmount, 
-      dueDate,
-      subTotal,
-      services,
-      vehicleType,
-      serviceDescription,
-      phone,
-      payment,
-      notes,
-      subject,
-      duration
+      totalAmount
     } = req.body;
     
     console.log('Updating invoice:', id, 'with totalAmount:', totalAmount);
     
-    if (status && !customerName) {
-      await updateInvoiceStatus(id, status, paymentMethod);
-    } else {
-      // Invoice update handled by database service
-      await updateInvoiceRecord(id, {
-        CustomerName: customerName,
-        Villa: villa,
-        TotalAmount: totalAmount,
-        DueDate: dueDate,
-        Status: status,
-        PaymentMethod: status === 'Pending' ? '' : paymentMethod,
-        SubTotal: subTotal,
-        Services: services,
-        Vehicle: vehicleType,
-        PackageID: serviceDescription,
-        Phone: phone,
-        Payment: payment,
-        Notes: notes,
-        Subject: subject,
-        Duration: duration
-      });
-    }
+    await db.updateInvoice(id, {
+      CustomerName: customerName,
+      Villa: villa,
+      TotalAmount: totalAmount,
+      Status: status
+    });
     
     res.json({ success: true, message: 'Invoice updated successfully' });
   } catch (error) {
@@ -233,7 +207,7 @@ const updateInvoice = async (req, res) => {
 const deleteInvoice = async (req, res) => {
   try {
     const { id } = req.params;
-    await deleteInvoiceRecord(id);
+    await db.deleteInvoice(id);
     res.json({ success: true, message: 'Invoice deleted successfully' });
   } catch (error) {
     console.error('Error deleting invoice:', error);

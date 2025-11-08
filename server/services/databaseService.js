@@ -519,6 +519,27 @@ class DatabaseService {
     }
   }
 
+  async updateInvoice(invoiceId, updateData) {
+    if (this.isPostgres) {
+      return await this.postgres.updateInvoice(invoiceId, updateData);
+    }
+    
+    const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(invoiceId);
+    
+    const sql = `UPDATE invoices SET ${fields} WHERE InvoiceID = ?`;
+    return await this.run(sql, values);
+  }
+
+  async deleteInvoice(invoiceId) {
+    if (this.isPostgres) {
+      return await this.postgres.deleteInvoice(invoiceId);
+    }
+    
+    return await this.run('DELETE FROM invoices WHERE InvoiceID = ?', [invoiceId]);
+  }
+
   // Users methods
   async findUserByUsername(username) {
     if (this.isPostgres) {

@@ -246,6 +246,40 @@ class PostgresService {
       return 'INV-0001';
     }
   }
+
+  async updateInvoice(invoiceId, updateData) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'UPDATE invoices SET "CustomerName" = $1, "Villa" = $2, "TotalAmount" = $3, "Status" = $4 WHERE "InvoiceID" = $5 RETURNING *',
+        [
+          updateData.CustomerName,
+          updateData.Villa,
+          parseFloat(updateData.TotalAmount) || 0,
+          updateData.Status,
+          invoiceId
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating invoice:', error);
+      throw error;
+    }
+  }
+
+  async deleteInvoice(invoiceId) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'DELETE FROM invoices WHERE "InvoiceID" = $1 RETURNING *',
+        [invoiceId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new PostgresService();
