@@ -20,7 +20,7 @@ git commit -m "%message%"
 
 echo.
 echo Pushing to GitHub...
-git push origin main
+git push origin master
 
 echo.
 echo Done! Changes and database backup pushed to GitHub.
