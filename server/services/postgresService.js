@@ -150,6 +150,73 @@ class PostgresService {
       return null;
     }
   }
+
+  // Services methods
+  async getServices() {
+    try {
+      await this.connect();
+      const result = await this.client.query('SELECT * FROM "Services" WHERE "Status" = $1', ['Active']);
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching services:', error);
+      return [];
+    }
+  }
+
+  async addService(serviceData) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'INSERT INTO "Services" ("ServiceID", "ServiceName", "Price", "Description", "Status") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [
+          serviceData.ServiceID || `SRV-${Date.now()}`,
+          serviceData.ServiceName,
+          serviceData.Price,
+          serviceData.Description,
+          'Active'
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error adding service:', error);
+      throw error;
+    }
+  }
+
+  // Invoices methods
+  async getInvoices() {
+    try {
+      await this.connect();
+      const result = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching invoices:', error);
+      return [];
+    }
+  }
+
+  async addInvoice(invoiceData) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "InvoiceDate", "TotalAmount", "Status") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        [
+          invoiceData.InvoiceID || `INV-${Date.now()}`,
+          invoiceData.Ref,
+          invoiceData.CustomerID,
+          invoiceData.CustomerName,
+          invoiceData.Villa,
+          invoiceData.InvoiceDate || new Date().toISOString().split('T')[0],
+          invoiceData.TotalAmount,
+          'Pending'
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error adding invoice:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new PostgresService();

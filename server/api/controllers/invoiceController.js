@@ -156,7 +156,7 @@ const createInvoice = async (req, res) => {
 const getAllInvoices = async (req, res) => {
   try {
     console.log('[INVOICES] Fetching all invoices...');
-    const invoices = await getInvoices();
+    const invoices = await db.getInvoices();
     console.log('[INVOICES] Found', invoices.length, 'invoices');
     res.json({
       success: true,

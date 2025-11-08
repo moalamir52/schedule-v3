@@ -4,9 +4,9 @@ const { getCustomers, getInvoices } = require('../../services/googleSheetsServic
 const getAvailableClients = async (req, res) => {
   try {
     console.log('[CLIENTS] Fetching available clients...');
-    const customers = await getCustomers();
+    const customers = await db.getCustomers();
     console.log('[CLIENTS] Found', customers.length, 'customers');
-    const invoices = await getInvoices();
+    const invoices = await db.getInvoices();
     console.log('[CLIENTS] Found', invoices.length, 'invoices');
     const activeCustomers = customers.filter(customer => customer.Status === 'Active');
     console.log('[CLIENTS] Found', activeCustomers.length, 'active customers');
@@ -51,8 +51,8 @@ const getCustomerById = async (req, res) => {
   try {
     const { customerId } = req.params;
     
-    // Get all customers from Google Sheets
-    const customers = await getCustomers();
+    // Get all customers from database
+    const customers = await db.getCustomers();
     const customer = customers.find(c => c.CustomerID === customerId);
     
     if (!customer) {

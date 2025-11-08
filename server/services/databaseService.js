@@ -455,10 +455,16 @@ class DatabaseService {
 
   // Invoices methods
   async getInvoices() {
+    if (this.isPostgres) {
+      return await this.postgres.getInvoices();
+    }
     return await this.all('SELECT * FROM invoices ORDER BY CreatedAt DESC');
   }
 
   async addInvoice(invoiceData) {
+    if (this.isPostgres) {
+      return await this.postgres.addInvoice(invoiceData);
+    }
     const sql = `INSERT INTO invoices (InvoiceID, Ref, CustomerID, CustomerName, Villa, InvoiceDate, DueDate, TotalAmount, Status, PaymentMethod, Start, End, Vehicle, PackageID, Services, Notes, CreatedBy, SubTotal, Phone, Payment, Subject) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
@@ -523,10 +529,16 @@ class DatabaseService {
 
   // Services methods
   async getServices() {
+    if (this.isPostgres) {
+      return await this.postgres.getServices();
+    }
     return await this.all('SELECT * FROM Services WHERE Status = ? ORDER BY ServiceName COLLATE NOCASE', ['Active']);
   }
 
   async addService(serviceData) {
+    if (this.isPostgres) {
+      return await this.postgres.addService(serviceData);
+    }
     const sql = `INSERT INTO Services (ServiceID, ServiceName, Price, Description, Status) 
                  VALUES (?, ?, ?, ?, ?)`;
     const params = [

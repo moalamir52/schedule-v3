@@ -3,7 +3,7 @@ const { getAdditionalServices, addServiceToSheet, deleteServiceFromSheet } = req
 
 const getServices = async (req, res) => {
   try {
-    const services = await getAdditionalServices();
+    const services = await db.getServices();
     res.json(services);
   } catch (error) {
     console.error('Error getting services:', error);
@@ -19,7 +19,7 @@ const addService = async (req, res) => {
       return res.status(400).json({ error: 'Service name is required' });
     }
 
-    const services = await getAdditionalServices();
+    const services = await db.getServices();
     const serviceIds = services.map(s => {
       const id = s.ServiceID || s.serviceId || '';
       if (typeof id === 'string') {
@@ -40,7 +40,7 @@ const addService = async (req, res) => {
       Status: 'Active'
     };
     
-    await addServiceToSheet(newService);
+    await db.addService(newService);
     
     res.json({ success: true, service: newService });
   } catch (error) {
