@@ -259,8 +259,7 @@ const printInvoice = async (req, res) => {
 
 const getInvoiceNumber = async (req, res) => {
   try {
-    const { customerID, customerName, villa } = req.body;
-    const invoiceNumber = await getOrCreateInvoiceNumber(customerID, customerName, villa);
+    const invoiceNumber = await db.getNextInvoiceRef();
     res.json({ success: true, invoiceNumber });
   } catch (error) {
     console.error('Error getting invoice number:', error);

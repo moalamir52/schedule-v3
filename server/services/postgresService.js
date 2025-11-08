@@ -199,22 +199,48 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query(
-        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "InvoiceDate", "TotalAmount", "Status") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "CreatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
         [
           invoiceData.InvoiceID || `INV-${Date.now()}`,
           invoiceData.Ref,
           invoiceData.CustomerID,
           invoiceData.CustomerName,
           invoiceData.Villa,
-          invoiceData.InvoiceDate || new Date().toISOString().split('T')[0],
           invoiceData.TotalAmount,
-          'Pending'
+          'Pending',
+          new Date().toISOString()
         ]
       );
       return result.rows[0];
     } catch (error) {
       console.error('Error adding invoice:', error);
       throw error;
+    }
+  }
+
+  async getNextInvoiceRef() {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'SELECT "Ref" FROM invoices WHERE "Ref" LIKE $1 ORDER BY "Ref" DESC LIMIT 1',
+        ['INV-%']
+      );
+      
+      if (result.rows.length === 0) {
+        return 'INV-0001';
+      }
+      
+      const lastRef = result.rows[0].Ref;
+      const match = lastRef.match(/INV-(\d+)/);
+      if (match) {
+        const nextNum = parseInt(match[1]) + 1;
+        return `INV-${nextNum.toString().padStart(4, '0')}`;
+      }
+      
+      return 'INV-0001';
+    } catch (error) {
+      console.error('Error getting next invoice ref:', error);
+      return 'INV-0001';
     }
   }
 }

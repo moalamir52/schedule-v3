@@ -493,6 +493,32 @@ class DatabaseService {
     return await this.run(sql, params);
   }
 
+  async getNextInvoiceRef() {
+    if (this.isPostgres) {
+      return await this.postgres.getNextInvoiceRef();
+    }
+    
+    try {
+      const result = await this.all('SELECT Ref FROM invoices WHERE Ref LIKE ? ORDER BY Ref DESC LIMIT 1', ['INV-%']);
+      
+      if (result.length === 0) {
+        return 'INV-0001';
+      }
+      
+      const lastRef = result[0].Ref;
+      const match = lastRef.match(/INV-(\d+)/);
+      if (match) {
+        const nextNum = parseInt(match[1]) + 1;
+        return `INV-${nextNum.toString().padStart(4, '0')}`;
+      }
+      
+      return 'INV-0001';
+    } catch (error) {
+      console.error('Error getting next invoice ref:', error);
+      return 'INV-0001';
+    }
+  }
+
   // Users methods
   async findUserByUsername(username) {
     if (this.isPostgres) {
