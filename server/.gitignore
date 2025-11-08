@@ -1,3 +1,7 @@
 # Secret files
 credentials.json
 .env
+
+# Database files - DO NOT COMMIT
+database/database.db
+database/*.db

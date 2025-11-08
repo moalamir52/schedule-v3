@@ -8,6 +8,7 @@ node server\scripts\databaseBackup.js
 
 echo.
 echo Adding all changes to git...
+git reset server/database/database.db 2>nul
 git add .
 
 echo.
