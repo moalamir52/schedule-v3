@@ -30,13 +30,26 @@ class DatabaseService {
   }
 
   init() {
+    // Log all environment info
+    console.log('🔍 Environment check:');
+    console.log('NODE_ENV:', process.env.NODE_ENV);
+    console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+    
+    // Check if PostgreSQL URL is available
+    if (process.env.DATABASE_URL) {
+      console.log('🐘 PostgreSQL URL detected!');
+      console.log('URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
+    } else {
+      console.log('⚠️  No DATABASE_URL found, using SQLite');
+    }
+    
     // SQLite connection
     const dbPath = path.join(__dirname, '../database/database.db');
     this.db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
         console.error('Error opening database:', err);
       } else {
-        console.log('Connected to SQLite database');
+        console.log('✅ Connected to SQLite database');
         this.createTables();
       }
     });
