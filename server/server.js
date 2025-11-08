@@ -323,8 +323,11 @@ app.post('/api/database/import/:tableName', async (req, res) => {
     const createTableSQL = `CREATE TABLE IF NOT EXISTS "${tableName}" (${columns.map(col => `"${col}" TEXT`).join(', ')})`;
     await client.query(createTableSQL);
     
-    // Clear existing data
-    await client.query(`DELETE FROM "${tableName}"`);
+    // Clear existing data only if not appending
+    const { append } = req.body;
+    if (!append) {
+      await client.query(`DELETE FROM "${tableName}"`);
+    }
     
     // Insert new data
     for (const record of data) {
