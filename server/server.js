@@ -228,7 +228,8 @@ app.post('/api/add-user', async (req, res) => {
       username,
       password: hashedPassword,
       plainPassword: password,
-      role: 'User'
+      role: 'User',
+      Status: 'Active'
     });
     
     res.json({ success: true, message: 'User created successfully' });
