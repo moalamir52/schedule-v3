@@ -89,13 +89,11 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query(
-        'INSERT INTO users ("UserID", "Username", "Password", "Role", "Status") VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        'INSERT INTO users (username, password, created_at) VALUES ($1, $2, $3) RETURNING *',
         [
-          userData.UserID || `USER-${Date.now()}`,
-          userData.Username,
-          userData.Password,
-          userData.Role,
-          'Active'
+          userData.username || userData.Username,
+          userData.password || userData.Password,
+          new Date().toISOString()
         ]
       );
       return result.rows[0];
@@ -108,8 +106,13 @@ class PostgresService {
   async getUsers() {
     try {
       await this.connect();
-      const result = await this.client.query('SELECT * FROM users ORDER BY "Username"');
-      return result.rows;
+      const result = await this.client.query('SELECT * FROM users ORDER BY username');
+      return result.rows.map(user => ({
+        id: user.id,
+        username: user.username,
+        password: user.password,
+        created_at: user.created_at
+      }));
     } catch (error) {
       console.error('Error fetching users:', error);
       return [];
@@ -130,8 +133,18 @@ class PostgresService {
   async findUserByUsername(username) {
     try {
       await this.connect();
-      const result = await this.client.query('SELECT * FROM users WHERE "Username" = $1', [username]);
-      return result.rows[0] || null;
+      const result = await this.client.query('SELECT * FROM users WHERE username = $1', [username]);
+      const user = result.rows[0];
+      if (user) {
+        // Map PostgreSQL fields to expected format
+        return {
+          UserID: user.id,
+          Username: user.username,
+          Password: user.password,
+          Status: 'Active'
+        };
+      }
+      return null;
     } catch (error) {
       console.error('Error finding user:', error);
       return null;
