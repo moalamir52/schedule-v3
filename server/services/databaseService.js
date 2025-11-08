@@ -499,23 +499,23 @@ class DatabaseService {
     }
     
     try {
-      const result = await this.all('SELECT Ref FROM invoices WHERE Ref LIKE ? ORDER BY Ref DESC LIMIT 1', ['INV-%']);
+      const result = await this.all('SELECT Ref FROM invoices WHERE Ref LIKE ? ORDER BY Ref DESC LIMIT 1', ['GLOGO-%']);
       
       if (result.length === 0) {
-        return 'INV-0001';
+        return 'GLOGO-2511055';
       }
       
       const lastRef = result[0].Ref;
-      const match = lastRef.match(/INV-(\d+)/);
+      const match = lastRef.match(/GLOGO-(\d+)/);
       if (match) {
         const nextNum = parseInt(match[1]) + 1;
-        return `INV-${nextNum.toString().padStart(4, '0')}`;
+        return `GLOGO-${nextNum}`;
       }
       
-      return 'INV-0001';
+      return 'GLOGO-2511055';
     } catch (error) {
       console.error('Error getting next invoice ref:', error);
-      return 'INV-0001';
+      return 'GLOGO-2511055';
     }
   }
 

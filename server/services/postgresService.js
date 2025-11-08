@@ -202,7 +202,7 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query(
-        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "CreatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *',
+        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "Start", "End", "CreatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
         [
           invoiceData.InvoiceID || `INV-${Date.now()}`,
           invoiceData.Ref,
@@ -211,6 +211,8 @@ class PostgresService {
           invoiceData.Villa,
           parseFloat(invoiceData.TotalAmount) || 0,
           'Pending',
+          invoiceData.Start || '',
+          invoiceData.End || '',
           new Date().toISOString()
         ]
       );
@@ -226,24 +228,24 @@ class PostgresService {
       await this.connect();
       const result = await this.client.query(
         'SELECT "Ref" FROM invoices WHERE "Ref" LIKE $1 ORDER BY "Ref" DESC LIMIT 1',
-        ['INV-%']
+        ['GLOGO-%']
       );
       
       if (result.rows.length === 0) {
-        return 'INV-0001';
+        return 'GLOGO-2511055';
       }
       
       const lastRef = result.rows[0].Ref;
-      const match = lastRef.match(/INV-(\d+)/);
+      const match = lastRef.match(/GLOGO-(\d+)/);
       if (match) {
         const nextNum = parseInt(match[1]) + 1;
-        return `INV-${nextNum.toString().padStart(4, '0')}`;
+        return `GLOGO-${nextNum}`;
       }
       
-      return 'INV-0001';
+      return 'GLOGO-2511055';
     } catch (error) {
       console.error('Error getting next invoice ref:', error);
-      return 'INV-0001';
+      return 'GLOGO-2511055';
     }
   }
 
@@ -251,12 +253,14 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query(
-        'UPDATE invoices SET "CustomerName" = $1, "Villa" = $2, "TotalAmount" = $3, "Status" = $4 WHERE "InvoiceID" = $5 RETURNING *',
+        'UPDATE invoices SET "CustomerName" = $1, "Villa" = $2, "TotalAmount" = $3, "Status" = $4, "Start" = $5, "End" = $6 WHERE "InvoiceID" = $7 RETURNING *',
         [
           updateData.CustomerName,
           updateData.Villa,
           parseFloat(updateData.TotalAmount) || 0,
           updateData.Status,
+          updateData.Start || '',
+          updateData.End || '',
           invoiceId
         ]
       );
