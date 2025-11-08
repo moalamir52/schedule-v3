@@ -104,6 +104,25 @@ const changeMyPassword = async (req, res) => {
   }
 };
 
+const createUser = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    
+    // Check if user already exists
+    const existingUser = await findUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+    
+    // Add user
+    await db.addUser(username, password);
+    res.status(201).json({ message: 'User created successfully' });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 const deleteUserById = async (req, res) => {
   try {
     const userId = req.params.id;
@@ -116,4 +135,4 @@ const deleteUserById = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, updateUserRole, deleteUserById, changeUserPassword, resetUserPassword, changeMyPassword };
+module.exports = { getAllUsers, createUser, updateUserRole, deleteUserById, changeUserPassword, resetUserPassword, changeMyPassword };

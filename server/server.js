@@ -209,6 +209,26 @@ app.get('/api/clients/next-id', async (req, res) => {
   }
 });
 
+// Direct add user endpoint
+app.post('/api/add-user', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const db = require('./services/databaseService');
+    
+    // Check if user exists
+    const existingUser = await db.findUserByUsername(username);
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'User already exists' });
+    }
+    
+    // Add user
+    await db.addUser(username, password);
+    res.json({ success: true, message: 'User created successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Database viewer endpoint
 app.get('/api/database/tables', async (req, res) => {
   try {
