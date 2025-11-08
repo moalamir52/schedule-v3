@@ -64,12 +64,20 @@ const createInvoice = async (req, res) => {
         throw new Error('Customer not found');
       }
       
-      const startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate || customerData.CreatedAt;
+      let startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate || customerData.CreatedAt;
+      
       if (!startDateStr) {
-        throw new Error('Customer start date not found');
+        console.warn(`No start date found for customer ${customerID}, using current date as fallback`);
+        // Use current date as fallback
+        const now = new Date();
+        const day = now.getDate();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[now.getMonth()];
+        const year = now.getFullYear().toString().slice(-2);
+        startDateStr = `${day}-${month}-${year}`;
       }
       
-      const contractStartDate = new Date(customerData['start date'] || startDateStr);
+      const contractStartDate = new Date(startDateStr);
       if (isNaN(contractStartDate.getTime())) {
         throw new Error('Invalid customer start date');
       }
