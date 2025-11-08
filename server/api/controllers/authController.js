@@ -6,7 +6,7 @@ const login = async (req, res) => {
   try {
     const { username, password } = req.body;
     
-    const user = await findUserByUsername(username);
+    const user = await db.findUserByUsername(username);
     
     if (!user || user.Status !== 'Active') {
       return res.status(401).json({ message: 'Invalid credentials' });
@@ -46,7 +46,7 @@ const register = async (req, res) => {
     
     const hashedPassword = await bcrypt.hash(password, 10);
     
-    await addUser({ 
+    await db.addUser({ 
       username, 
       password: hashedPassword, 
       plainPassword: password,

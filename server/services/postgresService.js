@@ -105,6 +105,17 @@ class PostgresService {
     }
   }
 
+  async getUsers() {
+    try {
+      await this.connect();
+      const result = await this.client.query('SELECT * FROM users ORDER BY "Username"');
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      return [];
+    }
+  }
+
   async getWorkers() {
     try {
       await this.connect();

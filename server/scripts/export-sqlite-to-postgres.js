@@ -18,6 +18,31 @@ async function exportFromSQLite(dbPath) {
     const workers = await queryDB(db, 'SELECT * FROM workers');
     console.log(`👷 Found ${workers.length} workers`);
     
+    // Get users
+    const users = await queryDB(db, 'SELECT * FROM Users');
+    console.log(`👥 Found ${users.length} users`);
+    
+    // Get history
+    const history = await queryDB(db, 'SELECT * FROM wash_history');
+    console.log(`📝 Found ${history.length} history records`);
+    
+    // Get invoices
+    const invoices = await queryDB(db, 'SELECT * FROM invoices');
+    console.log(`📄 Found ${invoices.length} invoices`);
+    
+    // Get all other tables
+    const scheduledTasks = await queryDB(db, 'SELECT * FROM ScheduledTasks').catch(() => []);
+    console.log(`📅 Found ${scheduledTasks.length} scheduled tasks`);
+    
+    const services = await queryDB(db, 'SELECT * FROM Services').catch(() => []);
+    console.log(`🔧 Found ${services.length} services`);
+    
+    const washRules = await queryDB(db, 'SELECT * FROM WashRules').catch(() => []);
+    console.log(`📋 Found ${washRules.length} wash rules`);
+    
+    const assignments = await queryDB(db, 'SELECT * FROM assignments').catch(() => []);
+    console.log(`📝 Found ${assignments.length} assignments`);
+    
     // Upload customers
     for (const customer of customers) {
       try {
@@ -54,7 +79,34 @@ async function exportFromSQLite(dbPath) {
       }
     }
     
+    // Upload users
+    for (const user of users) {
+      try {
+        const response = await fetch(`${SERVER_URL}/users`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(user)
+        });
+        
+        if (response.ok) {
+          console.log(`✅ User: ${user.Username}`);
+        }
+      } catch (error) {
+        console.log(`❌ User error: ${error.message}`);
+      }
+    }
+    
     console.log('🎉 Export completed!');
+    console.log(`📊 Summary:`);
+    console.log(`  - ${customers.length} customers`);
+    console.log(`  - ${workers.length} workers`);
+    console.log(`  - ${users.length} users`);
+    console.log(`  - ${history.length} history records`);
+    console.log(`  - ${invoices.length} invoices`);
+    console.log(`  - ${scheduledTasks.length} scheduled tasks`);
+    console.log(`  - ${services.length} services`);
+    console.log(`  - ${washRules.length} wash rules`);
+    console.log(`  - ${assignments.length} assignments`);
     
   } catch (error) {
     console.error('❌ Export failed:', error.message);

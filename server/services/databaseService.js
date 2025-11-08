@@ -496,6 +496,10 @@ class DatabaseService {
   }
 
   async addUser(userData) {
+    if (this.isPostgres) {
+      return await this.postgres.addUser(userData);
+    }
+    
     const sql = `INSERT INTO Users (UserID, Username, Password, PlainPassword, Role, Status, CreatedAt) 
                  VALUES (?, ?, ?, ?, ?, ?, ?)`;
     const params = [
@@ -511,6 +515,9 @@ class DatabaseService {
   }
 
   async getUsers() {
+    if (this.isPostgres) {
+      return await this.postgres.getUsers();
+    }
     return await this.all('SELECT * FROM Users ORDER BY Username COLLATE NOCASE');
   }
 
