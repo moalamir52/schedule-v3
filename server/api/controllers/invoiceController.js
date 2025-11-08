@@ -57,19 +57,19 @@ const createInvoice = async (req, res) => {
         throw new Error(`Customer already has an invoice for this month: ${existingInvoice.Ref || existingInvoice.InvoiceID}`);
       }
       
-      const customers = await getCustomers();
+      const customers = await db.getCustomers();
       customerData = customers.find(c => c.CustomerID === customerID);
       
       if (!customerData) {
         throw new Error('Customer not found');
       }
       
-      const startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate;
+      const startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate || customerData.CreatedAt;
       if (!startDateStr) {
         throw new Error('Customer start date not found');
       }
       
-      const contractStartDate = new Date(startDateStr);
+      const contractStartDate = new Date(customerData['start date'] || startDateStr);
       if (isNaN(contractStartDate.getTime())) {
         throw new Error('Invalid customer start date');
       }
