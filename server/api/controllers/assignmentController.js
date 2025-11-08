@@ -10,7 +10,17 @@ const getCustomers = () => dataSource.getCustomers();
 const getWorkers = () => dataSource.getWorkers();
 const getAllHistory = () => dataSource.getAllHistory();
 const getScheduledTasks = () => dataSource.getScheduledTasks();
-const getWashRulesFromDb = async () => dataSource.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+const getWashRulesFromDb = async () => {
+  try {
+    if (dataSource.isPostgres) {
+      return []; // PostgreSQL doesn't have WashRules yet
+    }
+    return await dataSource.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+  } catch (error) {
+    console.error('Error getting wash rules:', error);
+    return [];
+  }
+};
 const clearAndWriteScheduleToDb = (tasks) => dataSource.clearAndWriteSchedule(tasks);
 
 // Rate limiting for Google Sheets API
@@ -1763,14 +1773,23 @@ const getCachedWashRules = async () => {
     return washRulesCache.data;
   }
   
-  const washRulesData = await db.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
-  washRulesCache = {
-    data: washRulesData || [],
-    timestamp: now,
-    ttl: 300000
-  };
-  
-  return washRulesCache.data;
+  try {
+    let washRulesData = [];
+    if (!db.isPostgres && db.all) {
+      washRulesData = await db.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+    }
+    
+    washRulesCache = {
+      data: washRulesData || [],
+      timestamp: now,
+      ttl: 300000
+    };
+    
+    return washRulesCache.data;
+  } catch (error) {
+    console.error('Error getting cached wash rules:', error);
+    return [];
+  }
 };
 
 async function calculateHistoryBasedWashType(customer, carPlate, allHistory, visitNumber, weekOffset = 0, intCarForThisVisit = null, showAllSlots = false) {
