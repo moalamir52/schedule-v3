@@ -114,8 +114,17 @@ const createUser = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
     
-    // Add user
-    await db.addUser(username, password);
+    // Hash password and add user
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    await db.addUser({
+      username,
+      password: hashedPassword,
+      plainPassword: password,
+      role: 'User'
+    });
+    
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
     console.error('Error creating user:', error);

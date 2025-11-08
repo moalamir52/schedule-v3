@@ -214,6 +214,7 @@ app.post('/api/add-user', async (req, res) => {
   try {
     const { username, password } = req.body;
     const db = require('./services/databaseService');
+    const bcrypt = require('bcryptjs');
     
     // Check if user exists
     const existingUser = await db.findUserByUsername(username);
@@ -221,8 +222,15 @@ app.post('/api/add-user', async (req, res) => {
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
     
-    // Add user
-    await db.addUser(username, password);
+    // Hash password and add user
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await db.addUser({
+      username,
+      password: hashedPassword,
+      plainPassword: password,
+      role: 'User'
+    });
+    
     res.json({ success: true, message: 'User created successfully' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
