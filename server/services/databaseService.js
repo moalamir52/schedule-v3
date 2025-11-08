@@ -37,10 +37,15 @@ class DatabaseService {
     
     // Check if PostgreSQL URL is available
     if (process.env.DATABASE_URL) {
-      console.log('🐘 PostgreSQL URL detected!');
+      console.log('🐘 Using PostgreSQL database!');
       console.log('URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
+      // Use PostgreSQL service
+      this.postgres = require('./postgresService');
+      this.isPostgres = true;
+      return;
     } else {
       console.log('⚠️  No DATABASE_URL found, using SQLite');
+      this.isPostgres = false;
     }
     
     // SQLite connection
@@ -244,6 +249,10 @@ class DatabaseService {
 
   // Customers methods
   async getCustomers() {
+    if (this.isPostgres) {
+      return await this.postgres.getCustomers();
+    }
+    
     try {
       console.log('[DB] Fetching customers...');
       const result = await this.all('SELECT * FROM customers WHERE Status = ? ORDER BY CustomerID COLLATE NOCASE', ['Active']);
@@ -256,6 +265,10 @@ class DatabaseService {
   }
 
   async addCustomer(customerData) {
+    if (this.isPostgres) {
+      return await this.postgres.addCustomer(customerData);
+    }
+    
     const sql = `INSERT INTO customers (CustomerID, Name, Villa, CarPlates, Washman_Package, Days, Time, Status, Phone, Notes, Fee, \`Number of car\`, \`start date\`) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const params = [
@@ -318,6 +331,9 @@ class DatabaseService {
 
   // Wash history methods
   async getAllHistory() {
+    if (this.isPostgres) {
+      return await this.postgres.getAllHistory();
+    }
     return await this.all('SELECT * FROM wash_history ORDER BY WashDate DESC');
   }
 
@@ -346,6 +362,9 @@ class DatabaseService {
 
   // Workers methods
   async getWorkers() {
+    if (this.isPostgres) {
+      return await this.postgres.getWorkers();
+    }
     return await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
   }
 
@@ -470,6 +489,9 @@ class DatabaseService {
 
   // Users methods
   async findUserByUsername(username) {
+    if (this.isPostgres) {
+      return await this.postgres.findUserByUsername(username);
+    }
     return await this.get('SELECT * FROM Users WHERE Username = ? COLLATE NOCASE', [username]);
   }
 
