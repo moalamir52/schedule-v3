@@ -22,6 +22,7 @@ const aiRoutes = require('./api/routes/aiRoutes');
 const debugRoutes = require('./api/routes/debugRoutes');
 const autoScheduleRoutes = require('./api/routes/autoScheduleRoutes');
 const washRulesRoutes = require('./api/routes/washRulesRoutes');
+const completedTasksRoutes = require('./api/routes/completedTasksRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -92,12 +93,12 @@ app.use('/api/workers', workersRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/customers', clientRoutes);
-app.use('/api/clients', clientRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/debug', debugRoutes);
 app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
+app.use('/api/completed-tasks', completedTasksRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 
 // Root route
@@ -156,6 +157,44 @@ app.get('/api/version', (req, res) => {
     },
     timestamp: new Date().toISOString()
   });
+});
+
+// Database info endpoint
+app.get('/api/database-info', (req, res) => {
+  const dbInfo = {
+    hasPostgresUrl: !!process.env.DATABASE_URL,
+    hasPostgresUrl2: !!process.env.POSTGRES_URL,
+    nodeEnv: process.env.NODE_ENV,
+    port: process.env.PORT,
+    dbType: process.env.DATABASE_URL ? 
+      (process.env.DATABASE_URL.includes('postgres') ? 'PostgreSQL' : 'Other') : 
+      'SQLite (Local)',
+    timestamp: new Date().toISOString()
+  };
+  
+  res.json(dbInfo);
+});
+
+// Direct clients next-id endpoint
+app.get('/api/clients/next-id', async (req, res) => {
+  try {
+    const db = require('./services/databaseService');
+    const customers = await db.getCustomers();
+    
+    let maxNum = 0;
+    customers.forEach(customer => {
+      const match = customer.CustomerID?.match(/CUST-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    
+    const nextId = `CUST-${String(maxNum + 1).padStart(3, '0')}`;
+    res.json({ success: true, nextId });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // Error handling

@@ -234,7 +234,11 @@ const autoAssignSchedule = async (req, res) => {
       return res.status(400).json({ success: false, error: 'No active workers found.' });
     }
     
-    // 3. Clean up completed tasks from ScheduledTasks
+    // 3. Clean up completed tasks from ScheduledTasks FIRST
+    console.log(`\n=== CLEANUP PHASE ===`);
+    console.log(`[CLEANUP] Starting with ${existingSchedule.length} scheduled tasks`);
+    console.log(`[CLEANUP] Total history records: ${allHistory.length}`);
+    
     const cleanedSchedule = existingSchedule.filter(task => {
       if (!task.AppointmentDate) return true; // Keep tasks without date
       
@@ -242,15 +246,19 @@ const autoAssignSchedule = async (req, res) => {
       const isCompleted = allHistory.some(record => 
         record.CustomerID === task.CustomerID &&
         record.CarPlate === (task.CarPlate || '') &&
-        parseHistoryDate(record.WashDate).toDateString() === taskDate.toDateString()
+        parseHistoryDate(record.WashDate).toDateString() === taskDate.toDateString() &&
+        (record.Status === 'Completed' || record.Status === 'Cancelled')
       );
       
       if (isCompleted) {
-
+        console.log(`[CLEANUP] ❌ Removing completed task: ${task.CustomerID} - ${task.CarPlate} on ${task.AppointmentDate}`);
         return false;
       }
       return true;
     });
+    
+    console.log(`[CLEANUP] ✅ Cleaned up ${existingSchedule.length - cleanedSchedule.length} completed tasks`);
+    console.log(`[CLEANUP] Remaining tasks: ${cleanedSchedule.length}`);
     
     // Update ScheduledTasks if any tasks were removed
     if (cleanedSchedule.length !== existingSchedule.length) {
@@ -270,34 +278,81 @@ const autoAssignSchedule = async (req, res) => {
         scheduleDate: task.ScheduleDate || new Date().toISOString().split('T')[0]
       }));
       await clearAndWriteScheduleToDb(cleanedTasks);
-
+      console.log(`[CLEANUP] 💾 Updated ScheduledTasks after cleanup`);
     }
     
+    // Use cleaned schedule for further processing
+    const currentSchedule = cleanedSchedule;
+    
     // 4. Identify Locked Tasks (manual edits that should be preserved)
-    const lockedTasks = cleanedSchedule.filter(task => task.isLocked === 'TRUE');
+    const lockedTasks = currentSchedule.filter(task => task.isLocked === 'TRUE');
     console.log(`[AUTO-ASSIGN] Found ${lockedTasks.length} locked tasks (manual edits) to preserve`);
     if (lockedTasks.length > 0) {
       console.log('[AUTO-ASSIGN] Locked tasks:', lockedTasks.map(t => `${t.CustomerID}-${t.Day}-${t.Time} (${t.WorkerName}, ${t.WashType})`));
     }
     
     // 4. Generate All Potential New Appointments (only for customers that need them)
+    console.log(`\n=== APPOINTMENT GENERATION ===`);
+    console.log(`[GENERATION] Processing ${activeCustomers.length} customers`);
+    
     const appointmentResult = await generateAllAppointments(activeCustomers, allHistory, weekOffset, showAllSlots);
     const potentialAppointments = appointmentResult.appointments || appointmentResult;
     const manualInputCustomers = appointmentResult.manualInputRequired || [];
     
-    console.log(`[AUTO-ASSIGN] Generated ${potentialAppointments.length} potential appointments for ${activeCustomers.length} customers`);
+    console.log(`[GENERATION] ✅ Generated ${potentialAppointments.length} potential appointments`);
+    
+    // Check if any generated appointments are for completed tasks
+    const completedTasksThisWeek = getCompletedTasksForWeek(allHistory, weekOffset);
+    console.log(`[GENERATION] Found ${completedTasksThisWeek.length} completed tasks this week`);
+    
+    // Create a more comprehensive filter for completed tasks
+    const filteredAppointments = potentialAppointments.filter(apt => {
+      const appointmentDate = getAppointmentDate(apt.day, weekOffset);
+      const appointmentDateStr = appointmentDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+      
+      // Check against completed tasks using multiple date formats
+      const isAlreadyCompleted = completedTasksThisWeek.some(completed => {
+        if (completed.CustomerID !== apt.customerId || completed.CarPlate !== apt.carPlate) {
+          return false;
+        }
+        
+        // Parse completed task date
+        const completedDate = parseHistoryDate(completed.WashDate);
+        const completedDateStr = completedDate.toISOString().split('T')[0]; // YYYY-MM-DD format
+        
+        // Compare dates in YYYY-MM-DD format for accuracy
+        return completedDateStr === appointmentDateStr;
+      });
+      
+      // Also check against wash_history directly for this specific appointment
+      const isInWashHistory = allHistory.some(record => 
+        record.CustomerID === apt.customerId &&
+        record.CarPlate === apt.carPlate &&
+        (record.Status === 'Completed' || record.Status === 'Cancelled') &&
+        parseHistoryDate(record.WashDate).toISOString().split('T')[0] === appointmentDateStr
+      );
+      
+      if (isAlreadyCompleted || isInWashHistory) {
+        console.log(`[GENERATION] ❌ Skipping completed appointment: ${apt.customerId} - ${apt.carPlate} on ${apt.day} (${appointmentDateStr})`);
+        return false;
+      }
+      return true;
+    });
+    
+    console.log(`[GENERATION] ✅ After filtering completed: ${filteredAppointments.length} appointments remain`);
     
     // Track new appointments for specific customers
     const p1019NewAppointments = potentialAppointments.filter(apt => apt.villa === 'P1 019' || (p1019Customer && apt.customerId === p1019Customer.CustomerID));
     const cust006NewAppointments = potentialAppointments.filter(apt => apt.customerId === 'CUST-006');
     
     // Add actual dates to appointments
-    const appointmentsWithDates = addActualDatesToAppointments(potentialAppointments, weekOffset);
+    const appointmentsWithDates = addActualDatesToAppointments(filteredAppointments, weekOffset);
     
 
     
-    // 4. Get completed tasks for this week
-    const completedTasksThisWeek = getCompletedTasksForWeek(allHistory, weekOffset);
+    // Get completed tasks for this week (already calculated above)
+    console.log(`\n=== FILTERING PHASE ===`);
+    console.log(`[FILTERING] Completed tasks this week: ${completedTasksThisWeek.length}`);
     
 
     
@@ -436,13 +491,19 @@ const autoAssignSchedule = async (req, res) => {
     const endTime = new Date();
 
     
+    console.log(`\n=== FINAL RESULT ===`);
+    console.log(`[RESULT] Final schedule: ${finalSchedule.length} total tasks`);
+    console.log(`[RESULT] Locked tasks: ${lockedTasks.length}`);
+    console.log(`[RESULT] New assignments: ${assignedUnlockedTasks.length}`);
+    console.log(`[RESULT] Completed tasks cleaned: ${existingSchedule.length - cleanedSchedule.length}`);
+    
     let message;
     if (showAllSlots) {
       message = `[TESTING] Full capacity view: ${finalSchedule.length} total slots, ${lockedTasks.length} locked tasks, ${assignedUnlockedTasks.length} available appointments, ${completedTasksForDisplay.length} completed/cancelled tasks`;
     } else if (activeCustomers.length === 0) {
-      message = `[SUCCESS] No new appointments needed - all active customers already have appointments for week ${weekOffset > 0 ? '+' : ''}${weekOffset}.`;
+      message = `[SUCCESS] No new appointments needed - all active customers already have appointments for week ${weekOffset > 0 ? '+' : ''}${weekOffset}. Cleaned up ${existingSchedule.length - cleanedSchedule.length} completed tasks.`;
     } else {
-      message = `[SUCCESS] Schedule updated successfully. ${assignedUnlockedTasks.length} new appointments added for ${activeCustomers.length} customers, ${lockedTasks.length} locked tasks preserved, ${completedTasksThisWeek?.length || 0} completed tasks excluded.`;
+      message = `[SUCCESS] Schedule updated successfully. ${assignedUnlockedTasks.length} new appointments added for ${activeCustomers.length} customers, ${lockedTasks.length} locked tasks preserved, ${completedTasksThisWeek?.length || 0} completed tasks excluded. Cleaned up ${existingSchedule.length - cleanedSchedule.length} completed tasks.`;
     }
     
     if (manualInputCustomers.length > 0) {
@@ -578,6 +639,20 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
                 continue;
               }
               
+              // Check if this appointment is already completed in wash_history
+              const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+              const isAlreadyCompleted = allHistory.some(record => 
+                record.CustomerID === customer.CustomerID &&
+                record.CarPlate === matchingCarPlate &&
+                (record.Status === 'Completed' || record.Status === 'Cancelled') &&
+                parseHistoryDate(record.WashDate).toISOString().split('T')[0] === appointmentDateStr
+              );
+              
+              if (isAlreadyCompleted && !showAllSlots) {
+                console.log(`[SKIP-COMPLETED] ${customer.CustomerID} - ${matchingCarPlate} on ${day} already completed`);
+                continue;
+              }
+              
               appointments.push({
                 day,
                 time: carTime.time,
@@ -617,6 +692,20 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
             // Check if appointment date is on or after customer start date
             const appointmentDate = getAppointmentDate(dayTime.day, weekOffset);
             if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
+              continue;
+            }
+            
+            // Check if this appointment is already completed in wash_history
+            const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+            const isAlreadyCompleted = allHistory.some(record => 
+              record.CustomerID === customer.CustomerID &&
+              record.CarPlate === carPlate &&
+              (record.Status === 'Completed' || record.Status === 'Cancelled') &&
+              parseHistoryDate(record.WashDate).toISOString().split('T')[0] === appointmentDateStr
+            );
+            
+            if (isAlreadyCompleted && !showAllSlots) {
+              console.log(`[SKIP-COMPLETED] ${customer.CustomerID} - ${carPlate} on ${dayTime.day} already completed`);
               continue;
             }
             
@@ -668,6 +757,20 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
                     continue;
                   }
                   
+                  // Check if this appointment is already completed in wash_history
+                  const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+                  const isAlreadyCompleted = allHistory.some(record => 
+                    record.CustomerID === customer.CustomerID &&
+                    record.CarPlate === carPlate &&
+                    (record.Status === 'Completed' || record.Status === 'Cancelled') &&
+                    parseHistoryDate(record.WashDate).toISOString().split('T')[0] === appointmentDateStr
+                  );
+                  
+                  if (isAlreadyCompleted && !showAllSlots) {
+                    console.log(`[SKIP-COMPLETED] ${customer.CustomerID} - ${carPlate} on ${day} already completed`);
+                    continue;
+                  }
+                  
                   appointments.push({
                     day,
                     time,
@@ -711,6 +814,20 @@ async function generateAllAppointments(customers, allHistory, weekOffset, showAl
           // Check if appointment date is on or after customer start date
           const appointmentDate = getAppointmentDate(appointment.day, weekOffset);
           if (!showAllSlots && customerStartDate && appointmentDate < customerStartDate) {
+            continue;
+          }
+          
+          // Check if this appointment is already completed in wash_history
+          const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+          const isAlreadyCompleted = allHistory.some(record => 
+            record.CustomerID === customer.CustomerID &&
+            record.CarPlate === carPlate &&
+            (record.Status === 'Completed' || record.Status === 'Cancelled') &&
+            parseHistoryDate(record.WashDate).toISOString().split('T')[0] === appointmentDateStr
+          );
+          
+          if (isAlreadyCompleted && !showAllSlots) {
+            console.log(`[SKIP-COMPLETED] ${customer.CustomerID} - ${carPlate} on ${appointment.day} already completed`);
             continue;
           }
           
@@ -1996,6 +2113,14 @@ function parseHistoryDate(dateStr) {
     const day = parseInt(parts[0]);
     const month = months[parts[1]];
     const year = parseInt(parts[2]);
+    return new Date(year, month, day);
+  }
+  
+  // Handle YYYY-MM-DD format
+  if (parts.length === 3 && parts[0].length === 4) {
+    const year = parseInt(parts[0]);
+    const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+    const day = parseInt(parts[2]);
     return new Date(year, month, day);
   }
   

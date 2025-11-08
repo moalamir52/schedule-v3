@@ -67,7 +67,71 @@ const getCustomerById = async (req, res) => {
   }
 };
 
+const getAllClients = async (req, res) => {
+  try {
+    const customers = await db.getCustomers();
+    res.json({ success: true, data: customers });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const getNextCustomerId = async (req, res) => {
+  try {
+    const customers = await db.getCustomers();
+    
+    // Find highest customer number
+    let maxNum = 0;
+    customers.forEach(customer => {
+      const match = customer.CustomerID?.match(/CUST-(\d+)/);
+      if (match) {
+        const num = parseInt(match[1]);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    
+    const nextId = `CUST-${String(maxNum + 1).padStart(3, '0')}`;
+    res.json({ success: true, nextId });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const createClient = async (req, res) => {
+  try {
+    const result = await db.addCustomer(req.body);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const updateClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.updateCustomer(id, req.body);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const deleteClient = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await db.deleteCustomer(id);
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   getAvailableClients,
-  getCustomerById
+  getCustomerById,
+  getAllClients,
+  getNextCustomerId,
+  createClient,
+  updateClient,
+  deleteClient
 };

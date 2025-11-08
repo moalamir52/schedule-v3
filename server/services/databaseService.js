@@ -319,7 +319,7 @@ class DatabaseService {
       historyData.WashID || `WASH-${Date.now()}`,
       historyData.CustomerID,
       historyData.CarPlate,
-      formatDate(historyData.WashDate) || formatDate(new Date()),
+      historyData.WashDate, // Keep original format (DD-MMM-YYYY)
       historyData.PackageType,
       historyData.Villa,
       historyData.WashTypePerformed,
