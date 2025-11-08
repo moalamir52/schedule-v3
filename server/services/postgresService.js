@@ -188,7 +188,10 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
-      return result.rows;
+      return result.rows.map(invoice => ({
+        ...invoice,
+        TotalAmount: parseFloat(invoice.TotalAmount) || 0
+      }));
     } catch (error) {
       console.error('Error fetching invoices:', error);
       return [];
@@ -206,7 +209,7 @@ class PostgresService {
           invoiceData.CustomerID,
           invoiceData.CustomerName,
           invoiceData.Villa,
-          invoiceData.TotalAmount,
+          parseFloat(invoiceData.TotalAmount) || 0,
           'Pending',
           new Date().toISOString()
         ]
