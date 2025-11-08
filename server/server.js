@@ -278,6 +278,15 @@ app.listen(PORT, () => {
   console.log(`   - GET /api/schedule/assign/current`);
   console.log('='.repeat(80) + '\n');
   
+  // Initialize database service to check environment
+  try {
+    console.log('🔍 Initializing database service...');
+    const db = require('./services/databaseService');
+    console.log('✅ Database service initialized');
+  } catch (error) {
+    console.log('❌ Database service failed:', error.message);
+  }
+  
   // Start cron service
   try {
     const cronService = require('./services/cronService');
