@@ -277,7 +277,7 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('🔴 Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('\n' + '='.repeat(80));
   console.log('🚀 SCHEDULE V3 SERVER STARTED SUCCESSFULLY!');
   console.log('='.repeat(80));
@@ -293,6 +293,17 @@ app.listen(PORT, () => {
   // Initialize database service to check environment
   try {
     console.log('🔍 Initializing database service...');
+    
+    // Setup PostgreSQL if DATABASE_URL exists
+    if (process.env.DATABASE_URL) {
+      const { setupPostgreSQL } = require('./scripts/setup-postgres');
+      try {
+        await setupPostgreSQL();
+      } catch (error) {
+        console.log('❌ PostgreSQL setup failed:', error.message);
+      }
+    }
+    
     const db = require('./services/databaseService');
     console.log('✅ Database service initialized');
   } catch (error) {
