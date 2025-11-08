@@ -187,8 +187,30 @@ class PostgresService {
   async getInvoices() {
     try {
       await this.connect();
-      const result = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
-      return result.rows.map(invoice => ({
+      
+      // Get table structure first
+      const structureResult = await this.client.query(`
+        SELECT column_name, data_type 
+        FROM information_schema.columns 
+        WHERE table_name = 'invoices' 
+        ORDER BY ordinal_position
+      `);
+      
+      console.log('📋 [DB-COLUMNS] Invoices table columns:');
+      structureResult.rows.forEach(col => {
+        console.log(`   - ${col.column_name} (${col.data_type})`);
+      });
+      
+      const result = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC LIMIT 1');
+      
+      if (result.rows.length > 0) {
+        console.log('📊 [DB-SAMPLE] Sample invoice data:');
+        console.log('   Keys:', Object.keys(result.rows[0]));
+        console.log('   Sample:', result.rows[0]);
+      }
+      
+      const allResult = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
+      return allResult.rows.map(invoice => ({
         ...invoice,
         TotalAmount: parseFloat(invoice.TotalAmount) || 0
       }));
