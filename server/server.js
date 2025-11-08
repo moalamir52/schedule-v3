@@ -1,4 +1,16 @@
 require('dotenv').config();
+
+// CRITICAL: Check environment BEFORE logger silences output
+console.log('\n' + '='.repeat(50));
+console.log('🔍 ENVIRONMENT CHECK (BEFORE LOGGER)');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('PORT:', process.env.PORT);
+if (process.env.DATABASE_URL) {
+  console.log('DATABASE_URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
+}
+console.log('='.repeat(50) + '\n');
+
 // Install centralized logger early to capture/silence existing console.* calls
 const logger = require('./services/logger');
 logger.install();
