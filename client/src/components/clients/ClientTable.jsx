@@ -28,7 +28,7 @@ function ClientTable({ clients, onEdit, onDelete }) {
           </tr>
         </thead>
         <tbody>
-          {clients.map((client, index) => (
+          {Array.isArray(clients) ? clients.map((client, index) => (
             <tr key={index}>
               <td>{client.CustomerID}</td>
               <td>{client.Name}</td>
@@ -97,7 +97,13 @@ function ClientTable({ clients, onEdit, onDelete }) {
                 </div>
               </td>
             </tr>
-          ))}
+          )) : (
+            <tr>
+              <td colSpan="16" style={{ textAlign: 'center', padding: '20px' }}>
+                No clients data available
+              </td>
+            </tr>
+          )}
         </tbody>
       </table>
     </div>

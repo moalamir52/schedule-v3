@@ -197,6 +197,65 @@ app.get('/api/clients/next-id', async (req, res) => {
   }
 });
 
+// Database viewer endpoint
+app.get('/api/database/tables', async (req, res) => {
+  try {
+    const { Client } = require('pg');
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    await client.connect();
+    
+    const result = await client.query(`
+      SELECT table_name, 
+             (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = t.table_name) as column_count
+      FROM information_schema.tables t 
+      WHERE table_schema = 'public' 
+      ORDER BY table_name
+    `);
+    
+    const tables = [];
+    for (const table of result.rows) {
+      const countResult = await client.query(`SELECT COUNT(*) FROM ${table.table_name}`);
+      tables.push({
+        name: table.table_name,
+        columns: table.column_count,
+        rows: parseInt(countResult.rows[0].count)
+      });
+    }
+    
+    await client.end();
+    res.json({ success: true, tables });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Database table data endpoint
+app.get('/api/database/table/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const limit = req.query.limit || 50;
+    
+    const { Client } = require('pg');
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    await client.connect();
+    
+    const result = await client.query(`SELECT * FROM ${tableName} LIMIT $1`, [limit]);
+    
+    await client.end();
+    res.json({ success: true, data: result.rows, count: result.rows.length });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Error handling
 process.on('uncaughtException', (error) => {
   console.error('🔴 Uncaught Exception:', error);

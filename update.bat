@@ -1,16 +1,27 @@
 @echo off
-echo Adding files to Git (excluding database)...
-git add .
-git reset server/database/database.db
+echo Git Update and Deploy Script
+echo ===========================
+echo.
 
-set /p commitMessage="Enter a short description for your update: "
-
-echo Committing changes...
-git commit -m "%commitMessage%"
-
-echo Pushing updates to GitHub...
-git push
+echo Creating database backup...
+node server\scripts\databaseBackup.js
 
 echo.
-echo Update complete!
+echo Adding all changes to git...
+git add .
+
+echo.
+set /p message="Enter commit message: "
+if "%message%"=="" set message="Update project files with database backup"
+
+echo.
+echo Committing changes...
+git commit -m "%message%"
+
+echo.
+echo Pushing to GitHub...
+git push origin main
+
+echo.
+echo Done! Changes and database backup pushed to GitHub.
 pause
