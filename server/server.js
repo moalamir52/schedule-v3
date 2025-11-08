@@ -297,6 +297,88 @@ app.get('/api/database/table/:tableName', async (req, res) => {
   }
 });
 
+// Database import endpoint
+app.post('/api/database/import/:tableName', async (req, res) => {
+  try {
+    const { tableName } = req.params;
+    const { data } = req.body;
+    
+    if (!data || !Array.isArray(data) || data.length === 0) {
+      return res.json({ success: true, message: 'No data to import' });
+    }
+    
+    const { Client } = require('pg');
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    await client.connect();
+    
+    // Create table structure based on first record
+    const firstRecord = data[0];
+    const columns = Object.keys(firstRecord);
+    
+    // Create table if not exists
+    const createTableSQL = `CREATE TABLE IF NOT EXISTS "${tableName}" (${columns.map(col => `"${col}" TEXT`).join(', ')})`;
+    await client.query(createTableSQL);
+    
+    // Clear existing data
+    await client.query(`DELETE FROM "${tableName}"`);
+    
+    // Insert new data
+    for (const record of data) {
+      const values = columns.map(col => record[col] || null);
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const insertSQL = `INSERT INTO "${tableName}" (${columns.map(col => `"${col}"`).join(', ')}) VALUES (${placeholders})`;
+      await client.query(insertSQL, values);
+    }
+    
+    await client.end();
+    
+    console.log(`✅ Imported ${data.length} records to ${tableName}`);
+    res.json({ success: true, message: `Imported ${data.length} records to ${tableName}` });
+    
+  } catch (error) {
+    console.error(`❌ Import error for ${req.params.tableName}:`, error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Clear all PostgreSQL tables endpoint
+app.post('/api/database/clear-all', async (req, res) => {
+  try {
+    const { Client } = require('pg');
+    const client = new Client({
+      connectionString: process.env.DATABASE_URL,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    
+    await client.connect();
+    
+    // Get all table names
+    const result = await client.query(`
+      SELECT tablename FROM pg_tables 
+      WHERE schemaname = 'public'
+    `);
+    
+    // Drop all tables
+    for (const row of result.rows) {
+      await client.query(`DROP TABLE IF EXISTS "${row.tablename}" CASCADE`);
+      console.log(`❌ Dropped table: ${row.tablename}`);
+    }
+    
+    await client.end();
+    
+    console.log('✅ All PostgreSQL tables cleared');
+    res.json({ success: true, message: 'All PostgreSQL tables cleared' });
+    
+  } catch (error) {
+    console.error('❌ Clear all error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Error handling
 process.on('uncaughtException', (error) => {
   console.error('🔴 Uncaught Exception:', error);
