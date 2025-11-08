@@ -25,7 +25,13 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query('SELECT * FROM customers WHERE "Status" = $1', ['Active']);
-      return result.rows;
+      return result.rows.map(customer => ({
+        ...customer,
+        Fee: parseFloat(customer.Fee) || 0,
+        CustomerName: customer.Name,
+        WashDay: customer.Days,
+        WashTime: customer.Time
+      }));
     } catch (error) {
       console.error('Error fetching customers:', error);
       return [];
@@ -236,7 +242,7 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query(
-        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "Start", "End", "CreatedAt") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+        'INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "Start", "End", "CreatedAt", "DueDate", "Services") VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
         [
           invoiceData.InvoiceID || `INV-${Date.now()}`,
           invoiceData.Ref,
@@ -247,7 +253,9 @@ class PostgresService {
           'Pending',
           invoiceData.Start || '',
           invoiceData.End || '',
-          new Date().toISOString()
+          new Date().toISOString(),
+          invoiceData.DueDate || '',
+          invoiceData.Services || ''
         ]
       );
       return result.rows[0];
@@ -315,6 +323,25 @@ class PostgresService {
       return result.rows[0];
     } catch (error) {
       console.error('Error deleting invoice:', error);
+      throw error;
+    }
+  }
+
+  async updateCustomer(customerId, updateData) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'UPDATE customers SET "Name" = $1, "Villa" = $2, "Fee" = $3 WHERE "CustomerID" = $4 RETURNING *',
+        [
+          updateData.Name,
+          updateData.Villa,
+          parseFloat(updateData.Fee) || 0,
+          customerId
+        ]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating customer:', error);
       throw error;
     }
   }

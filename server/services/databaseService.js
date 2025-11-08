@@ -297,6 +297,10 @@ class DatabaseService {
   }
 
   async updateCustomer(customerID, updatedData) {
+    if (this.isPostgres) {
+      return await this.postgres.updateCustomer(customerID, updatedData);
+    }
+    
     const fields = Object.keys(updatedData).map(key => {
       // Handle column names with spaces
       if (key.includes(' ')) {
