@@ -106,6 +106,12 @@ async function buildWeeklySchedule(weekOffset = 0) {
             // Find worker but don't reserve yet
             const groupWorker = findAvailableWorker(activeWorkers, workerSchedule, day, time, false);
             
+            // Skip this time group if no worker is available
+            if (!groupWorker) {
+                console.warn(`[NO-WORKER] Skipping customer ${customer.Name} at ${day} ${time} - no available workers`);
+                return;
+            }
+            
             // Now reserve the worker for this time slot
             const timeSlots = parseTimeSlots(time);
             if (!workerSchedule[groupWorker.WorkerID]) {
@@ -487,8 +493,8 @@ function findAvailableWorker(workers, workerSchedule, day, time, shouldReserve =
     }
   }
   
-  // If all workers are busy, assign to the first worker (will create conflict but system continues)
-  return workers[0];
+  // If all workers are busy, return null to indicate no availability
+  return null;
 }
 
 // Helper function to parse complex time strings into individual time slots
@@ -547,9 +553,63 @@ async function clearSchedule() {
   }
 }
 
+// Function to calculate available times for a specific day
+async function getAvailableTimesForDay(day, weekOffset = 0) {
+  try {
+    const db = require('./databaseService');
+    const [currentSchedule, allWorkers] = await Promise.all([
+      db.getScheduledTasks(),
+      db.getWorkers()
+    ]);
+    
+    const activeWorkers = allWorkers.filter(worker => worker.Status === 'Active');
+    
+    console.log(`[AVAILABLE-TIMES] Day: ${day}, Total workers: ${allWorkers.length}, Active workers: ${activeWorkers.length}`);
+    
+    if (activeWorkers.length === 0) {
+      return [];
+    }
+    
+    // All possible time slots
+    const allTimes = [
+      '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+      '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
+    ];
+    
+    // Count busy workers for each time slot from current schedule
+    const busyCount = {};
+    allTimes.forEach(time => {
+      busyCount[time] = 0;
+    });
+    
+    // Count assignments for the specific day from current schedule
+    currentSchedule.forEach(task => {
+      if (task.Day === day || task.day === day) {
+        const timeSlots = parseTimeSlots(task.Time || task.time);
+        timeSlots.forEach(timeSlot => {
+          if (busyCount[timeSlot] !== undefined) {
+            busyCount[timeSlot]++;
+          }
+        });
+      }
+    });
+    
+    // Return times where at least one worker is free
+    const availableTimes = allTimes.filter(time => busyCount[time] < activeWorkers.length);
+    console.log(`[AVAILABLE-TIMES] Day: ${day}, Busy count:`, busyCount);
+    console.log(`[AVAILABLE-TIMES] Available times:`, availableTimes);
+    return availableTimes;
+    
+  } catch (error) {
+    console.error('[GET-AVAILABLE-TIMES] Error:', error);
+    return [];
+  }
+}
+
 module.exports = {
   buildWeeklySchedule,
   determineIntCarForCustomer,
   checkIfFirstWeekOfBiWeekCycle,
-  clearSchedule
+  clearSchedule,
+  getAvailableTimesForDay
 };

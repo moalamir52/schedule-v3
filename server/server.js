@@ -200,6 +200,7 @@ app.use('/api/debug', debugRoutes);
 app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/completed-tasks', completedTasksRoutes);
+app.use('/api/available', require('./api/routes/availableTimesRoutes'));
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 app.use('/api/schedule-reset', require('./api/routes/scheduleResetRoutes'));
 

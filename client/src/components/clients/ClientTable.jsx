@@ -1,4 +1,16 @@
 function ClientTable({ clients, onEdit, onDelete }) {
+  // Helper function to format days from full names to abbreviated
+  const formatDays = (daysStr) => {
+    if (!daysStr) return '';
+    return daysStr.replace(/Monday/g, 'Mon')
+                  .replace(/Tuesday/g, 'Tue')
+                  .replace(/Wednesday/g, 'Wed')
+                  .replace(/Thursday/g, 'Thu')
+                  .replace(/Friday/g, 'Fri')
+                  .replace(/Saturday/g, 'Sat')
+                  .replace(/Sunday/g, 'Sun');
+  };
+  
   // Helper function to format date from ISO to DD-MMM-YY
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
@@ -61,7 +73,7 @@ function ClientTable({ clients, onEdit, onDelete }) {
               <td>{client.Phone}</td>
               <td>{client['Number of car']}</td>
               <td>{client.CarPlates}</td>
-              <td>{client.Days}</td>
+              <td>{formatDays(client.Days)}</td>
               <td>{client.Time}</td>
               <td style={{ 
                 maxWidth: '100px', 

@@ -21,6 +21,10 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
   
   const [cars, setCars] = useState([{ plate: '', washType: 'EXT' }]);
   const [appointments, setAppointments] = useState([{ day: 'Saturday', time: '9:00 AM' }]);
+  const [timeFormat, setTimeFormat] = useState('standard'); // 'standard' or 'advanced'
+  const [advancedTime, setAdvancedTime] = useState('');
+  const [availableTimes, setAvailableTimes] = useState({});
+  const [loadingTimes, setLoadingTimes] = useState({});
   
   // Package limits
   const getPackageLimit = (packageName) => {
@@ -52,6 +56,25 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
       console.error('Error generating customer ID:', error);
     }
   };
+  
+  const fetchAvailableTimes = async (day) => {
+    if (availableTimes[day] || loadingTimes[day]) return;
+    
+    setLoadingTimes(prev => ({ ...prev, [day]: true }));
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/available/times?day=${day}`);
+      const data = await response.json();
+      if (data.availableTimes) {
+        setAvailableTimes(prev => ({ ...prev, [day]: data.availableTimes }));
+      }
+    } catch (error) {
+      console.error('Error fetching available times:', error);
+      // Set empty array if API fails to prevent showing unavailable times
+      setAvailableTimes(prev => ({ ...prev, [day]: [] }));
+    } finally {
+      setLoadingTimes(prev => ({ ...prev, [day]: false }));
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -59,15 +82,49 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     
     try {
       // Prepare client data
+      let finalTime, finalDays;
+      
+      if (timeFormat === 'advanced' && advancedTime.trim()) {
+        finalTime = advancedTime.trim();
+        
+        // Extract days from advanced time format
+        if (advancedTime.includes('@')) {
+          // Day-specific format: "Mon@7:00 AM, Thu@2:00 PM"
+          const dayAbbrevToFull = {
+            'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 
+            'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'
+          };
+          const extractedDays = advancedTime.split(', ').map(part => {
+            const day = part.split('@')[0];
+            return dayAbbrevToFull[day] || day;
+          });
+          finalDays = extractedDays.join('-');
+        } else {
+          // Car-specific format: use appointments days as fallback
+          finalDays = appointments.map(apt => apt.day).join('-');
+        }
+      } else {
+        // Convert appointments to Day@Time format
+        const dayAbbrev = {
+          'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed', 
+          'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
+        };
+        finalTime = appointments.map(apt => 
+          `${dayAbbrev[apt.day] || apt.day}@${apt.time}`
+        ).join(', ');
+        finalDays = appointments.map(apt => apt.day).join('-');
+      }
+        
       const clientData = {
         ...formData,
         'Number of car': cars.length,
         CarPlates: cars.map(car => car.plate).join(', '),
-        Days: appointments.map(apt => apt.day).join('-'),
-        Time: appointments.map(apt => apt.time).join(' & '),
+        Days: finalDays,
+        Time: finalTime,
         cars: cars,
         appointments: appointments,
-        additionalServices: additionalServices
+        additionalServices: additionalServices,
+        timeFormat: timeFormat
       };
       
       await onAdd(clientData);
@@ -93,6 +150,8 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
       setCars([{ plate: '', washType: 'EXT' }]);
       setAppointments([{ day: 'Saturday', time: '9:00 AM' }]);
       setAdditionalServices([]);
+      setTimeFormat('standard');
+      setAdvancedTime('');
       
       onClose();
     } catch (error) {
@@ -261,7 +320,329 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
             </div>
             
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>📅 Appointments:</label>
+              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>⏰ Time Format:</label>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="timeFormat"
+                    value="standard"
+                    checked={timeFormat === 'standard'}
+                    onChange={(e) => setTimeFormat(e.target.value)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <span>📋 Standard Times (Same time for all cars)</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                  <input
+                    type="radio"
+                    name="timeFormat"
+                    value="advanced"
+                    checked={timeFormat === 'advanced'}
+                    onChange={(e) => setTimeFormat(e.target.value)}
+                    style={{ marginRight: '8px' }}
+                  />
+                  <span>🚗 Car-Specific Times (Different times per car)</span>
+                </label>
+              </div>
+            </div>
+            
+            {timeFormat === 'advanced' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🕐 Advanced Time Options:</label>
+                
+                <div style={{ marginBottom: '15px' }}>
+                  <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Select Format Type:</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAdvancedTime('Mon@7:00 AM')}
+                      style={{
+                        padding: '10px',
+                        border: advancedTime.includes('@') ? '2px solid #28a745' : '1px solid #ddd',
+                        borderRadius: '8px',
+                        backgroundColor: advancedTime.includes('@') ? '#f8fff8' : 'white',
+                        cursor: 'pointer',
+                        textAlign: 'center'
+                      }}
+                    >
+                      🗓️ Day-Specific Times<br/>
+                      <small>Mon@7:00 AM, Wed@2:00 PM</small>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const carNames = cars.map(car => car.plate).filter(plate => plate.trim());
+                        if (carNames.length >= 2) {
+                          setAdvancedTime(`9:00 AM ${carNames[0]}, 5:00 PM ${carNames[1]}`);
+                        } else {
+                          setAdvancedTime('9:00 AM Car1, 5:00 PM Car2');
+                        }
+                      }}
+                      style={{
+                        padding: '10px',
+                        border: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '2px solid #28a745' : '1px solid #ddd',
+                        borderRadius: '8px',
+                        backgroundColor: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '#f8fff8' : 'white',
+                        cursor: 'pointer',
+                        textAlign: 'center'
+                      }}
+                    >
+                      🚗 Car-Specific Times<br/>
+                      <small>9:00 AM Car1, 5:00 PM Car2</small>
+                    </button>
+                  </div>
+                </div>
+                
+                {advancedTime && (
+                  <>
+                    <div style={{
+                      padding: '10px',
+                      border: '2px solid #28a745',
+                      borderRadius: '8px',
+                      backgroundColor: '#f8fff8',
+                      marginBottom: '15px'
+                    }}>
+                      <strong>Generated Format:</strong><br/>
+                      <code style={{ fontSize: '14px', color: '#28a745' }}>{advancedTime}</code>
+                    </div>
+                    
+                    {advancedTime.includes('@') && (
+                      <div style={{ marginBottom: '15px' }}>
+                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Day-Specific Times:</label>
+                        
+                        {advancedTime.split(', ').map((dayTime, index) => {
+                          const [day, time] = dayTime.split('@');
+                          return (
+                            <div key={index} style={{ 
+                              display: 'grid', 
+                              gridTemplateColumns: '1fr 1fr auto auto', 
+                              gap: '8px', 
+                              marginBottom: '8px',
+                              padding: '8px',
+                              border: '1px solid #e0e0e0',
+                              borderRadius: '6px',
+                              backgroundColor: '#f9f9f9'
+                            }}>
+                              <select
+                                value={day || ''}
+                                onChange={(e) => {
+                                  const newDay = e.target.value;
+                                  if (newDay) {
+                                    const parts = advancedTime.split(', ');
+                                    parts[index] = `${newDay}@${time || '7:00 AM'}`;
+                                    setAdvancedTime(parts.join(', '));
+                                  }
+                                }}
+                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
+                              >
+                                <option value="">Select Day</option>
+                                <option value="Mon">Monday</option>
+                                <option value="Tue">Tuesday</option>
+                                <option value="Wed">Wednesday</option>
+                                <option value="Thu">Thursday</option>
+                                <option value="Fri">Friday</option>
+                                <option value="Sat">Saturday</option>
+                              </select>
+                              <select
+                                value={time || ''}
+                                onChange={(e) => {
+                                  const newTime = e.target.value;
+                                  if (newTime) {
+                                    const parts = advancedTime.split(', ');
+                                    parts[index] = `${day || 'Mon'}@${newTime}`;
+                                    setAdvancedTime(parts.join(', '));
+                                  }
+                                }}
+                                onFocus={() => {
+                                  const currentDay = day || 'Mon';
+                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };
+                                  fetchAvailableTimes(dayMap[currentDay] || currentDay);
+                                }}
+                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
+                              >
+                                <option value="">Select Time</option>
+                                {(() => {
+                                  const currentDay = day || 'Mon';
+                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };
+                                  const fullDayName = dayMap[currentDay] || currentDay;
+                                  const times = availableTimes[fullDayName] || [];
+                                  if (times.length === 0) {
+                                    return <option value="" disabled>No available times</option>;
+                                  }
+                                  return times.map(timeOption => (
+                                    <option key={timeOption} value={timeOption}>{timeOption}</option>
+                                  ));
+                                })()}
+                              </select>
+                              {advancedTime.split(', ').length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const parts = advancedTime.split(', ');
+                                    parts.splice(index, 1);
+                                    setAdvancedTime(parts.join(', '));
+                                  }}
+                                  style={{
+                                    background: '#dc3545',
+                                    color: 'white',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    padding: '6px 8px',
+                                    cursor: 'pointer',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  ×
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                                  const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);
+                                  const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';
+                                  setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);
+                                }}
+                                style={{
+                                  background: '#28a745',
+                                  color: 'white',
+                                  border: 'none',
+                                  borderRadius: '4px',
+                                  padding: '6px 8px',
+                                  cursor: 'pointer',
+                                  fontSize: '12px'
+                                }}
+                              >
+                                +
+                              </button>
+                            </div>
+                          );
+                        })}
+                        
+                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                              const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);
+                              const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';
+                              setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);
+                            }}
+                            style={{
+                              background: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '8px 16px',
+                              cursor: 'pointer',
+                              fontSize: '14px',
+                              fontWeight: 'bold'
+                            }}
+                          >
+                            + Add Another Day
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {advancedTime.includes(',') && !advancedTime.includes('@') && (
+                      <div style={{ marginBottom: '15px' }}>
+                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Car-Specific Times:</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                          <select
+                            onChange={(e) => {
+                              const time = e.target.value;
+                              if (time) {
+                                const parts = advancedTime.split(', ');
+                                const carName = parts[0].split(' ').slice(2).join(' ');
+                                parts[0] = `${time} ${carName}`;
+                                setAdvancedTime(parts.join(', '));
+                              }
+                            }}
+                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
+                          >
+                            <option value="">First Car Time</option>
+                            <option value="6:00 AM">6:00 AM</option>
+                            <option value="7:00 AM">7:00 AM</option>
+                            <option value="8:00 AM">8:00 AM</option>
+                            <option value="9:00 AM">9:00 AM</option>
+                            <option value="10:00 AM">10:00 AM</option>
+                            <option value="11:00 AM">11:00 AM</option>
+                            <option value="12:00 PM">12:00 PM</option>
+                            <option value="1:00 PM">1:00 PM</option>
+                            <option value="2:00 PM">2:00 PM</option>
+                            <option value="3:00 PM">3:00 PM</option>
+                            <option value="4:00 PM">4:00 PM</option>
+                            <option value="5:00 PM">5:00 PM</option>
+                            <option value="6:00 PM">6:00 PM</option>
+                          </select>
+                          <select
+                            onChange={(e) => {
+                              const time = e.target.value;
+                              if (time) {
+                                const parts = advancedTime.split(', ');
+                                if (parts[1]) {
+                                  const carName = parts[1].split(' ').slice(2).join(' ');
+                                  parts[1] = `${time} ${carName}`;
+                                  setAdvancedTime(parts.join(', '));
+                                }
+                              }
+                            }}
+                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
+                          >
+                            <option value="">Second Car Time</option>
+                            <option value="6:00 AM">6:00 AM</option>
+                            <option value="7:00 AM">7:00 AM</option>
+                            <option value="8:00 AM">8:00 AM</option>
+                            <option value="9:00 AM">9:00 AM</option>
+                            <option value="10:00 AM">10:00 AM</option>
+                            <option value="11:00 AM">11:00 AM</option>
+                            <option value="12:00 PM">12:00 PM</option>
+                            <option value="1:00 PM">1:00 PM</option>
+                            <option value="2:00 PM">2:00 PM</option>
+                            <option value="3:00 PM">3:00 PM</option>
+                            <option value="4:00 PM">4:00 PM</option>
+                            <option value="5:00 PM">5:00 PM</option>
+                            <option value="6:00 PM">6:00 PM</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const carNames = cars.map(car => car.plate).filter(plate => plate.trim());
+                              const nextCarName = carNames.length > 2 ? carNames[2] : 'Car3';
+                              setAdvancedTime(advancedTime + `, 11:00 AM ${nextCarName}`);
+                            }}
+                            style={{
+                              background: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '4px',
+                              padding: '6px 10px',
+                              cursor: 'pointer',
+                              fontSize: '12px'
+                            }}
+                          >
+                            + Add Time
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                
+                <div style={{ fontSize: '12px', color: '#6c757d' }}>
+                  <strong>Available formats:</strong><br/>
+                  • 🗓️ Day-specific: "Mon@7:00 AM, Wed@2:00 PM"<br/>
+                  • 🚗 Car-specific: "9:00 AM Kia, 5:00 PM Jetour"<br/>
+                  • Standard format auto-converts to: "Sat@1:00 PM, Wed@2:00 PM"
+                </div>
+              </div>
+            )}
+            
+            {timeFormat === 'standard' && (
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>📅 Appointments:</label>
               {appointments.map((apt, index) => (
                 <div key={index} style={{ 
                   border: '1px solid #ddd', 
@@ -314,21 +695,18 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                         newApts[index].time = e.target.value;
                         setAppointments(newApts);
                       }}
+                      onFocus={() => fetchAvailableTimes(apt.day)}
                       style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
                     >
-                      <option value="6:00 AM">6:00 AM</option>
-                      <option value="7:00 AM">7:00 AM</option>
-                      <option value="8:00 AM">8:00 AM</option>
-                      <option value="9:00 AM">9:00 AM</option>
-                      <option value="10:00 AM">10:00 AM</option>
-                      <option value="11:00 AM">11:00 AM</option>
-                      <option value="12:00 PM">12:00 PM</option>
-                      <option value="1:00 PM">1:00 PM</option>
-                      <option value="2:00 PM">2:00 PM</option>
-                      <option value="3:00 PM">3:00 PM</option>
-                      <option value="4:00 PM">4:00 PM</option>
-                      <option value="5:00 PM">5:00 PM</option>
-                      <option value="6:00 PM">6:00 PM</option>
+                      {(() => {
+                        const times = availableTimes[apt.day] || [];
+                        if (times.length === 0) {
+                          return <option value="" disabled>No available times</option>;
+                        }
+                        return times.map(timeOption => (
+                          <option key={timeOption} value={timeOption}>{timeOption}</option>
+                        ));
+                      })()}
                     </select>
                   </div>
                 </div>
@@ -364,7 +742,8 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                   Current: {appointments.length}/{getPackageLimit(formData.Washman_Package)}
                 </p>
               )}
-            </div>
+              </div>
+            )}
             
             <div>
               <label>Package:</label>

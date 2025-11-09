@@ -122,7 +122,50 @@ module.exports = {
   },
   addManualAppointment: (req, res) => res.json({ success: true, message: 'Not implemented' }),
   updateTaskAssignment: (req, res) => res.json({ success: true, message: 'Not implemented' }),
-  deleteTask: (req, res) => res.json({ success: true, message: 'Not implemented' }),
+  deleteTask: async (req, res) => {
+    try {
+      console.log('[DELETE-TASK] Deleting task...');
+      console.log('[DELETE-TASK] Request params:', req.params);
+      console.log('[DELETE-TASK] Request body:', req.body);
+      
+      const { customerId } = req.params;
+      const { taskId } = req.body;
+      
+      const idToDelete = taskId || customerId;
+      
+      if (!idToDelete) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Customer ID or Task ID is required' 
+        });
+      }
+      
+      // Use optimized task completion that parses taskId
+      const result = await db.completeTaskOptimized(idToDelete);
+      
+      if (result) {
+        console.log('[DELETE-TASK] Task deleted successfully');
+        res.json({
+          success: true,
+          message: 'Task deleted successfully',
+          deletedId: idToDelete
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid task ID format'
+        });
+      }
+      
+    } catch (error) {
+      console.error('[DELETE-TASK] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to delete task',
+        details: error.message
+      });
+    }
+  },
   batchUpdateTasks: async (req, res) => {
     try {
       console.log('[BATCH-UPDATE] Processing batch update...');

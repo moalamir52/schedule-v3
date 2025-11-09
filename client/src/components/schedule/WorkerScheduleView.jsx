@@ -702,7 +702,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
             return (
               <th key={day} colSpan={sortedWorkers.length}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{day}</div>
+                  <div style={{ fontSize: '16px', fontWeight: 'bold' }}>{day.substring(0, 3)}</div>
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '2px' }}>{displayDate}</div>
                 </div>
               </th>
