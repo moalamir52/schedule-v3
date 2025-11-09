@@ -58,8 +58,9 @@ function ClientsPage() {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
       if (!response.ok) throw new Error('Failed to fetch clients');
-      const data = await response.json();
-      setClients(data);
+      const result = await response.json();
+      const data = result.success ? result.data : result;
+      setClients(Array.isArray(data) ? data : []);
       setIsLoading(false);
     } catch (err) {
       setError(err.message);

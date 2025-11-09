@@ -1,6 +1,10 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const supabaseService = require('./supabaseService');
+
+// Use Supabase by default
+const USE_SUPABASE = true;
 
 // Date/Time formatting utilities
 const formatDate = (date) => {
@@ -173,7 +177,7 @@ class DatabaseService {
         await this.run(table);
       }
       
-      await this.run(schema);
+      // Schema tables created successfully
       console.log('Database tables verified successfully');
       this.seedCustomers();
     } catch (err) {
@@ -182,9 +186,14 @@ class DatabaseService {
   }
 
   async seedCustomers() {
+    if (USE_SUPABASE) {
+      console.log('Using Supabase - skipping seed check');
+      return;
+    }
+    
     try {
-      const result = await this.pool.query('SELECT COUNT(*) as count FROM customers');
-      if (parseInt(result.rows[0].count) === 0) {
+      const result = await this.get('SELECT COUNT(*) as count FROM customers');
+      if (result && parseInt(result.count) === 0) {
         console.log('No existing customers found, database ready for data');
       }
     } catch (err) {
@@ -231,6 +240,10 @@ class DatabaseService {
 
   // Customers methods
   async getCustomers() {
+    if (USE_SUPABASE) {
+      return await supabaseService.getCustomers();
+    }
+    
     try {
       console.log('[DB] Fetching customers...');
       const result = await this.all('SELECT * FROM customers WHERE Status = ? ORDER BY CustomerID COLLATE NOCASE', ['Active']);
@@ -423,6 +436,9 @@ class DatabaseService {
 
   // Invoices methods
   async getInvoices() {
+    if (USE_SUPABASE) {
+      return await supabaseService.getInvoices();
+    }
     return await this.all('SELECT * FROM invoices ORDER BY CreatedAt DESC');
   }
 

@@ -1,14 +1,13 @@
 const db = require('../../services/databaseService');
-const { getCustomers, getInvoices } = require('../../services/googleSheetsService');
 
 const getAvailableClients = async (req, res) => {
   try {
     console.log('[CLIENTS] Fetching available clients...');
-    const customers = await getCustomers();
+    const customers = await db.getCustomers();
     console.log('[CLIENTS] Found', customers.length, 'customers');
-    const invoices = await getInvoices();
+    const invoices = await db.getInvoices();
     console.log('[CLIENTS] Found', invoices.length, 'invoices');
-    const activeCustomers = customers.filter(customer => customer.Status === 'Active');
+    const activeCustomers = customers.filter(customer => customer.status === 'Active' || customer.Status === 'Active');
     console.log('[CLIENTS] Found', activeCustomers.length, 'active customers');
     
     // Get current month invoices
@@ -27,9 +26,9 @@ const getAvailableClients = async (req, res) => {
     });
     
     // Separate available and invoiced clients
-    const invoicedCustomerIDs = currentMonthInvoices.map(inv => inv.CustomerID);
-    const availableClients = activeCustomers.filter(customer => !invoicedCustomerIDs.includes(customer.CustomerID));
-    const invoicedClients = activeCustomers.filter(customer => invoicedCustomerIDs.includes(customer.CustomerID));
+    const invoicedCustomerIDs = currentMonthInvoices.map(inv => inv.customer_id || inv.CustomerID);
+    const availableClients = activeCustomers.filter(customer => !invoicedCustomerIDs.includes(customer.customer_id || customer.CustomerID));
+    const invoicedClients = activeCustomers.filter(customer => invoicedCustomerIDs.includes(customer.customer_id || customer.CustomerID));
     
     console.log('[CLIENTS] Available clients:', availableClients.length);
     console.log('[CLIENTS] Invoiced clients:', invoicedClients.length);
@@ -51,9 +50,9 @@ const getCustomerById = async (req, res) => {
   try {
     const { customerId } = req.params;
     
-    // Get all customers from Google Sheets
-    const customers = await getCustomers();
-    const customer = customers.find(c => c.CustomerID === customerId);
+    // Get all customers from database
+    const customers = await db.getCustomers();
+    const customer = customers.find(c => c.customer_id === customerId || c.CustomerID === customerId);
     
     if (!customer) {
       return res.status(404).json({ success: false, error: 'Customer not found' });

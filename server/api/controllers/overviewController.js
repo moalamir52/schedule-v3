@@ -4,7 +4,7 @@ const getScheduleOverview = async (req, res) => {
   try {
     // Fetch active workers to determine total capacity
     const workers = await db.getWorkers();
-    const totalCapacity = workers.filter(worker => worker.Status === 'Active').length;
+    const totalCapacity = workers.filter(worker => (worker.status || worker.Status) === 'Active').length;
     
     // Fetch all customers
     const customers = await db.getCustomers();
@@ -19,13 +19,13 @@ const getScheduleOverview = async (req, res) => {
     
     // Loop through each customer and parse appointments
     customers.forEach(customer => {
-      if (!customer || customer.Status !== 'Active') {
+      if (!customer || (customer.status || customer.Status) !== 'Active') {
         return;
       }
       
-      const timeField = customer.Time || '';
-      const daysField = customer.Days || '';
-      const notesField = customer.Notes || '';
+      const timeField = customer.time || customer.Time || '';
+      const daysField = customer.days || customer.Days || '';
+      const notesField = customer.notes || customer.Notes || '';
       
       const customerAppointments = [];
       
@@ -64,7 +64,7 @@ const getScheduleOverview = async (req, res) => {
                 const apt = {
                   day: day,
                   time: time,
-                  customerId: customer.CustomerID
+                  customerId: customer.customer_id || customer.CustomerID
                 };
                 appointments.push(apt);
                 customerAppointments.push(apt);
@@ -82,7 +82,7 @@ const getScheduleOverview = async (req, res) => {
             const apt = {
               day: day,
               time: time,
-              customerId: customer.CustomerID
+              customerId: customer.customer_id || customer.CustomerID
             };
             appointments.push(apt);
             customerAppointments.push(apt);
@@ -96,7 +96,7 @@ const getScheduleOverview = async (req, res) => {
           if (days.includes(appointment.day) && timeSlots.includes(appointment.time)) {
             // Remove existing appointment for this day if it exists
             const existingIndex = appointments.findIndex(apt => 
-              apt.customerId === customer.CustomerID && apt.day === appointment.day
+              apt.customerId === (customer.customer_id || customer.CustomerID) && apt.day === appointment.day
             );
             if (existingIndex !== -1) {
               appointments.splice(existingIndex, 1);
@@ -108,7 +108,7 @@ const getScheduleOverview = async (req, res) => {
             const apt = {
               day: appointment.day,
               time: appointment.time,
-              customerId: customer.CustomerID
+              customerId: customer.customer_id || customer.CustomerID
             };
             appointments.push(apt);
             customerAppointments.push(apt);
