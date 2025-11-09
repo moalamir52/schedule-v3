@@ -1,5 +1,40 @@
 const db = require('../../services/databaseService');
 
+// Helper function to get audit logs
+const getAuditLogs = async (filters = {}) => {
+  try {
+    const logs = await db.supabase.request('GET', '/ScheduleAuditLog?order=Timestamp.desc');
+    
+    // Apply filters
+    let filteredLogs = logs;
+    
+    if (filters.userId) {
+      filteredLogs = filteredLogs.filter(log => log.UserID === filters.userId);
+    }
+    
+    if (filters.action) {
+      filteredLogs = filteredLogs.filter(log => log.Action === filters.action);
+    }
+    
+    if (filters.customerID) {
+      filteredLogs = filteredLogs.filter(log => log.CustomerID === filters.customerID);
+    }
+    
+    if (filters.dateFrom) {
+      filteredLogs = filteredLogs.filter(log => new Date(log.Timestamp) >= new Date(filters.dateFrom));
+    }
+    
+    if (filters.dateTo) {
+      filteredLogs = filteredLogs.filter(log => new Date(log.Timestamp) <= new Date(filters.dateTo));
+    }
+    
+    return filteredLogs;
+  } catch (error) {
+    console.error('Error fetching audit logs:', error);
+    return [];
+  }
+};
+
 const getAuditReport = async (req, res) => {
   try {
     const { userId, action, customerID, dateFrom, dateTo, limit = 100 } = req.query;

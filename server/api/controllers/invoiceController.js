@@ -221,11 +221,11 @@ const getAllInvoices = async (req, res) => {
     console.log('[INVOICES] Found', invoices.length, 'invoices');
     res.json({
       success: true,
-      invoices: invoices
+      invoices: invoices,
+      message: `Found ${invoices.length} invoices`
     });
   } catch (error) {
     console.error('[INVOICES] Error getting invoices:', error);
-    console.error('[INVOICES] Stack trace:', error.stack);
     res.status(500).json({ success: false, error: error.message });
   }
 };

@@ -3,21 +3,28 @@ const db = require('../../services/databaseService');
 // Helper functions
 const getSheetData = async (sheetName) => {
   if (sheetName === 'WashRules') {
-    return await db.all('SELECT * FROM WashRules WHERE Status = ?', ['Active']);
+    try {
+      return await db.supabase.request('GET', '/WashRules?Status=eq.Active');
+    } catch (error) {
+      console.log('WashRules table not found, returning empty array');
+      return [];
+    }
   }
   return [];
 };
 
 const clearAndWriteSheet = async (sheetName, data) => {
   if (sheetName === 'WashRules') {
-    // Clear existing rules
-    await db.run('DELETE FROM WashRules');
-    // Insert new rules
-    for (const rule of data) {
-      await db.run(
-        'INSERT INTO WashRules (RuleId, RuleName, SingleCarPattern, MultiCarSettings, BiWeeklySettings, CreatedDate, Status) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [rule.RuleId, rule.RuleName, rule.SingleCarPattern, rule.MultiCarSettings, rule.BiWeeklySettings, rule.CreatedDate, rule.Status]
-      );
+    try {
+      // Clear existing rules
+      await db.supabase.request('DELETE', '/WashRules');
+      // Insert new rules
+      for (const rule of data) {
+        await db.supabase.request('POST', '/WashRules', rule);
+      }
+    } catch (error) {
+      console.error('Error updating WashRules:', error);
+      throw error;
     }
   }
 };

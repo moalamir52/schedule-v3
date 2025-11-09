@@ -49,19 +49,24 @@ const getAvailableWorkers = async (req, res) => {
 
 const getSchedule = async (req, res) => {
   try {
-    // Return empty schedule as fallback
+    console.log('[GET-SCHEDULE] Fetching scheduled tasks...');
+    const assignments = await db.getScheduledTasks();
+    console.log('[GET-SCHEDULE] Found', assignments.length, 'scheduled tasks');
+    console.log('[GET-SCHEDULE] Sample tasks:', assignments.slice(0, 2));
+    
     res.json({
       success: true,
-      message: 'Schedule loaded (fallback mode)',
-      totalAppointments: 0,
-      assignments: []
+      message: 'Schedule loaded successfully',
+      totalAppointments: assignments.length,
+      assignments: assignments
     });
     
   } catch (error) {
     console.error('[GET-SCHEDULE] Error:', error);
+    console.error('[GET-SCHEDULE] Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
-      error: 'Server error',
+      error: error.message || 'Server error',
       assignments: []
     });
   }

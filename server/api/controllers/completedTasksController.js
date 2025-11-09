@@ -1,6 +1,26 @@
 const db = require('../../services/databaseService');
 
 // Remove completed tasks from schedule immediately
+const getCompletedTasks = async (req, res) => {
+  try {
+    const history = await db.getAllHistory();
+    const completedTasks = history.filter(record => 
+      record.Status === 'Completed' || record.Status === 'Cancelled'
+    );
+    
+    res.json({
+      success: true,
+      completedTasks: completedTasks,
+      totalCount: completedTasks.length,
+      message: `Found ${completedTasks.length} completed tasks`
+    });
+    
+  } catch (error) {
+    console.error('[COMPLETED-TASKS] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 const removeCompletedTasks = async (req, res) => {
   try {
     console.log('[REMOVE-COMPLETED] Starting to remove completed tasks from schedule...');
@@ -123,6 +143,7 @@ function debugTaskMatching(scheduledTasks, allHistory) {
 }
 
 module.exports = {
+  getCompletedTasks,
   removeCompletedTasks,
   debugTaskMatching
 };

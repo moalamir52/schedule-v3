@@ -3,16 +3,16 @@ const db = require('../../services/databaseService');
 // Helper functions
 const getUsers = () => db.getUsers();
 const findUserByUsername = (username) => db.findUserByUsername(username);
-const updateUser = (userId, data) => db.run('UPDATE Users SET ' + Object.keys(data).map(key => `${key} = ?`).join(', ') + ' WHERE UserID = ?', [...Object.values(data), userId]);
-const deleteUser = (userId) => db.run('DELETE FROM Users WHERE UserID = ?', [userId]);
+const updateUser = (userId, data) => db.supabase.request('PATCH', `/Users?UserID=eq.${userId}`, data);
+const deleteUser = (userId) => db.supabase.request('DELETE', `/Users?UserID=eq.${userId}`);
 
 const getAllUsers = async (req, res) => {
   try {
     const users = await getUsers();
-    res.status(200).json(users);
+    res.json({ success: true, users: users, message: `Found ${users.length} users` });
   } catch (error) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ success: false, error: error.message });
   }
 };
 

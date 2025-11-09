@@ -5,6 +5,16 @@ const getAllWorkers = async (req, res) => {
     console.log('[WORKERS] Fetching workers...');
     
     let workers = await db.getWorkers();
+    console.log('[WORKERS] Raw workers data:', workers);
+    console.log('[WORKERS] Workers type:', typeof workers);
+    console.log('[WORKERS] Is array:', Array.isArray(workers));
+    
+    // Ensure workers is always an array
+    if (!Array.isArray(workers)) {
+      console.log('[WORKERS] Converting to array...');
+      workers = workers ? [workers] : [];
+    }
+    
     console.log('[WORKERS] Found', workers.length, 'workers from database');
     
     // If no workers in database, add default workers
@@ -34,11 +44,8 @@ const getAllWorkers = async (req, res) => {
       console.log('[WORKERS] After adding defaults:', workers.length, 'workers');
     }
     
-    res.json({
-      success: true,
-      workers: workers,
-      message: `Found ${workers.length} workers`
-    });
+    // Return workers array directly for frontend compatibility
+    res.json(workers);
     
   } catch (error) {
     console.error('[WORKERS] Error:', error);
@@ -50,11 +57,8 @@ const getAllWorkers = async (req, res) => {
       { WorkerID: 'WORKER-003', Name: 'Ali', Phone: '01234567892', Status: 'Active' }
     ];
     
-    res.json({
-      success: true,
-      workers: fallbackWorkers,
-      message: 'Using fallback workers due to database error'
-    });
+    // Return fallback workers array directly
+    res.json(fallbackWorkers);
   }
 };
 

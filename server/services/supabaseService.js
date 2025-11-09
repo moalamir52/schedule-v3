@@ -209,7 +209,139 @@ class SupabaseService {
       const result = await this.request('GET', '/Services?Status=eq.Active&order=ServiceName');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching services:', error);
+      console.log('[SUPABASE] Services table not found, returning default services');
+      return [
+        { ServiceID: 'SERV-001', ServiceName: 'Car Wash - Exterior', Price: 25, Status: 'Active' },
+        { ServiceID: 'SERV-002', ServiceName: 'Car Wash - Interior', Price: 35, Status: 'Active' },
+        { ServiceID: 'SERV-003', ServiceName: 'Car Wash - Full Service', Price: 50, Status: 'Active' }
+      ];
+    }
+  }
+
+  // Add service
+  async addService(serviceData) {
+    try {
+      const data = {
+        ServiceID: serviceData.ServiceID,
+        ServiceName: serviceData.ServiceName,
+        Price: serviceData.Price || 0,
+        Description: serviceData.Description || '',
+        Status: serviceData.Status || 'Active'
+      };
+      return await this.request('POST', '/Services', data);
+    } catch (error) {
+      console.log('[SUPABASE] Services table not available for adding');
+      throw new Error('Services functionality not available');
+    }
+  }
+
+  // Search customers
+  async searchCustomers(searchTerm) {
+    try {
+      const result = await this.request('GET', `/customers?or=(Name.ilike.%${searchTerm}%,Villa.ilike.%${searchTerm}%,CarPlates.ilike.%${searchTerm}%,Phone.ilike.%${searchTerm}%)&Status=eq.Active&order=Name`);
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[SUPABASE] Error searching customers:', error);
+      return [];
+    }
+  }
+
+  // Get history for car
+  async getHistoryForCar(carPlate) {
+    try {
+      const result = await this.request('GET', `/wash_history?CarPlate=eq.${carPlate}&order=WashDate.desc`);
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[SUPABASE] Error fetching car history:', error);
+      return [];
+    }
+  }
+
+  // Delete worker
+  async deleteWorker(workerName) {
+    return await this.request('PATCH', `/Workers?Name=eq.${workerName}`, { Status: 'Inactive' });
+  }
+
+  // Clear and write schedule
+  async clearAndWriteSchedule(tasks) {
+    try {
+      // Clear existing tasks
+      await this.request('DELETE', '/ScheduledTasks');
+      
+      // Insert new tasks
+      for (const task of tasks) {
+        const data = {
+          Day: task.day,
+          AppointmentDate: task.appointmentDate,
+          Time: task.time,
+          CustomerID: task.customerId,
+          CustomerName: task.customerName,
+          Villa: task.villa,
+          CarPlate: task.carPlate,
+          WashType: task.washType,
+          WorkerName: task.workerName,
+          WorkerID: task.workerId,
+          PackageType: task.packageType,
+          isLocked: task.isLocked || 'FALSE',
+          ScheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0]
+        };
+        await this.request('POST', '/ScheduledTasks', data);
+      }
+      
+      console.log(`[SUPABASE] Successfully saved ${tasks.length} tasks`);
+    } catch (error) {
+      console.error('[SUPABASE] Error saving schedule:', error);
+      throw error;
+    }
+  }
+
+  // Add audit log
+  async addAuditLog(auditData) {
+    const data = {
+      LogID: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      Timestamp: new Date().toISOString(),
+      UserID: auditData.userId || auditData.UserID,
+      UserName: auditData.userName || auditData.UserName,
+      Action: auditData.action || auditData.Action,
+      CustomerID: auditData.customerID || auditData.CustomerID,
+      CustomerName: auditData.customerName || auditData.CustomerName,
+      Villa: auditData.villa || auditData.Villa,
+      CarPlate: auditData.carPlate || auditData.CarPlate,
+      Day: auditData.day || auditData.Day,
+      Time: auditData.time || auditData.Time,
+      OldWorker: auditData.oldWorker || auditData.OldWorker,
+      NewWorker: auditData.newWorker || auditData.NewWorker,
+      OldWashType: auditData.oldWashType || auditData.OldWashType,
+      NewWashType: auditData.newWashType || auditData.NewWashType,
+      ChangeReason: auditData.changeReason || auditData.ChangeReason
+    };
+    return await this.request('POST', '/ScheduleAuditLog', data);
+  }
+
+  // Save assignment
+  async saveAssignment(assignmentData) {
+    const data = {
+      taskId: assignmentData.taskId,
+      customerName: assignmentData.customerName,
+      carPlate: assignmentData.carPlate,
+      washDay: assignmentData.washDay || assignmentData.sourceDay,
+      washTime: assignmentData.washTime || assignmentData.sourceTime,
+      washType: assignmentData.washType,
+      assignedWorker: assignmentData.assignedWorker || assignmentData.targetWorkerName,
+      villa: assignmentData.villa,
+      isLocked: assignmentData.isLocked || 'FALSE',
+      scheduleDate: new Date().toISOString().split('T')[0]
+    };
+    return await this.request('POST', '/assignments', data);
+  }
+
+  // Get assignments
+  async getAssignments() {
+    try {
+      const result = await this.request('GET', '/assignments?order=washDay,washTime');
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[SUPABASE] Error fetching assignments:', error);
       return [];
     }
   }

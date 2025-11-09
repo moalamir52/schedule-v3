@@ -3,6 +3,7 @@ const { getAuditReport, getDailyReport, getUserActivity } = require('../controll
 
 const router = express.Router();
 
+router.get('/', getAuditReport);
 router.get('/logs', getAuditReport);
 router.get('/daily', getDailyReport);
 router.get('/user/:userId', getUserActivity);
