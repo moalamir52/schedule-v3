@@ -36,8 +36,17 @@ class DatabaseService {
     console.log('NODE_ENV:', process.env.NODE_ENV);
     console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
     
+    // Force use Supabase if environment variables are set
+    if (process.env.USE_SUPABASE === 'true' && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      console.log('🚀 Using Supabase database!');
+      console.log('URL:', process.env.SUPABASE_URL);
+      this.supabase = require('./supabaseService');
+      this.isSupabase = true;
+      return;
+    }
+    
     // Check if PostgreSQL URL is available
-    if (process.env.DATABASE_URL) {
+    if (process.env.DATABASE_URL && process.env.USE_SUPABASE !== 'true') {
       console.log('🐘 Using PostgreSQL database!');
       console.log('URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
       // Use PostgreSQL service
@@ -47,6 +56,7 @@ class DatabaseService {
     } else {
       console.log('⚠️  No DATABASE_URL found, using SQLite');
       this.isPostgres = false;
+      this.isSupabase = false;
     }
     
     // SQLite connection
@@ -252,6 +262,9 @@ class DatabaseService {
 
   // Customers methods
   async getCustomers() {
+    if (this.isSupabase) {
+      return await this.supabase.getCustomers();
+    }
     if (this.isPostgres) {
       const customers = await this.postgres.getCustomers();
       return columnMapper.normalizeRecords(customers, true);
@@ -376,6 +389,9 @@ class DatabaseService {
   // Workers methods
   async getWorkers() {
     try {
+      if (this.isSupabase) {
+        return await this.supabase.getWorkers();
+      }
       if (this.isPostgres) {
         const workers = await this.postgres.getWorkers();
         const result = Array.isArray(workers) ? workers : (workers?.data ? workers.data : []);
