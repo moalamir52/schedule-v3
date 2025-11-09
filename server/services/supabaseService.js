@@ -65,26 +65,9 @@ class SupabaseService {
   async getCustomers() {
     try {
       console.log('[SUPABASE] Fetching customers...');
-      const result = await this.request('GET', '/customers?status=eq.Active&order=customer_id');
+      const result = await this.request('GET', '/customers?Status=eq.Active&order=CustomerID');
       console.log('[SUPABASE] Found', result.length, 'customers');
-      
-      // Convert snake_case to camelCase for compatibility
-      return result.map(customer => ({
-        CustomerID: customer.customer_id,
-        Name: customer.name,
-        Villa: customer.villa,
-        CarPlates: customer.car_plates,
-        Washman_Package: customer.package,
-        Days: customer.days,
-        Time: customer.time,
-        Status: customer.status,
-        Phone: customer.phone,
-        Email: customer.email,
-        Notes: customer.notes,
-        Fee: customer.fee,
-        'Number of car': customer.number_of_cars,
-        'start date': customer.start_date
-      }));
+      return result;
     } catch (error) {
       console.error('[SUPABASE] Error fetching customers:', error);
       return [];
@@ -107,19 +90,19 @@ class SupabaseService {
   // Add customer
   async addCustomer(customerData) {
     const data = {
-      customer_id: customerData.CustomerID || `CUST-${Date.now()}`,
-      name: customerData.Name || customerData.CustomerName || 'Unknown Customer',
-      villa: customerData.Villa,
-      car_plates: customerData.CarPlates,
-      package: customerData.Washman_Package,
-      days: customerData.Days || customerData.WashDay,
-      time: customerData.Time || customerData.WashTime,
-      status: customerData.Status || 'Active',
-      phone: customerData.Phone,
-      notes: customerData.Notes,
-      fee: customerData.Fee || 0,
-      number_of_cars: customerData['Number of car'] || customerData.cars?.length || 1,
-      start_date: customerData['start date'] || new Date().toLocaleDateString()
+      CustomerID: customerData.CustomerID || `CUST-${Date.now()}`,
+      Name: customerData.Name || customerData.CustomerName || 'Unknown Customer',
+      Villa: customerData.Villa,
+      CarPlates: customerData.CarPlates,
+      Washman_Package: customerData.Washman_Package,
+      Days: customerData.Days || customerData.WashDay,
+      Time: customerData.Time || customerData.WashTime,
+      Status: customerData.Status || 'Active',
+      Phone: customerData.Phone,
+      Notes: customerData.Notes,
+      Fee: customerData.Fee || 0,
+      'Number of car': customerData['Number of car'] || customerData.cars?.length || 1,
+      'start date': customerData['start date'] || new Date().toLocaleDateString()
     };
     return await this.request('POST', '/customers', data);
   }
