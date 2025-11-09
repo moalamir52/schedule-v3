@@ -1,4 +1,14 @@
-const db = require('../../services/databaseService');
+// Fix workers table - add default workers
+const fs = require('fs');
+const path = require('path');
+
+console.log('🔧 Fixing Workers Table');
+console.log('=======================');
+
+// Create workers controller with default workers
+const workersControllerPath = path.join(__dirname, 'api', 'controllers', 'workersController.js');
+
+const workersController = `const db = require('../../services/databaseService');
 
 const getAllWorkers = async (req, res) => {
   try {
@@ -37,7 +47,7 @@ const getAllWorkers = async (req, res) => {
     res.json({
       success: true,
       workers: workers,
-      message: `Found ${workers.length} workers`
+      message: \`Found \${workers.length} workers\`
     });
     
   } catch (error) {
@@ -93,4 +103,11 @@ module.exports = {
   addWorker,
   updateWorker,
   deleteWorker
-};
+};`;
+
+fs.writeFileSync(workersControllerPath, workersController);
+
+console.log('✅ Workers controller created with default workers!');
+console.log('🚀 Deploy to fix workers table');
+
+module.exports = { success: true };
