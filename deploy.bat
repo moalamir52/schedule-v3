@@ -11,7 +11,7 @@ if "%commit_msg%"=="" set commit_msg=Update project files
 git commit -m "%commit_msg%"
 
 echo Pushing to GitHub...
-git push origin main
+git push origin master
 
 echo Deployment completed successfully!
 pause
