@@ -125,6 +125,18 @@ const createInvoice = async (req, res) => {
 
     console.log('Final invoice data:', invoiceData);
 
+        // Calculate billing cycle immediately for display
+    let displayStart = '';
+    let displayEnd = '';
+    
+    if (isRegularInvoice && billingCycle) {
+      displayStart = `${String(billingCycle.startDate.getDate()).padStart(2, '0')}/${String(billingCycle.startDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.startDate.getFullYear()}`;
+      displayEnd = `${String(billingCycle.endDate.getDate()).padStart(2, '0')}/${String(billingCycle.endDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.endDate.getFullYear()}`;
+    } else if (!isRegularInvoice) {
+      displayStart = startDate || new Date().toLocaleDateString('en-GB');
+      displayEnd = '';
+    }
+
     const glogoRef = await addInvoiceRecord({
       InvoiceID: null, // سيتم إنشاؤه تلقائياً
       Ref: ref,
@@ -136,8 +148,8 @@ const createInvoice = async (req, res) => {
       TotalAmount: invoiceData.totalAmount,
       Status: invoiceData.status,
       PaymentMethod: invoiceData.paymentMethod,
-      Start: isRegularInvoice ? `${String(billingCycle.startDate.getDate()).padStart(2, '0')}/${String(billingCycle.startDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.startDate.getFullYear()}` : (startDate || new Date().toLocaleDateString('en-GB')),
-      End: isRegularInvoice ? `${String(billingCycle.endDate.getDate()).padStart(2, '0')}/${String(billingCycle.endDate.getMonth() + 1).padStart(2, '0')}/${billingCycle.endDate.getFullYear()}` : '',
+      Start: displayStart,
+      End: displayEnd,
       Vehicle: invoiceData.vehicleType,
       PackageID: invoiceData.packageId,
       Notes: isRegularInvoice ? (notes || `Service Period: ${invoiceData.serviceDate}`) : `Phone: ${invoiceData.phone}, Vehicle: ${invoiceData.vehicleType}, Services: ${invoiceData.services}`,
@@ -148,6 +160,10 @@ const createInvoice = async (req, res) => {
     });
     
     invoiceData.invoiceId = glogoRef;
+    
+    // Add display dates to response
+    invoiceData.displayStart = displayStart;
+    invoiceData.displayEnd = displayEnd;
 
     res.json({
       success: true,

@@ -99,9 +99,33 @@ const getNextCustomerId = async (req, res) => {
 
 const createClient = async (req, res) => {
   try {
-    const result = await db.addCustomer(req.body);
+    console.log('[CREATE-CLIENT] Request body:', req.body);
+    
+    // Ensure all required fields are included
+    const customerData = {
+      ...req.body,
+      Phone: req.body.Phone || req.body.phone || '',
+      CarPlates: req.body.CarPlates || req.body.cars || req.body.Cars || '',
+      'Number of car': req.body['Number of car'] || req.body.numberOfCars || 1,
+      'start date': req.body['start date'] || req.body.startDate || (() => {
+        const now = new Date();
+        const day = now.getDate();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[now.getMonth()];
+        const year = now.getFullYear().toString().slice(-2);
+        return `${day}-${month}-${year}`;
+      })()
+    };
+    
+    console.log('[CREATE-CLIENT] Processed data:', customerData);
+    
+    const result = await db.addCustomer(customerData);
+    
+    console.log('[CREATE-CLIENT] Customer created successfully:', result);
+    
     res.json({ success: true, data: result });
   } catch (error) {
+    console.error('[CREATE-CLIENT] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
