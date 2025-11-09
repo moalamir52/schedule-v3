@@ -87,6 +87,47 @@ class SupabaseService {
     }
   }
 
+  // Add customer
+  async addCustomer(customerData) {
+    const data = {
+      CustomerID: customerData.CustomerID || `CUST-${Date.now()}`,
+      Name: customerData.Name || customerData.CustomerName || 'Unknown Customer',
+      Villa: customerData.Villa,
+      CarPlates: customerData.CarPlates,
+      'Washman_Package': customerData.Washman_Package,
+      Days: customerData.Days || customerData.WashDay,
+      Time: customerData.Time || customerData.WashTime,
+      Status: customerData.Status || 'Active',
+      Phone: customerData.Phone,
+      Notes: customerData.Notes,
+      Fee: customerData.Fee || 0,
+      'Number of car': customerData['Number of car'] || customerData.cars?.length || 1,
+      'start date': customerData['start date'] || new Date().toLocaleDateString()
+    };
+    return await this.request('POST', '/customers', data);
+  }
+
+  // Update customer
+  async updateCustomer(customerID, updatedData) {
+    return await this.request('PATCH', `/customers?CustomerID=eq.${customerID}`, updatedData);
+  }
+
+  // Delete customer
+  async deleteCustomer(customerID) {
+    return await this.request('DELETE', `/customers?CustomerID=eq.${customerID}`);
+  }
+
+  // Add worker
+  async addWorker(workerData) {
+    const data = {
+      WorkerID: workerData.WorkerID || `WORKER-${Date.now()}`,
+      Name: workerData.Name,
+      Job: workerData.Job,
+      Status: workerData.Status || 'Active'
+    };
+    return await this.request('POST', '/Workers', data);
+  }
+
   // Invoices methods
   async getInvoices() {
     try {
@@ -98,6 +139,30 @@ class SupabaseService {
     }
   }
 
+  // Add invoice
+  async addInvoice(invoiceData) {
+    const data = {
+      InvoiceID: invoiceData.InvoiceID || `INV-${Date.now()}`,
+      Ref: invoiceData.Ref,
+      CustomerID: invoiceData.CustomerID,
+      CustomerName: invoiceData.CustomerName,
+      Villa: invoiceData.Villa,
+      DueDate: invoiceData.DueDate,
+      TotalAmount: invoiceData.TotalAmount,
+      Status: invoiceData.Status || 'Pending',
+      PaymentMethod: invoiceData.PaymentMethod,
+      Start: invoiceData.Start,
+      End: invoiceData.End,
+      Vehicle: invoiceData.Vehicle,
+      PackageID: invoiceData.PackageID,
+      Notes: invoiceData.Notes,
+      CreatedBy: invoiceData.CreatedBy,
+      CreatedAt: invoiceData.CreatedAt || new Date().toISOString(),
+      Services: invoiceData.Services
+    };
+    return await this.request('POST', '/invoices', data);
+  }
+
   // History methods
   async getAllHistory() {
     try {
@@ -105,6 +170,46 @@ class SupabaseService {
       return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('[SUPABASE] Error fetching history:', error);
+      return [];
+    }
+  }
+
+  // Add history record
+  async addHistoryRecord(historyData) {
+    const data = {
+      WashID: historyData.WashID || `WASH-${Date.now()}`,
+      CustomerID: historyData.CustomerID,
+      CarPlate: historyData.CarPlate,
+      WashDate: historyData.WashDate,
+      PackageType: historyData.PackageType,
+      Villa: historyData.Villa,
+      WashTypePerformed: historyData.WashTypePerformed,
+      VisitNumberInWeek: historyData.VisitNumberInWeek,
+      WeekInCycle: historyData.WeekInCycle,
+      Status: historyData.Status,
+      WorkerName: historyData.WorkerName
+    };
+    return await this.request('POST', '/wash_history', data);
+  }
+
+  // Users methods
+  async findUserByUsername(username) {
+    try {
+      const result = await this.request('GET', `/Users?Username=eq.${username}`);
+      return result && result.length > 0 ? result[0] : null;
+    } catch (error) {
+      console.error('[SUPABASE] Error finding user:', error);
+      return null;
+    }
+  }
+
+  // Services methods
+  async getServices() {
+    try {
+      const result = await this.request('GET', '/Services?Status=eq.Active&order=ServiceName');
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[SUPABASE] Error fetching services:', error);
       return [];
     }
   }

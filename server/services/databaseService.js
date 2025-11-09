@@ -282,6 +282,9 @@ class DatabaseService {
   }
 
   async addCustomer(customerData) {
+    if (this.isSupabase) {
+      return await this.supabase.addCustomer(customerData);
+    }
     if (this.isPostgres) {
       return await this.postgres.addCustomer(customerData);
     }
@@ -314,6 +317,9 @@ class DatabaseService {
   }
 
   async updateCustomer(customerID, updatedData) {
+    if (this.isSupabase) {
+      return await this.supabase.updateCustomer(customerID, updatedData);
+    }
     if (this.isPostgres) {
       return await this.postgres.updateCustomer(customerID, updatedData);
     }
@@ -333,6 +339,9 @@ class DatabaseService {
   }
 
   async deleteCustomer(customerID) {
+    if (this.isSupabase) {
+      return await this.supabase.deleteCustomer(customerID);
+    }
     if (this.isPostgres) {
       return await this.postgres.deleteCustomer(customerID);
     }
@@ -355,6 +364,9 @@ class DatabaseService {
 
   // Wash history methods
   async getAllHistory() {
+    if (this.isSupabase) {
+      return await this.supabase.getAllHistory();
+    }
     if (this.isPostgres) {
       const history = await this.postgres.getAllHistory();
       return columnMapper.normalizeRecords(history, true);
@@ -493,6 +505,9 @@ class DatabaseService {
 
   // Invoices methods
   async getInvoices() {
+    if (this.isSupabase) {
+      return await this.supabase.getInvoices();
+    }
     if (this.isPostgres) {
       return await this.postgres.getInvoices();
     }
@@ -500,6 +515,9 @@ class DatabaseService {
   }
 
   async addInvoice(invoiceData) {
+    if (this.isSupabase) {
+      return await this.supabase.addInvoice(invoiceData);
+    }
     if (this.isPostgres) {
       return await this.postgres.addInvoice(invoiceData);
     }
