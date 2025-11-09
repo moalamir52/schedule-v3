@@ -31,6 +31,22 @@
 ### ✅ شغال:
 - **رقم العميل التالي:** https://schedule-v3-server.onrender.com/api/clients/next-id
 
+## 🔧 **روابط العمليات المحسنة (جديد):**
+
+### ✅ عمليات المهام:
+- **المهام اليومية:** https://schedule-v3-server.onrender.com/api/tasks/today
+- **حالة التصحيح:** https://schedule-v3-server.onrender.com/api/tasks/debug-status
+- **إكمال مهمة:** POST https://schedule-v3-server.onrender.com/api/tasks/complete
+- **إلغاء مهمة:** POST https://schedule-v3-server.onrender.com/api/tasks/cancel
+- **إكمال متعدد:** POST https://schedule-v3-server.onrender.com/api/tasks/complete-all
+- **تنظيف قسري:** POST https://schedule-v3-server.onrender.com/api/tasks/force-cleanup
+
+## 🔄 **إعادة تعيين الجدولة (جديد):**
+
+### ✅ عمليات إعادة التعيين:
+- **حذف جميع المهام:** POST https://schedule-v3-server.onrender.com/api/schedule-reset/clear
+- **إعادة إنشاء الجدولة:** POST https://schedule-v3-server.onrender.com/api/schedule-reset/reset
+
 ## 📈 **إحصائيات الحالة:**
 - **نسبة النجاح:** 100% (10/10)
 - **العملاء:** 52 ✅
@@ -47,6 +63,9 @@
 1. **✅ SQLite Methods** - تم تحويلها لـ Supabase
 2. **✅ JSON Responses** - تم توحيد الردود
 3. **✅ Supabase Integration** - تم ربط كل الـ endpoints
+4. **✅ Database Performance** - تم تحسين عمليات التحديث والحذف
+5. **✅ Batch Operations** - تم إضافة عمليات جماعية محسنة
+6. **✅ Direct Delete** - تم إضافة حذف مباشر بدلاً من إعادة كتابة الجدول
 
 ---
 

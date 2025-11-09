@@ -73,12 +73,45 @@ const SchedulePage = () => {
         
         if (data.success && data.assignments) {
           console.log('Setting schedule with', data.assignments.length, 'assignments');
-          setAssignedSchedule(data.assignments);
+          // Normalize the data structure to match frontend expectations
+          const normalizedAssignments = data.assignments.map(appointment => ({
+            day: appointment.Day,
+            time: appointment.Time,
+            workerId: appointment.WorkerID,
+            workerName: appointment.WorkerName,
+            customerId: appointment.CustomerID,
+            customerName: appointment.CustomerName,
+            villa: appointment.Villa,
+            carPlate: appointment.CarPlate,
+            washType: appointment.WashType,
+            packageType: appointment.PackageType,
+            isLocked: appointment.isLocked,
+            appointmentDate: appointment.AppointmentDate,
+            scheduleDate: appointment.ScheduleDate
+          }));
+          console.log('Normalized assignments:', normalizedAssignments.length, 'items');
+          console.log('Sample normalized appointment:', normalizedAssignments[0]);
+          setAssignedSchedule(normalizedAssignments);
           setError(null);
         } else if (Array.isArray(data)) {
           // Handle direct array response
           console.log('Setting schedule with direct array:', data.length, 'assignments');
-          setAssignedSchedule(data);
+          const normalizedAssignments = data.map(appointment => ({
+            day: appointment.Day || appointment.day,
+            time: appointment.Time || appointment.time,
+            workerId: appointment.WorkerID || appointment.workerId,
+            workerName: appointment.WorkerName || appointment.workerName,
+            customerId: appointment.CustomerID || appointment.customerId,
+            customerName: appointment.CustomerName || appointment.customerName,
+            villa: appointment.Villa || appointment.villa,
+            carPlate: appointment.CarPlate || appointment.carPlate,
+            washType: appointment.WashType || appointment.washType,
+            packageType: appointment.PackageType || appointment.packageType,
+            isLocked: appointment.isLocked,
+            appointmentDate: appointment.AppointmentDate || appointment.appointmentDate,
+            scheduleDate: appointment.ScheduleDate || appointment.scheduleDate
+          }));
+          setAssignedSchedule(normalizedAssignments);
           setError(null);
         } else {
           setAssignedSchedule([]);
@@ -188,53 +221,65 @@ const SchedulePage = () => {
   
   // Clear All Data - يمسح كل البيانات من قاعدة البيانات
   const handleForceReset = async () => {
+    if (!confirm('Are you sure you want to clear ALL schedule data from the database? This cannot be undone.')) {
+      return;
+    }
+    
     setIsLoading(true);
     try {
-      // Try the new endpoint first, fallback to local clear if server not restarted
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clear-all-schedule`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success) {
-            setAssignedSchedule([]);
-            setError(null);
-            // Success - no alert needed
-            return;
-          }
-        }
-      } catch (apiError) {
+      // Try multiple endpoints
+      const endpoints = [
+        '/api/clear-all-schedule',
+        '/api/schedule-reset/clear',
+        '/api/schedule/assign/clear'
+      ];
+      
+      let success = false;
+      
+      for (const endpoint of endpoints) {
         try {
-          const altResponse = await fetch(`${import.meta.env.VITE_API_URL}/api/clear-all-schedule`, {
-            method: 'DELETE',
+          const response = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
           
-          if (altResponse.ok) {
-            const altData = await altResponse.json();
-            if (altData.success) {
-              setAssignedSchedule([]);
-              setError(null);
-              // Success - no alert needed
-              return;
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success) {
+              success = true;
+              break;
             }
           }
-        } catch (altError) {
-          // Fallback to local clear
+        } catch (e) {
+          console.log(`Endpoint ${endpoint} failed:`, e.message);
         }
       }
       
-      // Fallback: clear local state only
-      setAssignedSchedule([]);
-      setError(null);
-      alert(`✅ Schedule cleared locally!\n\nNote: Database has been cleared. Refresh the page to see changes.`);
+      if (success) {
+        setAssignedSchedule([]);
+        setError(null);
+        alert('✅ All schedule data cleared from database successfully!');
+      } else {
+        // Force clear local state and refresh
+        setAssignedSchedule([]);
+        setError(null);
+        
+        // Try to force clear by calling the Update button API with empty data
+        try {
+          await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
+            method: 'DELETE'
+          });
+        } catch (e) {
+          console.log('Delete attempt failed:', e);
+        }
+        
+        alert('✅ Local schedule cleared! The page will refresh to sync with database.');
+        setTimeout(() => window.location.reload(), 1000);
+      }
       
     } catch (err) {
       setError('Failed to clear schedule data');
-      alert('❌ Error clearing schedule data.');
+      alert('❌ Error clearing schedule data: ' + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -257,12 +302,43 @@ const SchedulePage = () => {
         
         if (data.success && data.assignments) {
           console.log('Loading schedule with', data.assignments.length, 'assignments');
-          setAssignedSchedule(data.assignments);
+          // Normalize the data structure to match frontend expectations
+          const normalizedAssignments = data.assignments.map(appointment => ({
+            day: appointment.Day,
+            time: appointment.Time,
+            workerId: appointment.WorkerID,
+            workerName: appointment.WorkerName,
+            customerId: appointment.CustomerID,
+            customerName: appointment.CustomerName,
+            villa: appointment.Villa,
+            carPlate: appointment.CarPlate,
+            washType: appointment.WashType,
+            packageType: appointment.PackageType,
+            isLocked: appointment.isLocked,
+            appointmentDate: appointment.AppointmentDate,
+            scheduleDate: appointment.ScheduleDate
+          }));
+          setAssignedSchedule(normalizedAssignments);
           setError(null);
         } else if (Array.isArray(data)) {
           // Handle direct array response
           console.log('Loading schedule with direct array:', data.length, 'assignments');
-          setAssignedSchedule(data);
+          const normalizedAssignments = data.map(appointment => ({
+            day: appointment.Day || appointment.day,
+            time: appointment.Time || appointment.time,
+            workerId: appointment.WorkerID || appointment.workerId,
+            workerName: appointment.WorkerName || appointment.workerName,
+            customerId: appointment.CustomerID || appointment.customerId,
+            customerName: appointment.CustomerName || appointment.customerName,
+            villa: appointment.Villa || appointment.villa,
+            carPlate: appointment.CarPlate || appointment.carPlate,
+            washType: appointment.WashType || appointment.washType,
+            packageType: appointment.PackageType || appointment.packageType,
+            isLocked: appointment.isLocked,
+            appointmentDate: appointment.AppointmentDate || appointment.appointmentDate,
+            scheduleDate: appointment.ScheduleDate || appointment.scheduleDate
+          }));
+          setAssignedSchedule(normalizedAssignments);
           setError(null);
         } else {
           setAssignedSchedule([]);
@@ -357,6 +433,7 @@ const SchedulePage = () => {
 
   // Memoize filtered schedule to prevent recalculation on every render
   const filteredSchedule = useMemo(() => {
+    console.log('Filtering schedule - original length:', assignedSchedule.length);
     let filtered = assignedSchedule;
     
     // Filter by today if needed
@@ -365,11 +442,13 @@ const SchedulePage = () => {
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const todayName = dayNames[today.getDay()];
       filtered = filtered.filter(item => item.day === todayName);
+      console.log('After today filter:', filtered.length, 'items for day:', todayName);
     }
     
     // Filter by customer if selected
     if (customerFilter.trim()) {
       filtered = filtered.filter(item => item.customerId === customerFilter);
+      console.log('After customer filter:', filtered.length, 'items for customer:', customerFilter);
     }
     
     // Filter by search term
@@ -380,8 +459,10 @@ const SchedulePage = () => {
         (item.customerName && item.customerName.toLowerCase().includes(search)) ||
         (item.carPlate && item.carPlate.toLowerCase().includes(search))
       );
+      console.log('After search filter:', filtered.length, 'items for search:', search);
     }
     
+    console.log('Final filtered schedule length:', filtered.length);
     return filtered;
   }, [assignedSchedule, viewMode, customerFilter, searchTerm]);
 

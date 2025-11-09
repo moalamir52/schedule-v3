@@ -72,12 +72,13 @@ async function batchUpdate(req, res) {
     
     for (const change of changes) {
       await db.saveAssignment(change);
-      console.log('[BATCH-UPDATE] Saved:', change.customerName, change.carPlate, change.assignedWorker);
+      console.log('[BATCH-UPDATE] ✅ Updated:', change.customerName, change.carPlate, 'assigned to', change.assignedWorker || change.targetWorkerName);
     }
     
+    console.log('[BATCH-UPDATE] ✅ All changes saved to database successfully');
     res.status(200).json({ message: 'Changes saved successfully' });
   } catch (error) {
-    console.error('[BATCH-UPDATE] Error:', error);
+    console.error('[BATCH-UPDATE] ❌ Error:', error);
     res.status(500).json({ error: 'Failed to save changes' });
   }
 }

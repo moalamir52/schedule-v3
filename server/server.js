@@ -55,7 +55,7 @@ app.use(cors({
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-name']
 }));
 app.use(express.text());
 app.use(express.json());
@@ -201,6 +201,7 @@ app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/completed-tasks', completedTasksRoutes);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
+app.use('/api/schedule-reset', require('./api/routes/scheduleResetRoutes'));
 
 // Root route
 app.get('/', (req, res) => {

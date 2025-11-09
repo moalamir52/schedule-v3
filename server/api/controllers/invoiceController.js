@@ -68,13 +68,13 @@ const createInvoice = async (req, res) => {
       let startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate || customerData.CreatedAt;
       
       if (!startDateStr) {
-        console.warn(`No start date found for customer ${customerID}, using current date as fallback`);
-        const now = new Date();
-        const day = now.getDate();
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        const month = months[now.getMonth()];
-        const year = now.getFullYear().toString().slice(-2);
-        startDateStr = `${day}-${month}-${year}`;
+        console.warn(`No start date found for customer ${customerID}, leaving empty for manual entry`);
+        // Don't set automatic dates - let user specify billing period
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Customer start date is required. Please update customer information first.',
+          requiresStartDate: true
+        });
       }
       
       console.log('Raw start date string:', startDateStr);
@@ -82,8 +82,8 @@ const createInvoice = async (req, res) => {
       // Parse different date formats
       let contractStartDate;
       
-      // Try DD-MMM-YY format (1-Nov-25)
-      if (startDateStr.includes('-') && startDateStr.split('-').length === 3) {
+      // Try DD-MMM-YY format (1-Nov-25) first
+      if (startDateStr.includes('-') && startDateStr.split('-').length === 3 && isNaN(parseInt(startDateStr.split('-')[1]))) {
         const parts = startDateStr.split('-');
         const day = parseInt(parts[0]);
         const monthStr = parts[1];
@@ -101,10 +101,8 @@ const createInvoice = async (req, res) => {
         if (monthIndex !== undefined) {
           contractStartDate = new Date(year, monthIndex, day);
         }
-      }
-      
-      // Fallback to standard date parsing
-      if (!contractStartDate || isNaN(contractStartDate.getTime())) {
+      } else {
+        // Fallback to standard date parsing (handles ISO format like 2025-11-01)
         contractStartDate = new Date(startDateStr);
       }
       
@@ -176,7 +174,7 @@ const createInvoice = async (req, res) => {
 
     const glogoRef = await addInvoiceRecord({
       InvoiceID: null, // سيتم إنشاؤه تلقائياً
-      Ref: ref,
+      Ref: ref || 'GLOGO-' + Date.now(),
       CustomerID: isRegularInvoice ? customerID : 'ONE_TIME',
       CustomerName: invoiceData.customerName,
       Villa: invoiceData.villa,
@@ -189,7 +187,7 @@ const createInvoice = async (req, res) => {
       End: displayEnd,
       Vehicle: invoiceData.vehicleType,
       PackageID: invoiceData.packageId,
-      Notes: isRegularInvoice ? (notes || `Service Period: ${invoiceData.serviceDate}`) : `Phone: ${invoiceData.phone}, Vehicle: ${invoiceData.vehicleType}, Services: ${invoiceData.services}`,
+      Notes: isRegularInvoice ? `Name: ${invoiceData.customerName}\nPackage ID: ${invoiceData.packageId}\nVehicle: ${invoiceData.vehicleType}\nStart: ${displayStart}\nEnd: ${displayEnd}` : `Phone: ${invoiceData.phone}, Vehicle: ${invoiceData.vehicleType}, Services: ${invoiceData.services}`,
       Services: invoiceData.services || '',
       Subject: subject || invoiceData.services || '',
       CreatedBy: 'System',

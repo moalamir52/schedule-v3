@@ -1,5 +1,5 @@
 const express = require('express');
-const { getTodayTasks, completeTask, cancelTask, completeAllTasks, getDebugStatus, forceCleanup } = require('../controllers/tasksController');
+const { getTodayTasks, completeTask, cancelTask, completeAllTasks, getDebugStatus, forceCleanup } = require('../controllers/tasksControllerOptimized');
 
 const router = express.Router();
 

@@ -136,7 +136,7 @@ const forceResetAll = async (req, res) => {
 const forceGenerateWeek = async (req, res) => {
   try {
     const { weekOffset } = req.body;
-    const targetWeekOffset = parseInt(weekOffset) || 1;
+    const targetWeekOffset = parseInt(weekOffset) || 0;
     
     console.log(`[FORCE-GENERATE] Generating schedule for week offset: ${targetWeekOffset}`);
     

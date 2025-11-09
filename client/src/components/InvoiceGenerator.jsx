@@ -324,8 +324,11 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
     
     let startDateStr, endDateStr;
     
-    // For reprints, use the exact serviceDate from the saved invoice
-    if (clientData.isReprint && clientData.serviceDate && clientData.serviceDate.includes(' - ')) {
+    // Use backend calculated dates if available
+    if (clientData.displayStart && clientData.displayEnd) {
+      startDateStr = clientData.displayStart;
+      endDateStr = clientData.displayEnd;
+    } else if (clientData.isReprint && clientData.serviceDate && clientData.serviceDate.includes(' - ')) {
       const [start, end] = clientData.serviceDate.split(' - ');
       startDateStr = start;
       endDateStr = end;
@@ -494,11 +497,19 @@ const InvoiceGenerator = ({ clientData, onClose, onInvoiceCreated, existingRef, 
         setConfirmedRef(invoiceRef);
         
         // Update clientData with backend calculated values
-        if (responseData.serviceDate) {
-          clientData.serviceDate = responseData.serviceDate;
-        }
-        if (responseData.invoiceDate) {
-          clientData.invoiceDate = responseData.invoiceDate;
+        if (responseData.invoice) {
+          if (responseData.invoice.serviceDate) {
+            clientData.serviceDate = responseData.invoice.serviceDate;
+          }
+          if (responseData.invoice.invoiceDate) {
+            clientData.invoiceDate = responseData.invoice.invoiceDate;
+          }
+          if (responseData.invoice.displayStart) {
+            clientData.displayStart = responseData.invoice.displayStart;
+          }
+          if (responseData.invoice.displayEnd) {
+            clientData.displayEnd = responseData.invoice.displayEnd;
+          }
         }
 
         if (onInvoiceCreated) {

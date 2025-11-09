@@ -109,7 +109,7 @@ const createClient = async (req, res) => {
       'Number of car': req.body['Number of car'] || req.body.numberOfCars || 1,
       'start date': req.body['start date'] || req.body.startDate || (() => {
         const now = new Date();
-        const day = now.getDate();
+        const day = now.getDate().toString().padStart(2, '0');
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const month = months[now.getMonth()];
         const year = now.getFullYear().toString().slice(-2);
@@ -155,7 +155,7 @@ const updateClient = async (req, res) => {
       'Number of car': req.body['Number of car'] || req.body.numberOfCars || 1,
       'start date': req.body['start date'] || req.body.startDate || (() => {
         const now = new Date();
-        const day = now.getDate();
+        const day = now.getDate().toString().padStart(2, '0');
         const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
         const month = months[now.getMonth()];
         const year = now.getFullYear().toString().slice(-2);

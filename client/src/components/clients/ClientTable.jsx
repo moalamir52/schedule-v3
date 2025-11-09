@@ -1,4 +1,29 @@
 function ClientTable({ clients, onEdit, onDelete }) {
+  // Helper function to format date from ISO to DD-MMM-YY
+  const formatDate = (dateStr) => {
+    if (!dateStr) return '';
+    
+    // If already in DD-MMM-YY format, return as is
+    if (dateStr.match(/^\d{1,2}-[A-Za-z]{3}-\d{2}$/)) {
+      return dateStr;
+    }
+    
+    // Convert from ISO format (YYYY-MM-DD) to DD-MMM-YY
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      
+      const day = date.getDate().toString().padStart(2, '0');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[date.getMonth()];
+      const year = date.getFullYear().toString().slice(-2);
+      
+      return `${day}-${month}-${year}`;
+    } catch (error) {
+      return dateStr;
+    }
+  };
+  
   return (
     <div style={{ 
       overflowX: 'auto',
@@ -48,7 +73,7 @@ function ClientTable({ clients, onEdit, onDelete }) {
               </td>
               <td>{client.Washman_Package}</td>
               <td>{client.Fee}</td>
-              <td>{client['start date']}</td>
+              <td>{formatDate(client['start date'])}</td>
               <td>{client.payment}</td>
               <td>
                 <span style={{

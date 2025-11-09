@@ -51,21 +51,40 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
   
   // Auto-refresh disabled for better performance - use manual refresh button instead
   
+  // Helper to parse complex time formats
+  const parseTimeSlots = useCallback((timeString) => {
+    if (!timeString) return [];
+    const timePattern = /\d{1,2}:\d{2}\s*[AP]M/gi;
+    const matches = timeString.match(timePattern);
+    return matches ? [...new Set(matches.map(time => time.trim()))] : [timeString.trim()];
+  }, []);
+
   // Memoize appointment lookup to prevent redundant filtering
   const appointmentLookup = useMemo(() => {
     if (!assignedSchedule || assignedSchedule.length === 0) {
+      console.log('appointmentLookup: No schedule data');
       return {};
     }
+    console.log('appointmentLookup: Processing', assignedSchedule.length, 'appointments');
+    
     const lookup = {};
     assignedSchedule.forEach(appointment => {
-      const key = `${appointment.workerId}-${appointment.day}-${appointment.time}`;
-      if (!lookup[key]) {
-        lookup[key] = [];
-      }
-      lookup[key].push(appointment);
+      // Parse complex time formats to individual time slots
+      const timeSlots = parseTimeSlots(appointment.time);
+      
+      timeSlots.forEach(timeSlot => {
+        const key = `${appointment.workerId}-${appointment.day}-${timeSlot}`;
+        if (!lookup[key]) {
+          lookup[key] = [];
+        }
+        lookup[key].push(appointment);
+      });
     });
+    
+    const totalInLookup = Object.values(lookup).reduce((sum, arr) => sum + arr.length, 0);
+    console.log('appointmentLookup: Created lookup with', Object.keys(lookup).length, 'keys, total appointments:', totalInLookup);
     return lookup;
-  }, [assignedSchedule]);
+  }, [assignedSchedule, parseTimeSlots]);
 
   const getAppointmentsForWorkerDayTime = useCallback((workerId, day, time) => {
     const key = `${workerId}-${day}-${time}`;
@@ -108,7 +127,11 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
     return <div className="text-center" style={{ padding: '2rem', color: '#666' }}>Loading workers...</div>;
   }
   
+  console.log('WorkerScheduleView received assignedSchedule:', assignedSchedule?.length || 0, 'items');
+  console.log('WorkerScheduleView received workers:', workers?.length || 0, 'workers');
+  
   if (!assignedSchedule || assignedSchedule.length === 0) {
+    console.log('WorkerScheduleView: No schedule data - showing empty message');
     return (
       <div className="text-center" style={{ padding: '3rem', color: '#666' }}>
         <div style={{ fontSize: '1.2rem', marginBottom: '1rem' }}>📅 No schedule data found</div>
@@ -261,7 +284,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
     
     // Prepare change data for auto-save
     const changeData = {
-      type: 'washType',
+      type: 'washTypeChange',
       taskId,
       newWashType,
       workerName: appointment.workerName,
@@ -336,13 +359,13 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
     // Auto-save all week pattern changes
     const allChanges = [
       {
-        type: 'washType',
+        type: 'washTypeChange',
         taskId: changedTaskId,
         newWashType: weekPatternModal.changedAppointment.newWashType,
         timestamp: Date.now()
       },
       ...changes.map(change => ({
-        type: 'washType',
+        type: 'washTypeChange',
         taskId: change.taskId,
         newWashType: change.newWashType,
         timestamp: Date.now()
@@ -720,6 +743,16 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                     const workerId = worker.WorkerID || worker.Name;
                     const appointments = getAppointmentsForWorkerDayTime(workerId, day, time);
                     
+                    // Debug first few cells
+                    if (timeIndex === 0 && dayIndex === 0 && workerIndex === 0) {
+                      console.log('First cell debug:', {
+                        workerId,
+                        day,
+                        time,
+                        appointments: appointments.length,
+                        sampleAppointment: appointments[0]
+                      });
+                    }
 
                     const groupedByCustomer = appointments.reduce((groups, appointment) => {
                       const customerKey = `${appointment.customerId}-${appointment.carPlate}`;

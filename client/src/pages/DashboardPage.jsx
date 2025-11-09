@@ -166,6 +166,7 @@ function DashboardPage() {
         
         <button
           onClick={async () => {
+            console.log('🔄 [FORCE-GEN] Button clicked');
             // Show week options with actual dates
             const getWeekDates = (offset) => {
               const today = new Date();
@@ -222,21 +223,36 @@ function DashboardPage() {
             const selectedWeek = weekOptions[choiceNum - 1];
             
             try {
-              const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auto-schedule/force-generate`, {
+              console.log('🔄 [FORCE-GEN] Starting force generation...');
+              console.log('🔄 [FORCE-GEN] Selected week:', selectedWeek);
+              
+              const apiUrl = 'http://localhost:5001'; // Force localhost
+              const response = await fetch(`${apiUrl}/api/auto-schedule/force-generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ weekOffset: selectedWeek.offset })
               });
               
+              console.log('🔄 [FORCE-GEN] Response status:', response.status);
+              
+              if (!response.ok) {
+                const errorText = await response.text();
+                console.log('🔄 [FORCE-GEN] Error response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+              }
+              
               const data = await response.json();
+              console.log('🔄 [FORCE-GEN] Response data:', data);
               
               if (data.success) {
-                alert(`✅ Schedule Generated!\n\n📅 Week: ${selectedWeek.label}\n📋 Tasks Generated: ${data.generatedData?.totalAppointments || 'N/A'}`);
+                const tasksCount = data.generatedData?.totalAppointments || data.generatedData?.assignments?.length || 'N/A';
+                alert(`✅ Schedule Generated!\n\n📅 Week: ${selectedWeek.label}\n📋 Tasks Generated: ${tasksCount}`);
               } else {
-                alert('❌ Failed to generate week: ' + data.error);
+                alert('❌ Failed to generate week: ' + (data.error || 'Unknown error'));
               }
             } catch (err) {
-              alert('❌ Error: ' + err.message);
+              console.error('🔄 [FORCE-GEN] Error:', err);
+              alert('❌ Error: ' + err.message + '\n\nCheck console for details.');
             }
           }}
           style={{

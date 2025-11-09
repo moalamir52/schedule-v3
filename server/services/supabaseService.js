@@ -61,6 +61,56 @@ class SupabaseService {
     });
   }
 
+  async rpc(name, params) {
+    return new Promise((resolve, reject) => {
+      const options = {
+        hostname: 'gtbtlslrhifwjpzukfmt.supabase.co',
+        port: 443,
+        path: `/rest/v1/rpc/${name}`,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        }
+      };
+
+      if (params) {
+        const postData = JSON.stringify(params);
+        options.headers['Content-Length'] = Buffer.byteLength(postData);
+      }
+
+      const req = https.request(options, (res) => {
+        let responseData = '';
+        
+        res.on('data', (chunk) => {
+          responseData += chunk;
+        });
+        
+        res.on('end', () => {
+          try {
+            if (res.statusCode >= 200 && res.statusCode < 300) {
+              resolve();
+            } else {
+              reject(new Error(`HTTP ${res.statusCode}: ${responseData}`));
+            }
+          } catch (error) {
+            reject(new Error(`Parse error: ${error.message}`));
+          }
+        });
+      });
+
+      req.on('error', (error) => {
+        reject(error);
+      });
+
+      if (params) {
+        req.write(JSON.stringify(params));
+      }
+      req.end();
+    });
+  }
+
   // Customers methods
   async getCustomers() {
     try {
@@ -102,19 +152,42 @@ class SupabaseService {
       Notes: customerData.Notes,
       Fee: customerData.Fee || 0,
       'Number of car': customerData['Number of car'] || customerData.cars?.length || 1,
-      'start date': customerData['start date'] || new Date().toLocaleDateString()
+      'start date': customerData['start date'] || (() => {
+        const now = new Date();
+        const day = now.getDate().toString().padStart(2, '0');
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const month = months[now.getMonth()];
+        const year = now.getFullYear().toString().slice(-2);
+        return `${day}-${month}-${year}`;
+      })()
     };
     return await this.request('POST', '/customers', data);
   }
 
   // Update customer
   async updateCustomer(customerID, updatedData) {
-    return await this.request('PATCH', `/customers?customer_id=eq.${customerID}`, updatedData);
+    try {
+      console.log(`[SUPABASE] Updating customer ${customerID} with data:`, updatedData);
+      const result = await this.request('PATCH', `/customers?CustomerID=eq.${customerID}`, updatedData);
+      console.log(`[SUPABASE] Customer update result:`, result);
+      return result;
+    } catch (error) {
+      console.error(`[SUPABASE] Error updating customer ${customerID}:`, error);
+      throw error;
+    }
   }
 
   // Delete customer
   async deleteCustomer(customerID) {
-    return await this.request('DELETE', `/customers?customer_id=eq.${customerID}`);
+    try {
+      console.log(`[SUPABASE] Deleting customer ${customerID}`);
+      const result = await this.request('DELETE', `/customers?CustomerID=eq.${customerID}`);
+      console.log(`[SUPABASE] Customer delete result:`, result);
+      return result;
+    } catch (error) {
+      console.error(`[SUPABASE] Error deleting customer ${customerID}:`, error);
+      throw error;
+    }
   }
 
   // Add worker
@@ -141,6 +214,7 @@ class SupabaseService {
 
   // Add invoice
   async addInvoice(invoiceData) {
+    console.log('[SUPABASE] Adding invoice with data:', invoiceData);
     const data = {
       InvoiceID: invoiceData.InvoiceID || `INV-${Date.now()}`,
       Ref: invoiceData.Ref,
@@ -160,7 +234,10 @@ class SupabaseService {
       CreatedAt: invoiceData.CreatedAt || new Date().toISOString(),
       Services: invoiceData.Services
     };
-    return await this.request('POST', '/invoices', data);
+    console.log('[SUPABASE] Prepared invoice data for database:', data);
+    const result = await this.request('POST', '/invoices', data);
+    console.log('[SUPABASE] Invoice saved successfully:', result);
+    return result;
   }
 
   // History methods
@@ -265,30 +342,74 @@ class SupabaseService {
   // Clear and write schedule
   async clearAndWriteSchedule(tasks) {
     try {
-      // Clear existing tasks
-      await this.request('DELETE', '/ScheduledTasks');
+      console.log(`[SUPABASE] Updating schedule with ${tasks.length} tasks...`);
       
-      // Insert new tasks
-      for (const task of tasks) {
-        const data = {
-          Day: task.day,
-          AppointmentDate: task.appointmentDate,
-          Time: task.time,
-          CustomerID: task.customerId,
-          CustomerName: task.customerName,
-          Villa: task.villa,
-          CarPlate: task.carPlate,
-          WashType: task.washType,
-          WorkerName: task.workerName,
-          WorkerID: task.workerId,
-          PackageType: task.packageType,
-          isLocked: task.isLocked || 'FALSE',
-          ScheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0]
-        };
-        await this.request('POST', '/ScheduledTasks', data);
+      // Get existing locked tasks to preserve them
+      let lockedTasks = [];
+      try {
+        console.log('[SUPABASE] Getting locked tasks to preserve...');
+        lockedTasks = await this.request('GET', '/ScheduledTasks?isLocked=eq.TRUE');
+        console.log(`[SUPABASE] Found ${lockedTasks.length} locked tasks to preserve`);
+      } catch (error) {
+        console.log('[SUPABASE] Failed to get locked tasks:', error.message);
       }
       
-      console.log(`[SUPABASE] Successfully saved ${tasks.length} tasks`);
+      // Clear only unlocked tasks
+      try {
+        console.log('[SUPABASE] Clearing unlocked tasks...');
+        await this.request('DELETE', '/ScheduledTasks?isLocked=neq.TRUE');
+        console.log('[SUPABASE] Unlocked tasks cleared successfully');
+      } catch (deleteError) {
+        console.log('[SUPABASE] Failed to clear unlocked tasks:', deleteError.message);
+        throw deleteError;
+      }
+      
+      if (tasks.length === 0) {
+        console.log('[SUPABASE] No new tasks to insert');
+        console.log(`[SUPABASE] Schedule update complete - ${lockedTasks.length} locked tasks preserved`);
+        return;
+      }
+      
+      // Filter out tasks that would duplicate existing locked tasks
+      const newTasks = tasks.filter(newTask => {
+        return !lockedTasks.some(lockedTask => 
+          lockedTask.CustomerID === newTask.customerId &&
+          lockedTask.Day === newTask.day &&
+          lockedTask.Time === newTask.time &&
+          lockedTask.CarPlate === (newTask.carPlate || '')
+        );
+      });
+      
+      console.log(`[SUPABASE] Filtered ${tasks.length} new tasks to ${newTasks.length} (avoiding ${tasks.length - newTasks.length} duplicates with locked tasks)`);
+      
+      if (newTasks.length === 0) {
+        console.log('[SUPABASE] No new tasks to insert after filtering');
+        console.log(`[SUPABASE] Schedule update complete - ${lockedTasks.length} locked tasks preserved`);
+        return;
+      }
+      
+      // Prepare batch data
+      const batchData = newTasks.map(task => ({
+        Day: task.day,
+        AppointmentDate: task.appointmentDate || '',
+        Time: task.time,
+        CustomerID: task.customerId,
+        CustomerName: task.customerName,
+        Villa: task.villa,
+        CarPlate: task.carPlate || '',
+        WashType: task.washType,
+        WorkerName: task.workerName,
+        WorkerID: task.workerId,
+        PackageType: task.packageType || '',
+        isLocked: task.isLocked || 'FALSE',
+        ScheduleDate: task.scheduleDate || new Date().toISOString().split('T')[0]
+      }));
+      
+      // Insert all tasks in one batch
+      console.log('[SUPABASE] Inserting new tasks in batch...');
+      await this.request('POST', '/ScheduledTasks', batchData);
+      
+      console.log(`[SUPABASE] Successfully saved ${newTasks.length} new tasks + ${lockedTasks.length} preserved locked tasks = ${newTasks.length + lockedTasks.length} total tasks`);
     } catch (error) {
       console.error('[SUPABASE] Error saving schedule:', error);
       throw error;
@@ -318,31 +439,260 @@ class SupabaseService {
     return await this.request('POST', '/ScheduleAuditLog', data);
   }
 
-  // Save assignment
+  // Save assignment - Update ScheduledTasks table and lock all customer cars
   async saveAssignment(assignmentData) {
-    const data = {
-      taskId: assignmentData.taskId,
-      customerName: assignmentData.customerName,
-      carPlate: assignmentData.carPlate,
-      washDay: assignmentData.washDay || assignmentData.sourceDay,
-      washTime: assignmentData.washTime || assignmentData.sourceTime,
-      washType: assignmentData.washType,
-      assignedWorker: assignmentData.assignedWorker || assignmentData.targetWorkerName,
-      villa: assignmentData.villa,
-      isLocked: assignmentData.isLocked || 'FALSE',
-      scheduleDate: new Date().toISOString().split('T')[0]
-    };
-    return await this.request('POST', '/assignments', data);
+    try {
+      console.log('[DRAG-DROP] Saving assignment:', assignmentData);
+      
+      // Parse taskId to get filter parameters
+      const taskId = assignmentData.taskId;
+      const dashes = [];
+      for (let i = 0; i < taskId.length; i++) {
+        if (taskId[i] === '-') dashes.push(i);
+      }
+      
+      if (dashes.length >= 3) {
+        const dayStart = dashes[dashes.length - 3] + 1;
+        const timeStart = dashes[dashes.length - 2] + 1;
+        const carPlateStart = dashes[dashes.length - 1] + 1;
+        
+        const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+        const day = taskId.substring(dayStart, dashes[dashes.length - 2]);
+        const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
+        const carPlate = taskId.substring(carPlateStart) || '';
+        
+        // Update data for worker assignment
+        const updateData = {
+          WorkerName: assignmentData.assignedWorker || assignmentData.targetWorkerName,
+          WorkerID: (assignmentData.targetWorkerId || 'WORKER-001').replace('WORKER-', 'WORK-'),
+          isLocked: 'TRUE'
+        };
+        
+        console.log(`[DRAG-DROP] Updating customer ${customerID} tasks:`);
+        console.log(`[DRAG-DROP] Old worker: ${assignmentData.sourceWorkerName || 'Unknown'}`);
+        console.log(`[DRAG-DROP] New worker: ${updateData.WorkerName}`);
+        
+        // Update ALL tasks for this customer (all cars) with same worker and lock them
+        const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}`;
+        console.log(`[DRAG-DROP] Updating all cars for customer: ${filter}`);
+        console.log(`[DRAG-DROP] Update data:`, updateData);
+        
+        try {
+          const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
+          console.log(`[DRAG-DROP] ✅ Database updated successfully:`, result);
+          
+          // Auto-lock all customer cars
+          await this.lockAllCustomerCars(customerID, day, time);
+          
+          // Verify the update worked
+          const verification = await this.request('GET', `/ScheduledTasks?${filter}`);
+          console.log(`[DRAG-DROP] 🔍 Verification - Updated records:`, verification.length);
+          if (verification.length > 0) {
+            console.log(`[DRAG-DROP] 🔍 Sample updated record:`, verification[0]);
+          }
+          
+          return result;
+        } catch (updateError) {
+          console.error(`[DRAG-DROP] ❌ Database update failed:`, updateError);
+          throw updateError;
+        }
+        
+        // Add audit log for the change
+        try {
+          await this.addAuditLog({
+            userId: assignmentData.userId || 'SYSTEM',
+            userName: assignmentData.userName || 'System User',
+            action: 'WORKER_REASSIGNMENT_ALL_CARS',
+            customerID: customerID,
+            customerName: assignmentData.customerName,
+            villa: assignmentData.villa,
+            carPlate: 'ALL_CARS',
+            day: day,
+            time: time,
+            oldWorker: assignmentData.sourceWorkerName || 'Unknown',
+            newWorker: updateData.WorkerName,
+            changeReason: 'Drag and Drop Assignment - All Customer Cars'
+          });
+          console.log('[DRAG-DROP] 📝 Audit log created for all cars');
+        } catch (auditError) {
+          console.warn('[DRAG-DROP] ⚠️ Failed to create audit log:', auditError.message);
+        }
+        
+        console.log('[DRAG-DROP] ✅ All customer cars assigned and locked');
+        return result;
+      } else {
+        throw new Error(`Invalid taskId format: ${taskId}`);
+      }
+    } catch (error) {
+      console.error('[DRAG-DROP] ❌ Error saving assignment:', error);
+      throw error;
+    }
   }
 
-  // Get assignments
+  // Get assignments - Use ScheduledTasks table instead
   async getAssignments() {
     try {
-      const result = await this.request('GET', '/assignments?order=washDay,washTime');
+      const result = await this.request('GET', '/ScheduledTasks?order=Day,Time');
       return Array.isArray(result) ? result : [];
     } catch (error) {
       console.error('[SUPABASE] Error fetching assignments:', error);
       return [];
+    }
+  }
+
+  // Lock all customer cars
+  async lockAllCustomerCars(customerID, day, time) {
+    try {
+      console.log(`[AUTO-LOCK] Locking all cars for customer ${customerID} on ${day} at ${time}`);
+      
+      const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}`;
+      const updateData = { isLocked: 'TRUE' };
+      
+      await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
+      console.log(`[AUTO-LOCK] ✅ All customer cars locked`);
+    } catch (error) {
+      console.warn(`[AUTO-LOCK] ⚠️ Failed to lock customer cars:`, error.message);
+    }
+  }
+
+  // Update wash type
+  async updateWashType(washTypeData) {
+    try {
+      console.log('[WASH-TYPE] Updating wash type:', washTypeData);
+      
+      // Parse taskId to get filter parameters
+      const taskId = washTypeData.taskId;
+      const dashes = [];
+      for (let i = 0; i < taskId.length; i++) {
+        if (taskId[i] === '-') dashes.push(i);
+      }
+      
+      if (dashes.length >= 3) {
+        const dayStart = dashes[dashes.length - 3] + 1;
+        const timeStart = dashes[dashes.length - 2] + 1;
+        const carPlateStart = dashes[dashes.length - 1] + 1;
+        
+        const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+        const day = taskId.substring(dayStart, dashes[dashes.length - 2]);
+        const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
+        const carPlate = taskId.substring(carPlateStart) || '';
+        
+        const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}&CarPlate=eq.${encodeURIComponent(carPlate)}`;
+        
+        // Get current task to preserve WorkerID format
+        const currentTask = await this.request('GET', `/ScheduledTasks?${filter}`);
+        let workerID = 'WORK-001'; // default
+        if (currentTask && currentTask.length > 0 && currentTask[0].WorkerID) {
+          workerID = currentTask[0].WorkerID.replace('WORKER-', 'WORK-');
+        }
+        
+        // Update only this specific task
+        const updateData = {
+          WashType: washTypeData.newWashType,
+          WorkerID: workerID,
+          isLocked: 'TRUE'
+        };
+        console.log(`[WASH-TYPE] Updating task: ${filter}`);
+        console.log(`[WASH-TYPE] Update data:`, updateData);
+        
+        const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
+        console.log(`[WASH-TYPE] ✅ Wash type updated successfully`);
+        
+        // Auto-lock all customer cars
+        await this.lockAllCustomerCars(customerID, day, time);
+        
+        // Add audit log
+        try {
+          await this.addAuditLog({
+            userId: washTypeData.userId || 'SYSTEM',
+            userName: washTypeData.userName || 'System User',
+            action: 'WASH_TYPE_CHANGE',
+            customerID: customerID,
+            carPlate: carPlate,
+            day: day,
+            time: time,
+            oldWashType: 'Unknown',
+            newWashType: washTypeData.newWashType,
+            changeReason: 'Manual Wash Type Change'
+          });
+          console.log('[WASH-TYPE] 📝 Audit log created');
+        } catch (auditError) {
+          console.warn('[WASH-TYPE] ⚠️ Failed to create audit log:', auditError.message);
+        }
+        
+        return result;
+      } else {
+        throw new Error(`Invalid taskId format: ${taskId}`);
+      }
+    } catch (error) {
+      console.error('[WASH-TYPE] ❌ Error updating wash type:', error);
+      throw error;
+    }
+  }
+
+  // Update scheduled task
+  async updateScheduledTask(customerID, day, time, carPlate, updateData) {
+    try {
+      const filter = `CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${time}&CarPlate=eq.${carPlate || ''}`;
+      console.log(`[SUPABASE] Updating task: ${filter}`);
+      const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
+      console.log(`[SUPABASE] Task updated successfully`);
+      return result;
+    } catch (error) {
+      console.error('[SUPABASE] Error updating task:', error);
+      throw error;
+    }
+  }
+
+  // Delete scheduled task
+  async deleteScheduledTask(customerID, day, time, carPlate) {
+    try {
+      const encodedFilter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}&CarPlate=eq.${encodeURIComponent(carPlate || '')}`;
+      console.log(`[SUPABASE] Deleting task: ${customerID} - ${day} - ${time} - ${carPlate}`);
+      const result = await this.request('DELETE', `/ScheduledTasks?${encodedFilter}`);
+      console.log(`[SUPABASE] Task deleted successfully`);
+      return result;
+    } catch (error) {
+      console.error('[SUPABASE] Error deleting task:', error);
+      throw error;
+    }
+  }
+
+  // Delete multiple scheduled tasks by IDs
+  async deleteScheduledTasks(taskIds) {
+    try {
+      console.log(`[SUPABASE] Deleting ${taskIds.length} tasks...`);
+      
+      for (const taskId of taskIds) {
+        try {
+          // Parse taskId format: CustomerID-Day-Time-CarPlate
+          // Example: CUST-019-Monday-10:00 AM-Jeep
+          const dashes = [];
+          for (let i = 0; i < taskId.length; i++) {
+            if (taskId[i] === '-') dashes.push(i);
+          }
+          
+          if (dashes.length >= 3) {
+            const dayStart = dashes[dashes.length - 3] + 1;
+            const timeStart = dashes[dashes.length - 2] + 1;
+            const carPlateStart = dashes[dashes.length - 1] + 1;
+            
+            const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+            const day = taskId.substring(dayStart, dashes[dashes.length - 2]);
+            const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
+            const carPlate = taskId.substring(carPlateStart) || '';
+            
+            await this.deleteScheduledTask(customerID, day, time, carPlate);
+          }
+        } catch (error) {
+          console.error(`[SUPABASE] Failed to delete task ${taskId}:`, error.message);
+        }
+      }
+      
+      console.log(`[SUPABASE] Successfully deleted ${taskIds.length} tasks`);
+    } catch (error) {
+      console.error('[SUPABASE] Error deleting tasks:', error);
+      throw error;
     }
   }
 }

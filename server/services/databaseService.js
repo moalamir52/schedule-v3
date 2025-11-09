@@ -98,6 +98,18 @@ class DatabaseService {
     return await this.supabase.clearAndWriteSchedule(tasks);
   }
 
+  async updateScheduledTask(customerID, day, time, carPlate, updateData) {
+    return await this.supabase.updateScheduledTask(customerID, day, time, carPlate, updateData);
+  }
+
+  async deleteScheduledTask(customerID, day, time, carPlate) {
+    return await this.supabase.deleteScheduledTask(customerID, day, time, carPlate);
+  }
+
+  async deleteScheduledTasks(taskIds) {
+    return await this.supabase.deleteScheduledTasks(taskIds);
+  }
+
   // Invoices methods
   async getInvoices() {
     return await this.supabase.getInvoices();
@@ -188,8 +200,51 @@ class DatabaseService {
     return await this.supabase.saveAssignment(assignmentData);
   }
 
+  async updateWashType(washTypeData) {
+    return await this.supabase.updateWashType(washTypeData);
+  }
+
   async getAssignments() {
     return await this.supabase.getAssignments();
+  }
+
+  // Batch operations for better performance
+  async batchDeleteTasks(taskIds) {
+    console.log(`[DB] Batch deleting ${taskIds.length} tasks...`);
+    return await this.supabase.deleteScheduledTasks(taskIds);
+  }
+
+  // Optimized task completion - direct delete instead of full rewrite
+  async completeTaskOptimized(taskId) {
+    try {
+      // Parse taskId format: CustomerID-Day-Time-CarPlate
+      // Example: CUST-019-Monday-10:00 AM-Jeep
+      const dashes = [];
+      for (let i = 0; i < taskId.length; i++) {
+        if (taskId[i] === '-') dashes.push(i);
+      }
+      
+      if (dashes.length >= 3) {
+        const dayStart = dashes[dashes.length - 3] + 1;
+        const timeStart = dashes[dashes.length - 2] + 1;
+        const carPlateStart = dashes[dashes.length - 1] + 1;
+        
+        const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+        const day = taskId.substring(dayStart, dashes[dashes.length - 2]);
+        const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
+        const carPlate = taskId.substring(carPlateStart) || '';
+        
+        console.log(`[DB] Completing task optimized: ${customerID} - ${day} - ${time} - ${carPlate}`);
+        await this.deleteScheduledTask(customerID, day, time, carPlate);
+        console.log(`[DB] Task completed and removed from schedule`);
+        return true;
+      }
+      console.log(`[DB] Invalid taskId format: ${taskId}`);
+      return false;
+    } catch (error) {
+      console.error('[DB] Error in optimized task completion:', error);
+      throw error;
+    }
   }
 
   close() {

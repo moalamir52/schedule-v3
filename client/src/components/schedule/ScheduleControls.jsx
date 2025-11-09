@@ -242,14 +242,54 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
             
             <div 
               style={dropdownItemStyle}
-              onClick={() => {
+              onClick={async () => {
                 const confirmed = window.confirm(
-                  '⚠️ WARNING: This will permanently delete ALL schedule data!\n\nThis action will:\n• Clear the entire schedule database\n• Remove all appointments and assignments\n• Cannot be undone\n\nAre you absolutely sure?'
+                  '🗑️ CLEAR SCHEDULE TABLE\n\n' +
+                  'This will delete ALL scheduled tasks (ScheduledTasks table only).\n' +
+                  'Customers, Workers, and other data will NOT be affected.\n\n' +
+                  'Continue?'
                 );
-                if (confirmed) {
-                  // Call force reset function
-                  onForceReset();
+                
+                if (!confirmed) {
+                  setShowDropdown(false);
+                  return;
                 }
+                
+                const doubleConfirm = window.confirm(
+                  '⚠️ FINAL CONFIRMATION\n\n' +
+                  'Delete all scheduled tasks?\n' +
+                  '(Customers and Workers will remain safe)'
+                );
+                
+                if (!doubleConfirm) {
+                  setShowDropdown(false);
+                  return;
+                }
+                
+                try {
+                  const apiUrl = 'http://localhost:5001'; // Force localhost for testing
+                  
+                  const response = await fetch(`${apiUrl}/api/schedule-reset/clear`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                  });
+                  
+                  if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                  }
+                  
+                  const data = await response.json();
+                  
+                  if (data.success) {
+                    alert('✅ SUCCESS!\n\nAll scheduled tasks have been cleared.\n\nCustomers and Workers are safe.\n\nPage will refresh.');
+                    window.location.reload();
+                  } else {
+                    alert('❌ Failed to clear schedule: ' + (data.error || 'Unknown error'));
+                  }
+                } catch (err) {
+                  alert('❌ Error clearing schedule: ' + err.message);
+                }
+                
                 setShowDropdown(false);
               }}
               onMouseEnter={(e) => {

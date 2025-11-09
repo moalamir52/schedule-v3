@@ -845,6 +845,83 @@ const OperationsPage = () => {
               📈 View Report
             </div>
           </div>
+          
+          <div className="stat-card" style={{ cursor: 'pointer' }}
+            onClick={async () => {
+              const confirmed = window.confirm(
+                '⚠️ WARNING: Clear All Schedule Data\n\n' +
+                'This will permanently delete ALL scheduled tasks.\n' +
+                'This action cannot be undone!\n\n' +
+                'Current schedule has tasks. Continue to delete ALL?'
+              );
+              
+              if (!confirmed) return;
+              
+              try {
+                console.log('🗑️ [CLEAR] Starting clear operation...');
+                console.log('🗑️ [CLEAR] API URL:', import.meta.env.VITE_API_URL);
+                
+                const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule-reset/clear`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+                
+                console.log('🗑️ [CLEAR] Response status:', response.status);
+                console.log('🗑️ [CLEAR] Response ok:', response.ok);
+                
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  console.log('🗑️ [CLEAR] Error response:', errorText);
+                  throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('🗑️ [CLEAR] Response data:', data);
+                
+                if (data.success) {
+                  console.log('🗑️ [CLEAR] Success! Showing alert...');
+                  alert('✅ All schedule data cleared successfully!\n\nThe page will refresh to show the empty schedule.');
+                  // Refresh the page to show empty schedule
+                  window.location.reload();
+                } else {
+                  console.log('🗑️ [CLEAR] Server returned error:', data.error);
+                  alert('❌ Failed to clear schedule: ' + (data.error || 'Unknown error'));
+                }
+              } catch (err) {
+                console.error('🗑️ [CLEAR] Exception:', err);
+                alert('❌ Error: ' + err.message + '\n\nCheck console for details.');
+              }
+            }}
+          >
+            <div>
+              <h4 style={{
+                color: '#dc3545',
+                fontSize: '1.2rem',
+                fontWeight: '600',
+                margin: '0 0 0.5rem 0'
+              }}>
+                🗑️ Clear All Schedule
+              </h4>
+              <p style={{
+                color: '#6c757d',
+                fontSize: '0.9rem',
+                margin: '0'
+              }}>
+                Delete all scheduled tasks (DANGER!)
+              </p>
+            </div>
+            
+            <div style={{
+              backgroundColor: '#dc3545',
+              color: 'white',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              fontSize: '0.9rem',
+              fontWeight: '600'
+            }}>
+              🚨 Clear All
+            </div>
+          </div>
         </div>
       </div>
 
