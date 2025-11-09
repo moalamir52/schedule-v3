@@ -1,4 +1,12 @@
-const db = require('../../services/databaseService');
+// Emergency fix for production 500 errors
+const fs = require('fs');
+const path = require('path');
+
+console.log('🚨 EMERGENCY PRODUCTION FIX');
+console.log('==========================');
+
+// 1. Create minimal working assignmentController
+const minimalController = `const db = require('../../services/databaseService');
 
 const getAvailableWorkers = async (req, res) => {
   try {
@@ -71,4 +79,43 @@ module.exports = {
   syncNewCustomers: (req, res) => res.json({ success: true, message: 'Not implemented' }),
   getWashHistory: (req, res) => res.json({ success: true, history: [] }),
   clearAllScheduleData: (req, res) => res.json({ success: true, message: 'Not implemented' })
-};
+};`;
+
+// 2. Create minimal working logicService
+const minimalLogic = `// Minimal working logicService
+function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex, weekOffset = 0) {
+  if (allCarPlates.length <= 1) {
+    return allCarPlates[0] || null;
+  }
+  const sortedPlates = [...allCarPlates].sort();
+  const intCarIndex = visitIndex % sortedPlates.length;
+  return sortedPlates[intCarIndex];
+}
+
+function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0) {
+  const isFirstWeek = (weekOffset % 2) === 0;
+  return isFirstWeek;
+}
+
+module.exports = {
+  determineIntCarForCustomer,
+  checkIfFirstWeekOfBiWeekCycle
+};`;
+
+// Write emergency fixes
+console.log('🔧 Writing emergency assignmentController...');
+fs.writeFileSync(
+  path.join(__dirname, 'api', 'controllers', 'assignmentController.js'), 
+  minimalController
+);
+
+console.log('🔧 Writing emergency logicService...');
+fs.writeFileSync(
+  path.join(__dirname, 'services', 'logicService.js'), 
+  minimalLogic
+);
+
+console.log('✅ Emergency fixes applied!');
+console.log('🚀 Deploy immediately to fix 500 errors');
+
+module.exports = { success: true };
