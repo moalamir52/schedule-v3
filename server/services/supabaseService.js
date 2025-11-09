@@ -90,42 +90,42 @@ class SupabaseService {
   // Add customer
   async addCustomer(customerData) {
     const data = {
-      CustomerID: customerData.CustomerID || `CUST-${Date.now()}`,
-      Name: customerData.Name || customerData.CustomerName || 'Unknown Customer',
-      Villa: customerData.Villa,
-      CarPlates: customerData.CarPlates,
-      'Washman_Package': customerData.Washman_Package,
-      Days: customerData.Days || customerData.WashDay,
-      Time: customerData.Time || customerData.WashTime,
-      Status: customerData.Status || 'Active',
-      Phone: customerData.Phone,
-      Notes: customerData.Notes,
-      Fee: customerData.Fee || 0,
-      'Number of car': customerData['Number of car'] || customerData.cars?.length || 1,
-      'start date': customerData['start date'] || new Date().toLocaleDateString()
+      customer_id: customerData.CustomerID || `CUST-${Date.now()}`,
+      name: customerData.Name || customerData.CustomerName || 'Unknown Customer',
+      villa: customerData.Villa,
+      car_plates: customerData.CarPlates,
+      package: customerData.Washman_Package,
+      days: customerData.Days || customerData.WashDay,
+      time: customerData.Time || customerData.WashTime,
+      status: customerData.Status || 'Active',
+      phone: customerData.Phone,
+      notes: customerData.Notes,
+      fee: customerData.Fee || 0,
+      number_of_cars: customerData['Number of car'] || customerData.cars?.length || 1,
+      start_date: customerData['start date'] || new Date().toLocaleDateString()
     };
     return await this.request('POST', '/customers', data);
   }
 
   // Update customer
   async updateCustomer(customerID, updatedData) {
-    return await this.request('PATCH', `/customers?CustomerID=eq.${customerID}`, updatedData);
+    return await this.request('PATCH', `/customers?customer_id=eq.${customerID}`, updatedData);
   }
 
   // Delete customer
   async deleteCustomer(customerID) {
-    return await this.request('DELETE', `/customers?CustomerID=eq.${customerID}`);
+    return await this.request('DELETE', `/customers?customer_id=eq.${customerID}`);
   }
 
   // Add worker
   async addWorker(workerData) {
     const data = {
-      WorkerID: workerData.WorkerID || `WORKER-${Date.now()}`,
-      Name: workerData.Name,
-      Job: workerData.Job,
-      Status: workerData.Status || 'Active'
+      worker_id: workerData.WorkerID || `WORKER-${Date.now()}`,
+      name: workerData.Name,
+      job: workerData.Job,
+      status: workerData.Status || 'Active'
     };
-    return await this.request('POST', '/Workers', data);
+    return await this.request('POST', '/workers', data);
   }
 
   // Invoices methods
