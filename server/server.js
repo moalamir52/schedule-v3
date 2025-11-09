@@ -46,7 +46,13 @@ const app = express();
 const PORT = process.env.PORT || 5001;
 
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://localhost:3000', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:5173', 
+    'http://localhost:3000', 
+    'http://127.0.0.1:5173',
+    'https://schedule-v3-bice.vercel.app',
+    'https://schedule-v3.vercel.app'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
