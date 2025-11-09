@@ -151,8 +151,8 @@ async function searchClients(req, res) {
 
 async function getNextCustomerId(req, res) {
   try {
-    const clients = await db.all('SELECT COUNT(*) as count FROM customers');
-    const nextNum = clients[0].count + 1;
+    const clients = await db.getCustomers();
+    const nextNum = clients.length + 1;
     const nextId = `CUST-${String(nextNum).padStart(3, '0')}`;
     
     res.status(200).json({ success: true, nextId });
