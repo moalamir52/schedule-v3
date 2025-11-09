@@ -374,11 +374,13 @@ class DatabaseService {
   }
 
   // Workers methods
-    async getWorkers() {
+  async getWorkers() {
     try {
       if (this.isPostgres) {
         const workers = await this.postgres.getWorkers();
-        return Array.isArray(workers) ? workers : [];
+        const result = Array.isArray(workers) ? workers : (workers?.data ? workers.data : []);
+        console.log('[DB] PostgreSQL workers result:', result);
+        return result;
       }
       const result = await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
       return Array.isArray(result) ? result : [];
