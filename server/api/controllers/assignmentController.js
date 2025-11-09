@@ -1270,8 +1270,12 @@ const clearScheduleCache = () => {
   scheduleCache.timestamp = 0;
 };
 
+
+// Add this at the beginning of getAvailableWorkers function
 const getAvailableWorkers = async (req, res) => {
   try {
+    console.log('[AVAILABLE-WORKERS] Request:', req.query);
+    
     const { day, time } = req.query;
     
     if (!day || !time) {
@@ -1281,10 +1285,17 @@ const getAvailableWorkers = async (req, res) => {
       });
     }
     
-    const workers = await db.getWorkers();
-    const activeWorkers = workers.filter(worker => worker.Status === 'Active');
-    const existingTasks = await db.getScheduledTasks();
+    // Add timeout protection
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Database timeout')), 10000)
+    );
     
+    const [workers, existingTasks] = await Promise.race([
+      Promise.all([db.getWorkers(), db.getScheduledTasks()]),
+      timeout
+    ]);
+    
+    const activeWorkers = workers.filter(worker => worker.Status === 'Active');
     const busyWorkers = existingTasks
       .filter(task => task.Day === day && task.Time === time)
       .map(task => task.WorkerName);
@@ -1300,7 +1311,12 @@ const getAvailableWorkers = async (req, res) => {
     });
     
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('[AVAILABLE-WORKERS] Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      suggestion: 'Check database connection and try again'
+    });
   }
 };
 

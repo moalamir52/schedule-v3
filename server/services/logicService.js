@@ -312,3 +312,34 @@ module.exports = {
   checkIfFirstWeekOfBiWeekCycle
 };
 
+or(daysDiff / 7);
+  
+  // Determine if this is the first week of the bi-weekly cycle
+  const isFirstWeek = (weeksSinceLastWash % 2) === 0;
+  
+  console.log(`[BI-WEEK] Weeks since last wash: ${weeksSinceLastWash}, Is first week: ${isFirstWeek}`);
+  
+  return isFirstWeek;
+}
+
+function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex, weekOffset = 0) {
+  if (allCarPlates.length <= 1) {
+    return allCarPlates[0] || null;
+  }
+  
+  // For multi-car customers, alternate INT between cars
+  const sortedPlates = [...allCarPlates].sort();
+  const intCarIndex = visitIndex % sortedPlates.length;
+  
+  return sortedPlates[intCarIndex];
+}
+
+module.exports = {
+  buildWeeklySchedule,
+  calculateWashSchedule,
+  parsePackage,
+  generateWashDays,
+  determineWashType,
+  checkIfFirstWeekOfBiWeekCycle,
+  determineIntCarForCustomer
+};

@@ -1,4 +1,12 @@
-// PostgreSQL Database Service - Fixed to match SQLite exactly
+const fs = require('fs');
+const path = require('path');
+
+console.log('🔧 Fixing PostgreSQL Service to Match SQLite');
+console.log('===========================================');
+
+const postgresServicePath = path.join(__dirname, 'services', 'postgresService.js');
+
+const fixedPostgresService = `// PostgreSQL Database Service - Fixed to match SQLite exactly
 const { Client } = require('pg');
 
 class PostgresService {
@@ -63,7 +71,7 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query('SELECT * FROM "ScheduledTasks" ORDER BY "AppointmentDate", "Time"');
-      console.log(`[POSTGRES] Retrieved ${result.rows.length} tasks from ScheduledTasks`);
+      console.log(\`[POSTGRES] Retrieved \${result.rows.length} tasks from ScheduledTasks\`);
       return result.rows;
     } catch (error) {
       console.error('Error fetching scheduled tasks:', error);
@@ -72,7 +80,7 @@ class PostgresService {
   }
 
   async clearAndWriteSchedule(tasks) {
-    console.log(`[POSTGRES] Starting transaction to save ${tasks.length} tasks to ScheduledTasks`);
+    console.log(\`[POSTGRES] Starting transaction to save \${tasks.length} tasks to ScheduledTasks\`);
     
     try {
       await this.connect();
@@ -82,15 +90,15 @@ class PostgresService {
       
       // Clear existing tasks
       await this.client.query('DELETE FROM "ScheduledTasks"');
-      console.log(`[POSTGRES] Cleared all existing tasks`);
+      console.log(\`[POSTGRES] Cleared all existing tasks\`);
       
       // Insert new tasks
       for (const task of tasks) {
-        await this.client.query(`
+        await this.client.query(\`
           INSERT INTO "ScheduledTasks" 
           ("Day", "AppointmentDate", "Time", "CustomerID", "CustomerName", "Villa", "CarPlate", "WashType", "WorkerName", "WorkerID", "PackageType", "isLocked", "ScheduleDate") 
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        `, [
+        \`, [
           task.day,
           task.appointmentDate,
           task.time,
@@ -109,10 +117,10 @@ class PostgresService {
       
       // Commit transaction
       await this.client.query('COMMIT');
-      console.log(`[POSTGRES] Successfully committed ${tasks.length} tasks to ScheduledTasks`);
+      console.log(\`[POSTGRES] Successfully committed \${tasks.length} tasks to ScheduledTasks\`);
       
     } catch (error) {
-      console.error(`[POSTGRES] Error during transaction, rolling back:`, error);
+      console.error(\`[POSTGRES] Error during transaction, rolling back:\`, error);
       await this.client.query('ROLLBACK');
       throw error;
     }
@@ -121,11 +129,11 @@ class PostgresService {
   async addCustomer(customerData) {
     try {
       await this.connect();
-      const result = await this.client.query(`
+      const result = await this.client.query(\`
         INSERT INTO customers ("CustomerID", "Name", "Villa", "CarPlates", "Washman_Package", "Days", "Time", "Status", "Phone", "Notes", "Fee", "Number of car", "start date") 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *
-      `, [
-        customerData.CustomerID || `CUST-${Date.now()}`,
+      \`, [
+        customerData.CustomerID || \`CUST-\${Date.now()}\`,
         customerData.Name || customerData.CustomerName,
         customerData.Villa,
         customerData.CarPlates,
@@ -143,7 +151,7 @@ class PostgresService {
           const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
           const month = months[now.getMonth()];
           const year = now.getFullYear().toString().slice(-2);
-          return `${day}-${month}-${year}`;
+          return \`\${day}-\${month}-\${year}\`;
         })()
       ]);
       return result.rows[0];
@@ -178,11 +186,11 @@ class PostgresService {
   async addUser(userData) {
     try {
       await this.connect();
-      const result = await this.client.query(`
+      const result = await this.client.query(\`
         INSERT INTO "Users" ("UserID", "Username", "Password", "PlainPassword", "Role", "Status", "CreatedAt") 
         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *
-      `, [
-        userData.UserID || `USER-${Date.now()}`,
+      \`, [
+        userData.UserID || \`USER-\${Date.now()}\`,
         userData.username || userData.Username,
         userData.password || userData.Password,
         userData.plainPassword || userData.PlainPassword,
@@ -222,11 +230,11 @@ class PostgresService {
   async addInvoice(invoiceData) {
     try {
       await this.connect();
-      const result = await this.client.query(`
+      const result = await this.client.query(\`
         INSERT INTO invoices ("InvoiceID", "Ref", "CustomerID", "CustomerName", "Villa", "TotalAmount", "Status", "CreatedAt") 
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *
-      `, [
-        invoiceData.InvoiceID || `INV-${Date.now()}`,
+      \`, [
+        invoiceData.InvoiceID || \`INV-\${Date.now()}\`,
         invoiceData.Ref,
         invoiceData.CustomerID,
         invoiceData.CustomerName,
@@ -252,10 +260,10 @@ class PostgresService {
       }
       
       const lastRef = result.rows[0].Ref;
-      const match = lastRef.match(/GLOGO-(\d+)/);
+      const match = lastRef.match(/GLOGO-(\\d+)/);
       if (match) {
         const nextNum = parseInt(match[1]) + 1;
-        return `GLOGO-${nextNum}`;
+        return \`GLOGO-\${nextNum}\`;
       }
       
       return 'GLOGO-2511055';
@@ -268,11 +276,11 @@ class PostgresService {
   async updateCustomer(customerId, updateData) {
     try {
       await this.connect();
-      const fields = Object.keys(updateData).map((key, index) => `"${key}" = $${index + 1}`).join(', ');
+      const fields = Object.keys(updateData).map((key, index) => \`"\${key}" = $\${index + 1}\`).join(', ');
       const values = Object.values(updateData);
       values.push(customerId);
       
-      const result = await this.client.query(`UPDATE customers SET ${fields} WHERE "CustomerID" = $${values.length}`, values);
+      const result = await this.client.query(\`UPDATE customers SET \${fields} WHERE "CustomerID" = $\${values.length}\`, values);
       return result.rows[0];
     } catch (error) {
       console.error('Error updating customer:', error);
@@ -292,4 +300,10 @@ class PostgresService {
   }
 }
 
-module.exports = new PostgresService();
+module.exports = new PostgresService();`;
+
+console.log('💾 Writing fixed PostgreSQL service...');
+fs.writeFileSync(postgresServicePath, fixedPostgresService);
+
+console.log('✅ PostgreSQL service fixed to match SQLite exactly!');
+console.log('🔄 Please restart your server to apply the changes.');

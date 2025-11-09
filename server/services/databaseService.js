@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const columnMapper = require('./columnMapper');
 
 // Date/Time formatting utilities
 const formatDate = (date) => {
@@ -191,7 +192,6 @@ class DatabaseService {
         await this.run(table);
       }
       
-      await this.run(schema);
       console.log('Database tables verified successfully');
       this.seedCustomers();
     } catch (err) {
@@ -250,14 +250,15 @@ class DatabaseService {
   // Customers methods
   async getCustomers() {
     if (this.isPostgres) {
-      return await this.postgres.getCustomers();
+      const customers = await this.postgres.getCustomers();
+      return columnMapper.normalizeRecords(customers, true);
     }
     
     try {
       console.log('[DB] Fetching customers...');
       const result = await this.all('SELECT * FROM customers WHERE Status = ? ORDER BY CustomerID COLLATE NOCASE', ['Active']);
       console.log('[DB] Found', result.length, 'customers');
-      return result;
+      return columnMapper.normalizeRecords(result, false);
     } catch (error) {
       console.error('[DB] Error fetching customers:', error);
       throw error;
@@ -339,9 +340,11 @@ class DatabaseService {
   // Wash history methods
   async getAllHistory() {
     if (this.isPostgres) {
-      return await this.postgres.getAllHistory();
+      const history = await this.postgres.getAllHistory();
+      return columnMapper.normalizeRecords(history, true);
     }
-    return await this.all('SELECT * FROM wash_history ORDER BY WashDate DESC');
+    const result = await this.all('SELECT * FROM wash_history ORDER BY WashDate DESC');
+    return columnMapper.normalizeRecords(result, false);
   }
 
   async getHistoryForCar(carPlate) {
@@ -370,9 +373,11 @@ class DatabaseService {
   // Workers methods
   async getWorkers() {
     if (this.isPostgres) {
-      return await this.postgres.getWorkers();
+      const workers = await this.postgres.getWorkers();
+      return columnMapper.normalizeRecords(workers, true);
     }
-    return await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
+    const result = await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
+    return columnMapper.normalizeRecords(result, false);
   }
 
   async addWorker(workerData) {
