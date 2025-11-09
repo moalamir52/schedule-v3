@@ -25,13 +25,25 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query('SELECT * FROM customers WHERE "Status" = $1', ['Active']);
-      return result.rows.map(customer => ({
-        ...customer,
-        Fee: parseFloat(customer.Fee) || 0,
-        CustomerName: customer.Name,
-        WashDay: customer.Days,
-        WashTime: customer.Time
-      }));
+      return result.rows.map(customer => {
+        const safeNumber = (value) => {
+          if (value === null || value === undefined || value === '') return 0;
+          if (typeof value === 'number') return isNaN(value) ? 0 : value;
+          if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? 0 : parsed;
+          }
+          return 0;
+        };
+        
+        return {
+          ...customer,
+          Fee: safeNumber(customer.Fee),
+          CustomerName: customer.Name,
+          WashDay: customer.Days,
+          WashTime: customer.Time
+        };
+      });
     } catch (error) {
       console.error('Error fetching customers:', error);
       return [];
@@ -217,19 +229,24 @@ class PostgresService {
       
       const allResult = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
       return allResult.rows.map(invoice => {
-        const totalAmount = invoice.TotalAmount;
-        let numericAmount = 0;
-        
-        if (typeof totalAmount === 'number') {
-          numericAmount = totalAmount;
-        } else if (typeof totalAmount === 'string') {
-          numericAmount = parseFloat(totalAmount) || 0;
-        }
+        const safeNumber = (value) => {
+          if (value === null || value === undefined || value === '') return 0;
+          if (typeof value === 'number') return isNaN(value) ? 0 : value;
+          if (typeof value === 'string') {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? 0 : parsed;
+          }
+          return 0;
+        };
         
         return {
           ...invoice,
-          TotalAmount: numericAmount,
-          SubTotal: parseFloat(invoice.SubTotal) || 0
+          TotalAmount: safeNumber(invoice.TotalAmount),
+          SubTotal: safeNumber(invoice.SubTotal),
+          DueDate: invoice.DueDate || '',
+          Start: invoice.Start || '',
+          End: invoice.End || '',
+          Services: invoice.Services || ''
         };
       });
     } catch (error) {
@@ -342,6 +359,20 @@ class PostgresService {
       return result.rows[0];
     } catch (error) {
       console.error('Error updating customer:', error);
+      throw error;
+    }
+  }
+
+  async deleteCustomer(customerId) {
+    try {
+      await this.connect();
+      const result = await this.client.query(
+        'DELETE FROM customers WHERE "CustomerID" = $1 RETURNING *',
+        [customerId]
+      );
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error deleting customer:', error);
       throw error;
     }
   }

@@ -316,6 +316,9 @@ class DatabaseService {
   }
 
   async deleteCustomer(customerID) {
+    if (this.isPostgres) {
+      return await this.postgres.deleteCustomer(customerID);
+    }
     return await this.run('DELETE FROM customers WHERE CustomerID = ? COLLATE NOCASE', [customerID]);
   }
 
