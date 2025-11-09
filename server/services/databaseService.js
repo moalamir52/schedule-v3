@@ -40,8 +40,14 @@ class DatabaseService {
     if (process.env.USE_SUPABASE === 'true' && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
       console.log('🚀 Using Supabase database!');
       console.log('URL:', process.env.SUPABASE_URL);
-      this.supabase = require('./supabaseService');
-      this.isSupabase = true;
+      try {
+        this.supabase = require('./supabaseService');
+        this.isSupabase = true;
+        console.log('✅ Supabase service loaded successfully');
+      } catch (error) {
+        console.error('❌ Failed to load Supabase service:', error);
+        this.isSupabase = false;
+      }
       return;
     }
     

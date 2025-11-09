@@ -65,9 +65,26 @@ class SupabaseService {
   async getCustomers() {
     try {
       console.log('[SUPABASE] Fetching customers...');
-      const result = await this.request('GET', '/customers?Status=eq.Active&order=CustomerID');
+      const result = await this.request('GET', '/customers?status=eq.Active&order=customer_id');
       console.log('[SUPABASE] Found', result.length, 'customers');
-      return result;
+      
+      // Convert snake_case to camelCase for compatibility
+      return result.map(customer => ({
+        CustomerID: customer.customer_id,
+        Name: customer.name,
+        Villa: customer.villa,
+        CarPlates: customer.car_plates,
+        Washman_Package: customer.package,
+        Days: customer.days,
+        Time: customer.time,
+        Status: customer.status,
+        Phone: customer.phone,
+        Email: customer.email,
+        Notes: customer.notes,
+        Fee: customer.fee,
+        'Number of car': customer.number_of_cars,
+        'start date': customer.start_date
+      }));
     } catch (error) {
       console.error('[SUPABASE] Error fetching customers:', error);
       return [];
