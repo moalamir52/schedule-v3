@@ -199,14 +199,17 @@ class DatabaseService {
     }
   }
 
-  async seedCustomers() {
+    async seedCustomers() {
     try {
-      const result = await this.pool.query('SELECT COUNT(*) as count FROM customers');
-      if (parseInt(result.rows[0].count) === 0) {
-        console.log('No existing customers found, database ready for data');
+      if (this.isPostgres) {
+        const result = await this.postgres.getCustomers();
+        console.log('PostgreSQL customers found:', result.length);
+      } else {
+        const result = await this.all('SELECT COUNT(*) as count FROM customers');
+        console.log('SQLite customers found:', result[0]?.count || 0);
       }
     } catch (err) {
-      console.error('Error checking customers:', err);
+      console.log('Database ready for data');
     }
   }
 
@@ -371,13 +374,18 @@ class DatabaseService {
   }
 
   // Workers methods
-  async getWorkers() {
-    if (this.isPostgres) {
-      const workers = await this.postgres.getWorkers();
-      return columnMapper.normalizeRecords(workers, true);
+    async getWorkers() {
+    try {
+      if (this.isPostgres) {
+        const workers = await this.postgres.getWorkers();
+        return Array.isArray(workers) ? workers : [];
+      }
+      const result = await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[DB] Error fetching workers:', error);
+      return [];
     }
-    const result = await this.all('SELECT * FROM workers WHERE Status = ? ORDER BY Name COLLATE NOCASE', ['Active']);
-    return columnMapper.normalizeRecords(result, false);
   }
 
   async addWorker(workerData) {
