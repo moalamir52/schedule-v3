@@ -174,6 +174,7 @@ app.listen(PORT, () => {
   console.log(`✅ Schedule v3 Server running on port ${PORT}`);
   console.log(`🌐 Server URL: http://localhost:${PORT}`);
   console.log(`📊 Version: 2.1.0`);
+  console.log(`🗄️ Database: Supabase (Persistent Storage)`);
   console.log(`⏰ Started at: ${new Date().toISOString()}`);
   console.log(`🔧 Available endpoints:`);
   console.log(`   - PUT /api/schedule/assign/batch-update`);
