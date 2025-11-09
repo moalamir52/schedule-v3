@@ -262,16 +262,22 @@ class DatabaseService {
 
   // Customers methods
   async getCustomers() {
+    console.log('[DB] getCustomers - isSupabase:', this.isSupabase);
+    console.log('[DB] getCustomers - isPostgres:', this.isPostgres);
+    console.log('[DB] getCustomers - USE_SUPABASE:', process.env.USE_SUPABASE);
+    
     if (this.isSupabase) {
+      console.log('[DB] Using Supabase for customers');
       return await this.supabase.getCustomers();
     }
     if (this.isPostgres) {
+      console.log('[DB] Using PostgreSQL for customers');
       const customers = await this.postgres.getCustomers();
       return columnMapper.normalizeRecords(customers, true);
     }
     
     try {
-      console.log('[DB] Fetching customers...');
+      console.log('[DB] Using SQLite for customers');
       const result = await this.all('SELECT * FROM customers WHERE Status = ? ORDER BY CustomerID COLLATE NOCASE', ['Active']);
       console.log('[DB] Found', result.length, 'customers');
       return columnMapper.normalizeRecords(result, false);
