@@ -31,41 +31,26 @@ class DatabaseService {
   }
 
   init() {
-    // Log all environment info
     console.log('🔍 Environment check:');
     console.log('NODE_ENV:', process.env.NODE_ENV);
-    console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+    console.log('USE_SUPABASE:', process.env.USE_SUPABASE);
+    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
+    console.log('SUPABASE_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
     
-    // Force use Supabase if environment variables are set
-    if (process.env.USE_SUPABASE === 'true' && process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-      console.log('🚀 Using Supabase database!');
-      console.log('URL:', process.env.SUPABASE_URL);
-      try {
-        this.supabase = require('./supabaseService');
-        this.isSupabase = true;
-        console.log('✅ Supabase service loaded successfully');
-      } catch (error) {
-        console.error('❌ Failed to load Supabase service:', error);
-        this.isSupabase = false;
-      }
-      return;
-    }
-    
-    // Check if PostgreSQL URL is available
-    if (process.env.DATABASE_URL && process.env.USE_SUPABASE !== 'true') {
-      console.log('🐘 Using PostgreSQL database!');
-      console.log('URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
-      // Use PostgreSQL service
-      this.postgres = require('./postgresService');
-      this.isPostgres = true;
-      return;
-    } else {
-      console.log('⚠️  No DATABASE_URL found, using SQLite');
+    // ALWAYS use Supabase in production if variables exist
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+      console.log('🚀 FORCING Supabase database!');
+      this.supabase = require('./supabaseService');
+      this.isSupabase = true;
       this.isPostgres = false;
-      this.isSupabase = false;
+      console.log('✅ Supabase service initialized');
+      return;
     }
     
-    // SQLite connection
+    console.log('⚠️ No Supabase config, using SQLite');
+    this.isSupabase = false;
+    this.isPostgres = false;
+    
     const dbPath = path.join(__dirname, '../database/database.db');
     this.db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
