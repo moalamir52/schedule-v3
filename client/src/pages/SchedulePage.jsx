@@ -43,6 +43,7 @@ const SchedulePage = () => {
         setWorkers(activeWorkers);
 
         // Auto-load schedule on page load/refresh
+        console.log('Auto-loading schedule on page load...');
         await loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
@@ -68,9 +69,16 @@ const SchedulePage = () => {
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Schedule API Response:', data);
         
         if (data.success && data.assignments) {
+          console.log('Setting schedule with', data.assignments.length, 'assignments');
           setAssignedSchedule(data.assignments);
+          setError(null);
+        } else if (Array.isArray(data)) {
+          // Handle direct array response
+          console.log('Setting schedule with direct array:', data.length, 'assignments');
+          setAssignedSchedule(data);
           setError(null);
         } else {
           setAssignedSchedule([]);
@@ -245,9 +253,16 @@ const SchedulePage = () => {
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Load Schedule API Response:', data);
         
         if (data.success && data.assignments) {
+          console.log('Loading schedule with', data.assignments.length, 'assignments');
           setAssignedSchedule(data.assignments);
+          setError(null);
+        } else if (Array.isArray(data)) {
+          // Handle direct array response
+          console.log('Loading schedule with direct array:', data.length, 'assignments');
+          setAssignedSchedule(data);
           setError(null);
         } else {
           setAssignedSchedule([]);
