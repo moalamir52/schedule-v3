@@ -114,7 +114,8 @@ app.get('/api/test-supabase', async (req, res) => {
       success: true,
       message: 'Supabase connection working',
       customerCount: data.length || 0,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      supabaseUrl: process.env.SUPABASE_URL
     });
 
   } catch (error) {
@@ -238,6 +239,21 @@ app.get('/api/database-info', (req, res) => {
   };
   
   res.json(dbInfo);
+});
+
+// Show all environment variables
+app.get('/api/env-check', (req, res) => {
+  res.json({
+    USE_SUPABASE: process.env.USE_SUPABASE,
+    SUPABASE_URL_EXISTS: !!process.env.SUPABASE_URL,
+    SUPABASE_KEY_EXISTS: !!process.env.SUPABASE_ANON_KEY,
+    DATABASE_URL_EXISTS: !!process.env.DATABASE_URL,
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    ALL_ENV_KEYS: Object.keys(process.env).filter(key => 
+      key.includes('SUPABASE') || key.includes('DATABASE') || key.includes('USE_')
+    )
+  });
 });
 
 // Direct clients next-id endpoint
