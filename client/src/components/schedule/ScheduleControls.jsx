@@ -267,10 +267,8 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
                 }
                 
                 try {
-                  const apiUrl = 'http://localhost:5001'; // Force localhost for testing
-                  
-                  const response = await fetch(`${apiUrl}/api/schedule-reset/clear`, {
-                    method: 'POST',
+                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/clear`, {
+                    method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' }
                   });
                   
