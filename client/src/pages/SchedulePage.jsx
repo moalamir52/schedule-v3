@@ -207,7 +207,8 @@ const SchedulePage = () => {
       
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
-        // Success - no alert needed
+        // Auto-refresh to ensure data consistency
+        setTimeout(() => window.location.reload(), 1000);
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -259,6 +260,8 @@ const SchedulePage = () => {
         setAssignedSchedule([]);
         setError(null);
         alert('✅ All schedule data cleared from database successfully!');
+        // Auto-refresh page after clearing
+        setTimeout(() => window.location.reload(), 1500);
       } else {
         // Force clear local state and refresh
         setAssignedSchedule([]);

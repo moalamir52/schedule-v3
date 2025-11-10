@@ -309,7 +309,8 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         
         if (response.ok) {
           console.log('[WASH-TYPE] ✅ Wash type saved successfully!');
-          // Success - no alert needed
+          // Auto-refresh to ensure data consistency
+          setTimeout(() => window.location.reload(), 1000);
         } else {
           console.error('[WASH-TYPE] ❌ Failed to save wash type');
         }
@@ -387,7 +388,8 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         
         if (response.ok) {
           console.log('[WEEK-PATTERN] ✅ Week pattern changes saved successfully!');
-          // Success - no alert needed
+          // Auto-refresh to ensure data consistency
+          setTimeout(() => window.location.reload(), 1000);
         }
       } catch (error) {
         console.error('[WEEK-PATTERN] ❌ Error saving:', error);
@@ -667,7 +669,8 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         
         if (response.ok) {
           console.log('[DRAG-DROP] ✅ Drag & drop saved successfully!');
-          // Success - no alert needed
+          // Auto-refresh to ensure data consistency
+          setTimeout(() => window.location.reload(), 1000);
         } else {
           console.error('[DRAG-DROP] ❌ Failed to save drag & drop');
         }

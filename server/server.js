@@ -197,6 +197,26 @@ app.use('/api/available', require('./api/routes/availableTimesRoutes'));
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 app.use('/api/schedule-reset', require('./api/routes/scheduleResetRoutes'));
 
+// Direct clear endpoint for frontend
+app.post('/api/schedule-reset/clear', async (req, res) => {
+  try {
+    const { clearSchedule } = require('./services/logicService');
+    await clearSchedule();
+    res.json({
+      success: true,
+      message: 'تم حذف جميع المهام بنجاح',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[CLEAR] خطأ:', error);
+    res.status(500).json({
+      success: false,
+      error: 'فشل في حذف المهام',
+      details: error.message
+    });
+  }
+});
+
 // Root route
 app.get('/', (req, res) => {
   res.json({
