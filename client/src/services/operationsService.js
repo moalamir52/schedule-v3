@@ -493,7 +493,19 @@ class OperationsService {
   async getAdditionalServices() {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`);
-      const services = await response.json();
+      const data = await response.json();
+      
+      // Handle different response formats
+      let services;
+      if (Array.isArray(data)) {
+        services = data;
+      } else if (data.services && Array.isArray(data.services)) {
+        services = data.services;
+      } else {
+        console.warn('Services response format unexpected:', data);
+        return ['garage bi-weekly', 'garage weekly'];
+      }
+      
       return services.map(s => {
         if (typeof s === 'string') return s;
         return s.Name || s.ServiceName || 'Unknown Service';

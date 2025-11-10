@@ -13,17 +13,23 @@ const login = async (username, password) => {
     throw new Error('Login failed');
   }
 
-  const { token } = await response.json();
+  const data = await response.json();
+  const token = data.token;
+  
   localStorage.setItem('token', token);
   
-  // Decode token to get user data
-  const payload = JSON.parse(atob(token.split('.')[1]));
+  // Create simple user data
+  const userData = {
+    username: username,
+    userId: 'WEB-USER',
+    role: 'User'
+  };
   
   // Store user info for audit logging
-  localStorage.setItem('userId', payload.userId || 'WEB-USER');
-  localStorage.setItem('userName', payload.username || 'Web User');
+  localStorage.setItem('userId', userData.userId);
+  localStorage.setItem('userName', userData.username);
   
-  return payload;
+  return userData;
 };
 
 const logout = () => {
@@ -67,14 +73,15 @@ const changeMyPassword = async (username, currentPassword, newPassword) => {
 
 const getCurrentUser = () => {
   const token = localStorage.getItem('token');
+  const username = localStorage.getItem('userName');
+  
   if (!token) return null;
   
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload;
-  } catch (error) {
-    return null;
-  }
+  return {
+    username: username || 'User',
+    userId: localStorage.getItem('userId') || 'WEB-USER',
+    role: 'User'
+  };
 };
 
 export default {
