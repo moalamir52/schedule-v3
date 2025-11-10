@@ -280,6 +280,42 @@ class SupabaseService {
     }
   }
 
+  async getUsers() {
+    try {
+      const result = await this.request('GET', '/Users?order=Username');
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      console.error('[SUPABASE] Error fetching users:', error);
+      return [];
+    }
+  }
+
+  async addUser(userData) {
+    try {
+      const data = {
+        UserID: userData.UserID || `USER-${Date.now()}`,
+        Username: userData.Username || userData.username,
+        Password: userData.Password || userData.password,
+        PlainPassword: userData.PlainPassword || userData.plainPassword,
+        Role: userData.Role || userData.role || 'User',
+        Status: userData.Status || 'Active'
+      };
+      return await this.request('POST', '/Users', data);
+    } catch (error) {
+      console.error('[SUPABASE] Error adding user:', error);
+      throw error;
+    }
+  }
+
+  async deleteUser(userID) {
+    try {
+      return await this.request('DELETE', `/Users?UserID=eq.${userID}`);
+    } catch (error) {
+      console.error('[SUPABASE] Error deleting user:', error);
+      throw error;
+    }
+  }
+
   // Services methods
   async getServices() {
     try {

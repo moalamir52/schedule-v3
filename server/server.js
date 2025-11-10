@@ -99,14 +99,7 @@ app.post('/api/test-login', (req, res) => {
   res.json({ success: true, token, message: 'Test login successful' });
 });
 
-// Direct login endpoint as fallback
-app.post('/api/auth/login', (req, res) => {
-  console.log('🔐 [DIRECT] Direct login endpoint hit!');
-  console.log('Body:', req.body);
-  const { username } = req.body;
-  const token = `token-${username}-${Date.now()}`;
-  res.json({ token, success: true, message: 'Login successful' });
-});
+// Direct login endpoint disabled - using proper auth controller
 
 // Test Supabase connection on Render
 app.get('/api/test-supabase', async (req, res) => {
@@ -528,6 +521,11 @@ app.listen(PORT, async () => {
   originalConsole.log(`🔧 Available endpoints:`);
   originalConsole.log(`   - PUT /api/schedule/assign/batch-update`);
   originalConsole.log(`   - GET /api/schedule/assign/current`);
+  originalConsole.log(`   - GET /api/users (Get all users)`);
+  originalConsole.log(`   - POST /api/users (Add new user)`);
+  originalConsole.log(`   - DELETE /api/users/:username (Delete user)`);
+  originalConsole.log(`   - POST /api/auth/login (User login)`);
+  originalConsole.log(`   - POST /api/auth/register (User registration)`);
   originalConsole.log('='.repeat(80) + '\n');
   
   console.log('\n' + '='.repeat(80));
@@ -540,6 +538,11 @@ app.listen(PORT, async () => {
   console.log(`🔧 Available endpoints:`);
   console.log(`   - PUT /api/schedule/assign/batch-update`);
   console.log(`   - GET /api/schedule/assign/current`);
+  console.log(`   - GET /api/users (Get all users)`);
+  console.log(`   - POST /api/users (Add new user)`);
+  console.log(`   - DELETE /api/users/:username (Delete user)`);
+  console.log(`   - POST /api/auth/login (User login)`);
+  console.log(`   - POST /api/auth/register (User registration)`);
   console.log('='.repeat(80) + '\n');
   
   // Initialize database service to check environment

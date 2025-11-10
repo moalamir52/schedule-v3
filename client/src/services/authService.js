@@ -18,16 +18,17 @@ const login = async (username, password) => {
   
   localStorage.setItem('token', token);
   
-  // Create simple user data
+  // Create user data from server response
   const userData = {
-    username: username,
-    userId: 'WEB-USER',
-    role: 'User'
+    username: data.user?.username || username,
+    userId: data.user?.userId || 'WEB-USER',
+    role: data.user?.role || 'User'
   };
   
   // Store user info for audit logging
   localStorage.setItem('userId', userData.userId);
   localStorage.setItem('userName', userData.username);
+  localStorage.setItem('userRole', userData.role);
   
   return userData;
 };
@@ -36,6 +37,7 @@ const logout = () => {
   localStorage.removeItem('token');
   localStorage.removeItem('userId');
   localStorage.removeItem('userName');
+  localStorage.removeItem('userRole');
 };
 
 const register = async (username, password, role) => {
@@ -74,13 +76,14 @@ const changeMyPassword = async (username, currentPassword, newPassword) => {
 const getCurrentUser = () => {
   const token = localStorage.getItem('token');
   const username = localStorage.getItem('userName');
+  const role = localStorage.getItem('userRole');
   
   if (!token) return null;
   
   return {
     username: username || 'User',
     userId: localStorage.getItem('userId') || 'WEB-USER',
-    role: 'User'
+    role: role || 'User'
   };
 };
 

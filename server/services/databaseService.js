@@ -163,14 +163,17 @@ class DatabaseService {
       Password: userData.password || userData.Password,
       PlainPassword: userData.plainPassword || userData.PlainPassword,
       Role: userData.role || userData.Role,
-      Status: userData.Status || 'Active',
-      CreatedAt: userData.CreatedAt || new Date().toISOString()
+      Status: userData.Status || 'Active'
     };
-    return await this.supabase.request('POST', '/Users', data);
+    return await this.supabase.addUser(data);
   }
 
   async getUsers() {
     return await this.supabase.request('GET', '/Users?order=Username');
+  }
+
+  async deleteUser(userID) {
+    return await this.supabase.request('DELETE', `/Users?UserID=eq.${userID}`);
   }
 
   // Services methods

@@ -67,7 +67,7 @@ const OperationsPage = () => {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
       if (response.ok) {
         const usersData = await response.json();
-        setUsers(usersData);
+        setUsers(usersData.users || usersData);
       }
     } catch (error) {
       console.error('Failed to load users:', error);
@@ -81,22 +81,28 @@ const OperationsPage = () => {
     }
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newUser)
+        body: JSON.stringify({
+          username: newUser.username,
+          password: newUser.password,
+          role: newUser.role
+        })
       });
 
+      const data = await response.json();
+      
       if (response.ok) {
         setNewUser({ username: '', password: '', role: 'user' });
         setShowAddUserForm(false);
         loadUsers();
         setModal({ isOpen: true, type: 'success', title: 'Success', message: 'User added successfully!', onConfirm: null });
       } else {
-        setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add user', onConfirm: null });
+        setModal({ isOpen: true, type: 'error', title: 'Error', message: data.message || 'Failed to add user', onConfirm: null });
       }
     } catch (error) {
-      setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add user', onConfirm: null });
+      setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add user: ' + error.message, onConfirm: null });
     }
   };
 
@@ -126,16 +132,20 @@ const OperationsPage = () => {
       message: `Are you sure you want to delete user "${username}"?`,
       onConfirm: async () => {
         try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}`, {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${username}`, {
             method: 'DELETE'
           });
 
+          const data = await response.json();
+          
           if (response.ok) {
             loadUsers();
             setModal({ isOpen: true, type: 'success', title: 'Success', message: 'User deleted successfully!', onConfirm: null });
+          } else {
+            setModal({ isOpen: true, type: 'error', title: 'Error', message: data.message || 'Failed to delete user', onConfirm: null });
           }
         } catch (error) {
-          setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to delete user', onConfirm: null });
+          setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to delete user: ' + error.message, onConfirm: null });
         }
       }
     });
