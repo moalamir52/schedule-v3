@@ -106,7 +106,16 @@ const WeekPatternModal = ({
         });
       }
     });
+    
+    console.log(`📋 Applying ${changes.length} additional changes to week pattern`);
     onApplyChanges(changes);
+    onClose();
+  };
+  
+  const handleJustToday = () => {
+    // Apply only the original change without additional changes
+    console.log('📋 Applying change to today only');
+    onApplyChanges([]);
     onClose();
   };
   const remainingAppointments = useMemo(() =>
@@ -202,13 +211,12 @@ const WeekPatternModal = ({
           </div>
         </div>
         <div className="modal-actions-v2">
-          <button className="action-btn-v2 skip-btn-v2" onClick={onClose}>
+          <button className="action-btn-v2 skip-btn-v2" onClick={handleJustToday}>
             <FiX /> Just For Today
           </button>
           <button 
             className="action-btn-v2 apply-btn-v2" 
             onClick={handleApply}
-            disabled={remainingAppointments.length === 0}
           >
             <FiCheck /> Apply to Week
           </button>

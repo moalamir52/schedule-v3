@@ -2,16 +2,32 @@ import { useState, useEffect } from 'react';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const TIME_SLOTS = [
-  '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
-  '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
+  '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
+  '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
 ];
 
 function CarCard({ car, isDragging, onDragStart, onDragEnd }) {
+  const handleDragStart = (e) => {
+    console.log('🚗 CarCard DragStart:', car);
+    console.log('📎 Setting drag data:', car);
+    e.dataTransfer.setData('text/plain', car);
+    if (onDragStart) {
+      onDragStart(e, car);
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    console.log('🏁 CarCard DragEnd:', car);
+    if (onDragEnd) {
+      onDragEnd(e);
+    }
+  };
+
   return (
     <div
       draggable
-      onDragStart={(e) => onDragStart(e, car)}
-      onDragEnd={onDragEnd}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       style={{
         display: 'flex',
         flexDirection: 'column',
@@ -35,7 +51,7 @@ function CarCard({ car, isDragging, onDragStart, onDragEnd }) {
         wordBreak: 'break-all',
         lineHeight: '1.1'
       }}>
-        {car}
+        {car || 'Unknown'}
       </div>
     </div>
   );
@@ -57,6 +73,7 @@ function DropZone({ day, time, cars, onDrop, onRemoveCar }) {
     e.preventDefault();
     setIsDragOver(false);
     const carData = e.dataTransfer.getData('text/plain');
+    console.log('🎯 DropZone received car:', carData);
     onDrop(day, time, carData);
   };
 
@@ -136,11 +153,13 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
         });
       });
       
-      // Parse existing car-specific schedules from Notes
-      if (client.Notes) {
-        const scheduleEntries = client.Notes.split(',').map(entry => entry.trim());
+      // Parse existing schedules from both Notes and Time fields
+      const parseScheduleData = (scheduleText, source) => {
+        if (!scheduleText) return;
+        
+        const scheduleEntries = scheduleText.split(',').map(entry => entry.trim());
         scheduleEntries.forEach(entry => {
-          // Parse format: "Mon@8:00 AM CarName"
+          // Parse format: "Mon@8:00 AM CarName" or "8:00 AM CarName"
           if (entry.includes('@')) {
             const parts = entry.split('@');
             if (parts.length >= 2) {
@@ -149,54 +168,103 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
               
               // Split time and car name
               const timeParts = timeAndCar.split(' ');
-              if (timeParts.length >= 3) {
+              if (timeParts.length >= 2) {
                 const time = `${timeParts[0]} ${timeParts[1]}`; // "8:00 AM"
-                const carName = timeParts.slice(2).join(' '); // "ABC-123"
+                const carName = timeParts.length > 2 ? timeParts.slice(2).join(' ') : cars[0]; // Car name or first car
                 
                 const dayMap = {
                   'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
                   'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
                 };
                 const fullDay = dayMap[dayAbbr];
-                if (fullDay) {
+                if (fullDay && TIME_SLOTS.includes(time)) {
                   const key = `${fullDay}-${time}`;
-                  if (existingSchedule[key]) {
+                  if (existingSchedule[key] && !existingSchedule[key].includes(carName)) {
                     existingSchedule[key].push(carName);
                   }
                 }
               }
             }
+          } else {
+            // Handle car-specific format: "8:00 AM CarName"
+            const timeMatch = entry.match(/(\d{1,2}:\d{2}\s*[AP]M)\s+(.+)/i);
+            if (timeMatch) {
+              const time = timeMatch[1];
+              const carName = timeMatch[2].trim();
+              
+              // If no specific day, use Saturday as default
+              const defaultDay = 'Saturday';
+              if (TIME_SLOTS.includes(time)) {
+                const key = `${defaultDay}-${time}`;
+                if (existingSchedule[key] && !existingSchedule[key].includes(carName)) {
+                  existingSchedule[key].push(carName);
+                }
+              }
+            }
           }
         });
-      }
+      };
+      
+      // Parse Notes first (higher priority)
+      parseScheduleData(client.Notes, 'Notes');
+      // Parse Time field
+      parseScheduleData(client.Time, 'Time');
       
       setSchedule(existingSchedule);
     }
   }, [client, isOpen]);
 
   const handleDragStart = (e, car) => {
+    console.log('🚀 Drag Start:', car);
     e.dataTransfer.setData('text/plain', car);
     setDraggedCar(car);
   };
 
   const handleDragEnd = () => {
+    console.log('🏁 Drag End');
     setDraggedCar(null);
   };
 
   const handleDrop = (day, time, car) => {
+    console.log('📍 Drop:', { day, time, car });
     const key = `${day}-${time}`;
-    setSchedule(prev => ({
-      ...prev,
-      [key]: [...(prev[key] || []), car]
-    }));
+    setSchedule(prev => {
+      console.log('📋 Current Schedule:', prev);
+      const newSchedule = { ...prev };
+      
+      // Remove car from all other slots first
+      Object.keys(newSchedule).forEach(slotKey => {
+        const beforeFilter = newSchedule[slotKey].length;
+        newSchedule[slotKey] = newSchedule[slotKey].filter(c => c !== car);
+        const afterFilter = newSchedule[slotKey].length;
+        if (beforeFilter !== afterFilter) {
+          console.log(`🗑️ Removed ${car} from ${slotKey}`);
+        }
+      });
+      
+      // Add car to new slot
+      if (!newSchedule[key]) newSchedule[key] = [];
+      if (!newSchedule[key].includes(car)) {
+        newSchedule[key] = [...newSchedule[key], car];
+        console.log(`✅ Added ${car} to ${key}`);
+      }
+      
+      console.log('📋 New Schedule:', newSchedule);
+      return newSchedule;
+    });
   };
 
   const handleRemoveCar = (day, time, car) => {
+    console.log('🗑️ Remove Car:', { day, time, car });
     const key = `${day}-${time}`;
-    setSchedule(prev => ({
-      ...prev,
-      [key]: (prev[key] || []).filter(c => c !== car)
-    }));
+    setSchedule(prev => {
+      const newSchedule = {
+        ...prev,
+        [key]: (prev[key] || []).filter(c => c !== car)
+      };
+      console.log('📋 After Remove:', newSchedule);
+      return newSchedule;
+    });
   };
 
   const handleSave = () => {
@@ -288,7 +356,10 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {availableCars.map(car => (
+            {availableCars.filter(car => {
+              // Only show cars that are not scheduled anywhere
+              return !Object.values(schedule).some(cars => cars.includes(car));
+            }).map(car => (
               <CarCard
                 key={car}
                 car={car}

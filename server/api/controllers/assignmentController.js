@@ -151,12 +151,73 @@ module.exports = {
       for (const change of changes) {
         // Handle wash type changes directly
         if (change.type === 'washTypeChange') {
-          await db.updateWashType({
-            taskId: change.taskId,
-            newWashType: change.newWashType,
-            userId: req.headers['x-user-id'] || 'SYSTEM',
-            userName: req.headers['x-user-name'] || 'System User'
-          });
+          try {
+            await db.updateWashType({
+              taskId: change.taskId,
+              newWashType: change.newWashType,
+              userId: req.headers['x-user-id'] || 'SYSTEM',
+              userName: req.headers['x-user-name'] || 'System User'
+            });
+            console.log(`✅ Updated wash type for task ${change.taskId} to ${change.newWashType}`);
+          } catch (error) {
+            console.error(`❌ Failed to update wash type for task ${change.taskId}:`, error.message);
+            // Continue with other changes even if one fails
+          }
+          continue;
+        }
+        
+        // Handle drag & drop changes (time + worker changes)
+        if (change.type === 'dragDrop') {
+          try {
+            console.log(`🔄 Processing dragDrop change:`, JSON.stringify(change, null, 2));
+            
+            // Parse taskId to get components
+            const taskId = change.taskId;
+            const dashes = [];
+            for (let i = 0; i < taskId.length; i++) {
+              if (taskId[i] === '-') dashes.push(i);
+            }
+            
+            console.log(`📋 TaskId parsing: ${taskId}, dashes at positions:`, dashes);
+            
+            if (dashes.length >= 3) {
+              const dayStart = dashes[dashes.length - 3] + 1;
+              const timeStart = dashes[dashes.length - 2] + 1;
+              const carPlateStart = dashes[dashes.length - 1] + 1;
+              
+              const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+              const oldDay = taskId.substring(dayStart, dashes[dashes.length - 2]);
+              const oldTime = taskId.substring(timeStart, dashes[dashes.length - 1]);
+              const carPlate = taskId.substring(carPlateStart) || '';
+              
+              console.log(`📊 Parsed components:`);
+              console.log(`   CustomerID: ${customerID}`);
+              console.log(`   Old Day: ${oldDay}`);
+              console.log(`   Old Time: ${oldTime}`);
+              console.log(`   Car Plate: ${carPlate}`);
+              console.log(`   Target Day: ${change.targetDay}`);
+              console.log(`   Target Time: ${change.targetTime}`);
+              
+              // Update the task with new day, time, and worker
+              const updateData = {
+                Day: change.targetDay || oldDay,
+                Time: change.targetTime || oldTime,
+                WorkerName: change.newWorkerName,
+                WorkerID: change.newWorkerId || 'WORK-001',
+                isLocked: 'TRUE'
+              };
+              
+              console.log(`💾 Update data being sent:`, JSON.stringify(updateData, null, 2));
+              
+              await db.updateScheduledTask(customerID, oldDay, oldTime, carPlate, updateData);
+              console.log(`✅ Updated task ${taskId}: ${oldDay} ${oldTime} -> ${change.targetDay} ${change.targetTime}`);
+            } else {
+              console.error(`❌ Invalid taskId format: ${taskId} (expected at least 3 dashes)`);
+            }
+          } catch (error) {
+            console.error(`❌ Failed to update drag & drop for task ${change.taskId}:`, error.message);
+            console.error(`❌ Full error:`, error);
+          }
           continue;
         }
         
@@ -194,10 +255,18 @@ module.exports = {
         await db.saveAssignment(assignmentData);
       }
       
+      // Count different types of changes
+      const washTypeChanges = changes.filter(c => c.type === 'washTypeChange').length;
+      const dragDropChanges = changes.filter(c => c.type === 'dragDrop').length;
+      const workerChanges = customerUpdates.size;
+      
       res.json({
         success: true,
-        message: `Successfully processed ${changes.length} changes for ${customerUpdates.size} customers`,
+        message: `Successfully processed ${changes.length} changes (${washTypeChanges} wash type, ${dragDropChanges} drag & drop, ${workerChanges} worker assignments)`,
         changesProcessed: changes.length,
+        washTypeChanges: washTypeChanges,
+        dragDropChanges: dragDropChanges,
+        workerChanges: workerChanges,
         customersUpdated: customerUpdates.size
       });
       

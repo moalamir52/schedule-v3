@@ -9,6 +9,8 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
   const [customerInfo, setCustomerInfo] = useState({ isOpen: false, data: null, appointments: [] });
   const [lastUpdateTime, setLastUpdateTime] = useState(Date.now());
   const [weekPatternModal, setWeekPatternModal] = useState({ isOpen: false, customerInfo: null, changedAppointment: null, weekAppointments: [] });
+  const [savingTasks, setSavingTasks] = useState(new Set()); // Track which tasks are being saved
+  const [savedTasks, setSavedTasks] = useState(new Set()); // Track recently saved tasks
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
@@ -122,7 +124,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
   };
   const handleWorkerChange = async (appointment, newWorkerName) => {
     const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
-    // Update UI immediately
+    // Update UI immediately for smooth experience
     if (onScheduleUpdate) {
       const updatedSchedule = assignedSchedule.map(task => 
         `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
@@ -130,8 +132,12 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
           : task
       );
       onScheduleUpdate(updatedSchedule);
-      }
-    // Save immediately to server using batch update
+    }
+    
+    // Show saving indicator
+    setSavingTasks(prev => new Set([...prev, taskId]));
+    
+    // Save to server in background
     try {
       const changeData = {
         type: 'dragDrop',
@@ -144,6 +150,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         isSlotSwap: false,
         timestamp: Date.now()
       };
+      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
         method: 'PUT',
         headers: {
@@ -153,13 +160,38 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         },
         body: JSON.stringify({ changes: [changeData] })
       });
+      
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Failed to update worker');
       }
-      const responseData = await response.json();
-      // Success - no alert needed
+      
+      // Success - show visual confirmation
+      console.log('✅ Worker updated successfully');
+      setSavingTasks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(taskId);
+        return newSet;
+      });
+      setSavedTasks(prev => new Set([...prev, taskId]));
+      // Remove saved indicator after 2 seconds
+      setTimeout(() => {
+        setSavedTasks(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(taskId);
+          return newSet;
+        });
+      }, 2000);
     } catch (error) {
+      // Revert UI change on error
+      if (onScheduleUpdate) {
+        const revertedSchedule = assignedSchedule.map(task => 
+          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+            ? { ...task, workerName: appointment.workerName, isLocked: appointment.isLocked }
+            : task
+        );
+        onScheduleUpdate(revertedSchedule);
+      }
       alert(`❌ Error changing worker: ${error.message}`);
     }
     setShowOverrideMenu(null);
@@ -219,7 +251,10 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       workerName: appointment.workerName,
       timestamp: Date.now()
     };
-    // Auto-save wash type change immediately
+    // Show saving indicator
+    setSavingTasks(prev => new Set([...prev, taskId]));
+    
+    // Save wash type change in background
     setTimeout(async () => {
       try {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
@@ -231,34 +266,88 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
           },
           body: JSON.stringify({ changes: [changeData] })
         });
+        
         if (response.ok) {
-          // Auto-refresh to ensure data consistency
-          setTimeout(() => window.location.reload(), 1000);
+          // Success - show visual confirmation
+          console.log('✅ Wash type updated successfully');
+          setSavingTasks(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(taskId);
+            return newSet;
+          });
+          setSavedTasks(prev => new Set([...prev, taskId]));
+          // Remove saved indicator after 2 seconds
+          setTimeout(() => {
+            setSavedTasks(prev => {
+              const newSet = new Set(prev);
+              newSet.delete(taskId);
+              return newSet;
+            });
+          }, 2000);
         } else {
+          const data = await response.json();
+          console.error('❌ Failed to save wash type:', data.error);
+          setSavingTasks(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(taskId);
+            return newSet;
+          });
+          // Revert UI change on error
+          if (onScheduleUpdate) {
+            const revertedSchedule = assignedSchedule.map(task => 
+              `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+                ? { ...task, washType: appointment.washType, isLocked: appointment.isLocked }
+                : task
+            );
+            onScheduleUpdate(revertedSchedule);
           }
-      } catch (error) {
         }
+      } catch (error) {
+        console.error('❌ Error saving wash type:', error);
+        setSavingTasks(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(taskId);
+          return newSet;
+        });
+        // Revert UI change on error
+        if (onScheduleUpdate) {
+          const revertedSchedule = assignedSchedule.map(task => 
+            `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === taskId
+              ? { ...task, washType: appointment.washType, isLocked: appointment.isLocked }
+              : task
+          );
+          onScheduleUpdate(revertedSchedule);
+        }
+      }
     }, 100);
     setShowOverrideMenu(null);
   };
   const handleWeekPatternApply = (changes) => {
-    // Apply the changed appointment first
-    const changedTaskId = `${weekPatternModal.changedAppointment.customerId || assignedSchedule.find(apt => 
+    // Find the original changed appointment
+    const originalAppointment = assignedSchedule.find(apt => 
       apt.day === weekPatternModal.changedAppointment.day && 
-      apt.carPlate === weekPatternModal.changedAppointment.carPlate
-    )?.customerId}-${weekPatternModal.changedAppointment.day}-${assignedSchedule.find(apt => 
-      apt.day === weekPatternModal.changedAppointment.day && 
-      apt.carPlate === weekPatternModal.changedAppointment.carPlate
-    )?.time}-${weekPatternModal.changedAppointment.carPlate}`;
+      apt.carPlate === weekPatternModal.changedAppointment.carPlate &&
+      apt.time === weekPatternModal.changedAppointment.time
+    );
+    
+    if (!originalAppointment) {
+      console.error('Original appointment not found');
+      return;
+    }
+    
+    const changedTaskId = `${originalAppointment.customerId}-${originalAppointment.day}-${originalAppointment.time}-${originalAppointment.carPlate}`;
+    
     // Update UI for all changes
     if (onScheduleUpdate) {
       let updatedSchedule = [...assignedSchedule];
-      // Apply the original change
+      
+      // Apply the original change (this was already applied, but ensure it's correct)
       updatedSchedule = updatedSchedule.map(task => 
         `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` === changedTaskId
           ? { ...task, washType: weekPatternModal.changedAppointment.newWashType, isLocked: 'TRUE' }
           : task
       );
+      
       // Apply additional changes from modal
       changes.forEach(change => {
         updatedSchedule = updatedSchedule.map(task => 
@@ -267,42 +356,64 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
             : task
         );
       });
+      
       onScheduleUpdate(updatedSchedule);
     }
-    // Auto-save all week pattern changes
-    const allChanges = [
-      {
-        type: 'washTypeChange',
-        taskId: changedTaskId,
-        newWashType: weekPatternModal.changedAppointment.newWashType,
-        timestamp: Date.now()
-      },
-      ...changes.map(change => ({
+    
+    // Prepare all changes for saving
+    const allChanges = [];
+    
+    // Add the original change
+    allChanges.push({
+      type: 'washTypeChange',
+      taskId: changedTaskId,
+      newWashType: weekPatternModal.changedAppointment.newWashType,
+      timestamp: Date.now()
+    });
+    
+    // Add additional changes from modal
+    changes.forEach(change => {
+      allChanges.push({
         type: 'washTypeChange',
         taskId: change.taskId,
         newWashType: change.newWashType,
         timestamp: Date.now()
-      }))
-    ];
+      });
+    });
+    
     // Save all changes immediately
-    setTimeout(async () => {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
-            'X-User-Name': localStorage.getItem('userName') || 'Web User'
-          },
-          body: JSON.stringify({ changes: allChanges })
-        });
-        if (response.ok) {
-          // Auto-refresh to ensure data consistency
-          setTimeout(() => window.location.reload(), 1000);
+    if (allChanges.length > 0) {
+      console.log(`💾 Saving ${allChanges.length} week pattern changes:`, allChanges.map(c => `${c.taskId} -> ${c.newWashType}`));
+      
+      setTimeout(async () => {
+        try {
+          const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/batch-update`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-User-ID': localStorage.getItem('userId') || 'WEB-USER',
+              'X-User-Name': localStorage.getItem('userName') || 'Web User'
+            },
+            body: JSON.stringify({ changes: allChanges })
+          });
+          
+          if (response.ok) {
+            const result = await response.json();
+            console.log(`✅ Week pattern updated successfully:`, result);
+          } else {
+            const data = await response.json();
+            console.error('❌ Failed to save week pattern:', data.error);
+            // Show user-friendly error
+            alert(`❌ Failed to save some changes: ${data.error}`);
+          }
+        } catch (error) {
+          console.error('❌ Error saving week pattern:', error);
+          alert(`❌ Network error while saving changes: ${error.message}`);
         }
-      } catch (error) {
-        }
-    }, 100);
+      }, 100);
+    } else {
+      console.log('📝 No additional changes to save for week pattern');
+    }
   };
   const handleCustomerNameClick = async (customerId) => {
     try {
@@ -336,8 +447,23 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
   };
   const confirmDeleteTask = async (appointment) => {
     setModal({ isOpen: false });
+    const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
+    
+    // Store original schedule for potential revert
+    const originalSchedule = [...assignedSchedule];
+    
+    // Remove from UI immediately for smooth experience
+    if (onScheduleUpdate) {
+      const updatedSchedule = assignedSchedule.filter(task => 
+        `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
+      );
+      onScheduleUpdate(updatedSchedule);
+    }
+    
+    // Show saving indicator
+    setSavingTasks(prev => new Set([...prev, taskId]));
+    
     try {
-      const taskId = `${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`;
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/delete-task`, {
         method: 'DELETE',
         headers: {
@@ -345,25 +471,34 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         },
         body: JSON.stringify({ taskId })
       });
+      
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to delete task');
       }
-      // Remove the task from local state immediately
-      if (onScheduleUpdate) {
-        const updatedSchedule = assignedSchedule.filter(task => 
-          `${task.customerId}-${task.day}-${task.time}-${task.carPlate}` !== taskId
-        );
-        onScheduleUpdate(updatedSchedule);
-      }
-      setShowOverrideMenu(null);
-      setModal({
-        isOpen: true,
-        type: 'success',
-        title: 'Success',
-        message: `Task deleted successfully!\n\nCustomer: ${appointment.customerName}\nVilla: ${appointment.villa}\nCar: ${appointment.carPlate}`
+      
+      // Success - remove saving indicator
+      setSavingTasks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(taskId);
+        return newSet;
       });
+      
+      setShowOverrideMenu(null);
+      console.log('✅ Task deleted successfully');
+      
     } catch (error) {
+      // Revert UI changes on error
+      if (onScheduleUpdate) {
+        onScheduleUpdate(originalSchedule);
+      }
+      
+      setSavingTasks(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(taskId);
+        return newSet;
+      });
+      
       setModal({
         isOpen: true,
         type: 'error',
@@ -510,12 +645,15 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
           body: JSON.stringify({ changes })
         });
         if (response.ok) {
-          // Auto-refresh to ensure data consistency
-          setTimeout(() => window.location.reload(), 1000);
+          // Success - no page reload needed for drag & drop
+          console.log('✅ Drag & drop completed successfully');
         } else {
-          }
-      } catch (error) {
+          const data = await response.json();
+          console.error('❌ Failed to save drag & drop:', data.error);
         }
+      } catch (error) {
+        console.error('❌ Error saving drag & drop:', error);
+      }
     }, 100);
   };
   return (
@@ -602,7 +740,10 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                 key={key}
                                 className={`appointment-item ${appointment.washType === 'INT' ? 'int-type' : ''} ${appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled' ? 'cancelled-task' : ''} ${appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted ? 'completed-task' : ''} ${appointment.customerId && appointment.customerId.startsWith('MANUAL_') ? 'manual-appointment' : ''}`}
                                 style={{ 
-                                  position: 'relative'
+                                  position: 'relative',
+                                  opacity: savingTasks.has(`${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`) ? 0.7 : 1,
+                                  border: savedTasks.has(`${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`) ? '2px solid #28a745' : 'none',
+                                  transition: 'all 0.3s ease'
                                 }}
                                 onClick={(e) => {
                                   // Only filter if not clicking on interactive elements
@@ -651,7 +792,8 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                   }}
                                   style={{ 
                                     cursor: (appointment.washType === 'CANCELLED' || appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.isCompleted) ? 'default' : 'pointer', 
-                                    fontWeight: 'bold'
+                                    fontWeight: 'bold',
+                                    position: 'relative'
                                   }}
                                   title={(appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled') ? 'Task was cancelled' : 
                                          (appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted) ? 'Task completed' : 
@@ -659,6 +801,24 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                 >
                                   {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : 
                                    appointment.originalWashType || appointment.washType}
+                                  {savingTasks.has(`${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`) && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      top: '-5px',
+                                      right: '-5px',
+                                      fontSize: '10px',
+                                      color: '#ffc107'
+                                    }}>💾</span>
+                                  )}
+                                  {savedTasks.has(`${appointment.customerId}-${appointment.day}-${appointment.time}-${appointment.carPlate}`) && (
+                                    <span style={{
+                                      position: 'absolute',
+                                      top: '-5px',
+                                      right: '-5px',
+                                      fontSize: '10px',
+                                      color: '#28a745'
+                                    }}>✅</span>
+                                  )}
                                 </div>
                               </div>
                             );
@@ -708,15 +868,16 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
               width: '100%',
               padding: '15px 18px',
               border: 'none',
-              backgroundColor: 'white',
+              backgroundColor: appointment.washType === 'EXT' ? '#e8f5e9' : 'white',
               cursor: 'pointer',
               fontSize: '16px',
               textAlign: 'center',
-              borderBottom: '1px solid #f0f0f0'
+              borderBottom: '1px solid #f0f0f0',
+              fontWeight: appointment.washType === 'EXT' ? 'bold' : 'normal'
             }}
             onClick={() => handleWashTypeChange(appointment, 'EXT')}
           >
-            🚗 EXT Only
+            🚗 EXT Only {appointment.washType === 'EXT' && '✓'}
           </button>
           <button
             style={{
@@ -724,15 +885,16 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
               width: '100%',
               padding: '15px 18px',
               border: 'none',
-              backgroundColor: 'white',
+              backgroundColor: appointment.washType === 'INT' ? '#e8f5e9' : 'white',
               cursor: 'pointer',
               fontSize: '16px',
               textAlign: 'center',
-              borderBottom: '1px solid #f0f0f0'
+              borderBottom: '1px solid #f0f0f0',
+              fontWeight: appointment.washType === 'INT' ? 'bold' : 'normal'
             }}
             onClick={() => handleWashTypeChange(appointment, 'INT')}
           >
-            🧽 EXT + INT
+            🧽 EXT + INT {appointment.washType === 'INT' && '✓'}
           </button>
           <button
             style={{

@@ -357,37 +357,51 @@ class SupabaseService {
   // Clear and write schedule
   async clearAndWriteSchedule(tasks) {
     try {
+      console.log(`🔒 clearAndWriteSchedule: Starting with ${tasks.length} new tasks`);
+      
       // Get existing locked tasks to preserve them
       let lockedTasks = [];
       try {
         lockedTasks = await this.request('GET', '/ScheduledTasks?isLocked=eq.TRUE');
+        console.log(`🔒 Found ${lockedTasks.length} locked tasks to preserve`);
         } catch (error) {
+        console.log(`⚠️ Could not fetch locked tasks:`, error.message);
         }
       
       // Clear only unlocked tasks
       try {
         await this.request('DELETE', '/ScheduledTasks?isLocked=neq.TRUE');
+        console.log(`🗑️ Cleared unlocked tasks`);
         } catch (deleteError) {
+        console.error(`❌ Failed to clear unlocked tasks:`, deleteError.message);
         throw deleteError;
       }
       
       if (tasks.length === 0) {
+        console.log(`📝 No new tasks to add`);
         return;
       }
       
       // Filter out tasks that would duplicate existing locked tasks
       const newTasks = tasks.filter(newTask => {
-        return !lockedTasks.some(lockedTask => 
+        const isDuplicate = lockedTasks.some(lockedTask => 
           lockedTask.CustomerID === newTask.customerId &&
           lockedTask.Day === newTask.day &&
           lockedTask.Time === newTask.time &&
           lockedTask.CarPlate === (newTask.carPlate || '')
         );
+        
+        if (isDuplicate) {
+          console.log(`🔒 Skipping duplicate of locked task: ${newTask.customerId} ${newTask.day} ${newTask.time} ${newTask.carPlate}`);
+        }
+        
+        return !isDuplicate;
       });
       
-      console.log(`Filtered ${newTasks.length} new tasks after removing duplicates`);
+      console.log(`📊 Filtered ${newTasks.length} new tasks after removing ${tasks.length - newTasks.length} duplicates of locked tasks`);
       
       if (newTasks.length === 0) {
+        console.log(`✅ No new tasks to add after filtering`);
         return;
       }
       
@@ -410,8 +424,10 @@ class SupabaseService {
       
       // Insert all tasks in one batch
       await this.request('POST', '/ScheduledTasks', batchData);
+      console.log(`✅ Successfully added ${batchData.length} new tasks`);
       
       } catch (error) {
+      console.error(`❌ clearAndWriteSchedule error:`, error.message);
       throw error;
     }
   }
@@ -618,10 +634,21 @@ class SupabaseService {
   // Update scheduled task
   async updateScheduledTask(customerID, day, time, carPlate, updateData) {
     try {
-      const filter = `CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${time}&CarPlate=eq.${carPlate || ''}`;
+      console.log(`🔧 updateScheduledTask called with:`);
+      console.log(`   CustomerID: ${customerID}`);
+      console.log(`   Day: ${day}`);
+      console.log(`   Time: ${time}`);
+      console.log(`   CarPlate: ${carPlate}`);
+      console.log(`   UpdateData:`, updateData);
+      
+      const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}&CarPlate=eq.${encodeURIComponent(carPlate || '')}`;
+      console.log(`🔗 Encoded filter: ${filter}`);
+      
       const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
+      console.log(`✅ updateScheduledTask result:`, result);
       return result;
     } catch (error) {
+      console.error(`❌ updateScheduledTask error:`, error.message);
       throw error;
     }
   }

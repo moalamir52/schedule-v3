@@ -5,6 +5,7 @@ import WorkerScheduleView from '../components/schedule/WorkerScheduleView';
 import AddAppointmentModal from '../components/schedule/AddAppointmentModal';
 import ExportModal from '../components/schedule/ExportModal';
 import CronSettingsModal from '../components/schedule/CronSettingsModal';
+import '../styles/smooth-interactions.css';
 const SchedulePage = () => {
   const [currentView, setCurrentView] = useState(() => {
     return localStorage.getItem('scheduleCurrentView') || 'weekly';
@@ -186,10 +187,7 @@ const SchedulePage = () => {
       }
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
-        // تحديث البيانات بدلاً من إعادة تحميل الصفحة
-        setTimeout(async () => {
-          await refreshData();
-        }, 1000);
+        // No need to refresh - UI already updated
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -234,10 +232,7 @@ const SchedulePage = () => {
         setAssignedSchedule([]);
         setError(null);
         alert('✅ All schedule data cleared from database successfully!');
-        // تحديث البيانات بدلاً من إعادة تحميل الصفحة
-        setTimeout(async () => {
-          await refreshData();
-        }, 500);
+        // No need to refresh - data already cleared
       } else {
         // Force clear local state and refresh
         setAssignedSchedule([]);
@@ -358,6 +353,14 @@ const SchedulePage = () => {
     if (!confirm('Are you sure you want to delete this appointment?')) {
       return;
     }
+    
+    // Store original schedule for potential revert
+    const originalSchedule = [...assignedSchedule];
+    
+    // Remove from UI immediately
+    const updatedSchedule = assignedSchedule.filter(task => task.customerId !== customerId);
+    setAssignedSchedule(updatedSchedule);
+    
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -366,6 +369,7 @@ const SchedulePage = () => {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
+      
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Delete endpoint not found. Please restart the server.');
@@ -373,19 +377,25 @@ const SchedulePage = () => {
         const errorText = await response.text();
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
+      
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete appointment');
       }
-      await loadCurrentSchedule();
+      
+      console.log('✅ Appointment deleted successfully');
+      
     } catch (err) {
+      // Revert UI changes on error
+      setAssignedSchedule(originalSchedule);
+      
       if (err.name === 'AbortError') {
         alert('Delete operation timed out. Please check your connection and try again.');
       } else {
         alert(`Error deleting appointment: ${err.message}`);
       }
     }
-  }, []);
+  }, [assignedSchedule]);
   // Memoize filtered schedule to prevent recalculation on every render
   const filteredSchedule = useMemo(() => {
     let filtered = assignedSchedule;
@@ -426,32 +436,20 @@ const SchedulePage = () => {
       const taskParts = taskId.split('-');
       const [customerId, day, ...rest] = taskParts;
       const carPlate = rest[rest.length - 1] === 'NOPLATE' ? '' : rest[rest.length - 1];
+      
       // Find the task to get worker name
       const task = assignedSchedule.find(t => 
         t.customerId === customerId &&
         t.day === day &&
         (t.carPlate || 'NOPLATE') === carPlate
       );
+      
       if (!task) {
         throw new Error('Task not found');
       }
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ 
-          taskId, 
-          newWorkerName: task.workerName,
-          newWashType,
-          keepCustomerTogether: true // إضافة flag للحفاظ على وحدة العميل
-        })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to update wash type');
-      }
-      // Update all tasks for this customer to maintain unity
+      
+      // Update UI immediately for smooth experience
+      const originalSchedule = [...assignedSchedule];
       setAssignedSchedule(prev => 
         prev.map(t => {
           if (t.customerId === customerId && t.day === day) {
@@ -465,6 +463,31 @@ const SchedulePage = () => {
           return t;
         })
       );
+      
+      // Save to server in background
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ 
+          taskId, 
+          newWorkerName: task.workerName,
+          newWashType,
+          keepCustomerTogether: true
+        })
+      });
+      
+      if (!response.ok) {
+        const data = await response.json();
+        // Revert UI changes on error
+        setAssignedSchedule(originalSchedule);
+        throw new Error(data.error || 'Failed to update wash type');
+      }
+      
+      // Success - no page reload needed
+      console.log('✅ Wash type updated successfully');
+      
     } catch (err) {
       alert(`Error updating wash type: ${err.message}`);
     }
