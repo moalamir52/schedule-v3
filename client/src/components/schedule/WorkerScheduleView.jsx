@@ -284,10 +284,12 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
               return newSet;
             });
           }, 2000);
-          // Auto-refresh data after successful update
+          // Clear customer filter after successful update
           setTimeout(() => {
-            window.location.reload();
-          }, 1000);
+            if (onCustomerFilter) {
+              onCustomerFilter('');
+            }
+          }, 1500);
         } else {
           const data = await response.json();
           console.error('❌ Failed to save wash type:', data.error);
