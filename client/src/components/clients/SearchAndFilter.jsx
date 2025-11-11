@@ -1,31 +1,26 @@
 import { useState } from 'react';
-
 function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState({
     status: '',
     package: ''
   });
-
   const handleSearch = (e) => {
     const value = e.target.value;
     setSearchTerm(value);
     onSearch(value);
   };
-
   const handleFilterChange = (filterType, value) => {
     const newFilters = { ...filters, [filterType]: value };
     setFilters(newFilters);
     onFilter(newFilters);
   };
-
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       onImport(file);
     }
   };
-
   return (
     <div style={{
       backgroundColor: 'white',
@@ -51,7 +46,6 @@ function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
             }}
           />
         </div>
-
         {/* Status Filter */}
         <div>
           <select
@@ -69,7 +63,6 @@ function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
             <option value="Inactive">Inactive</option>
           </select>
         </div>
-
         {/* Package Filter */}
         <div>
           <select
@@ -91,7 +84,6 @@ function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
             <option value="3 Ext 1 INT bi week ">3 Ext 1 INT bi week</option>
           </select>
         </div>
-
         {/* Action Buttons */}
         <div style={{ display: 'flex', gap: '10px' }}>
           <button
@@ -101,7 +93,6 @@ function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
           >
             📊 Export
           </button>
-
           <label style={{
             backgroundColor: '#17a2b8',
             color: 'white',
@@ -124,5 +115,4 @@ function SearchAndFilter({ onSearch, onFilter, onExport, onImport }) {
     </div>
   );
 }
-
 export default SearchAndFilter;

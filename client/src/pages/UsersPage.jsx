@@ -1,13 +1,11 @@
 import { useState, useEffect } from 'react';
 import UsersTable from '../components/users/UsersTable.jsx';
-
 function UsersPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', role: 'User' });
-
   const fetchUsers = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
@@ -22,11 +20,9 @@ function UsersPage() {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     fetchUsers();
   }, []);
-
   const handleAddUser = async (e) => {
     e.preventDefault();
     try {
@@ -35,9 +31,7 @@ function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newUser)
       });
-      
       const data = await response.json();
-      
       if (response.ok) {
         alert('User added successfully!');
         setShowAddModal(false);
@@ -50,11 +44,9 @@ function UsersPage() {
       alert('Error: ' + error.message);
     }
   };
-
   if (loading) {
     return <div>Loading...</div>;
   }
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -73,11 +65,8 @@ function UsersPage() {
           Add New User
         </button>
       </div>
-      
       {error && <div style={{ color: 'red', marginBottom: '20px' }}>{error}</div>}
-      
       <UsersTable users={users} onUserDeleted={fetchUsers} />
-      
       {/* Add User Modal */}
       {showAddModal && (
         <div style={{
@@ -117,7 +106,6 @@ function UsersPage() {
                   }}
                 />
               </div>
-              
               <div style={{ marginBottom: '15px' }}>
                 <label>Password:</label>
                 <input
@@ -134,7 +122,6 @@ function UsersPage() {
                   }}
                 />
               </div>
-              
               <div style={{ marginBottom: '20px' }}>
                 <label>Role:</label>
                 <select
@@ -153,7 +140,6 @@ function UsersPage() {
                   <option value="Manager">Manager</option>
                 </select>
               </div>
-              
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
@@ -190,5 +176,4 @@ function UsersPage() {
     </div>
   );
 }
-
 export default UsersPage;

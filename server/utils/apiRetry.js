@@ -25,8 +25,6 @@ async function apiRetry(apiCall, maxRetries = 3, baseDelay = 1000) {
       // Calculate delay with exponential backoff
       const delay = baseDelay * Math.pow(2, attempt - 1);
       
-      console.log(`API retry attempt ${attempt}/${maxRetries} after ${delay}ms - Error: ${error.message}`);
-      
       // Wait before retrying
       await new Promise(resolve => setTimeout(resolve, delay));
     }

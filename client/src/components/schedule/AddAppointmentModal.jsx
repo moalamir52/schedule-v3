@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
   const [formData, setFormData] = useState({
     customerName: '',
@@ -9,28 +8,23 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
     workerName: '',
     cars: [{ plate: '', washType: 'EXT' }]
   });
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [availableWorkers, setAvailableWorkers] = useState([]);
-
   const days = ['Saturday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
   const timeSlots = [
     '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
     '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
   ];
-
   useEffect(() => {
     if (workers.length > 0 && !formData.workerName) {
       setFormData(prev => ({ ...prev, workerName: workers[0].Name }));
     }
   }, [workers]);
-
   const fetchAvailableWorkers = async (day, time) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/available-workers?day=${day}&time=${time}`);
       const data = await response.json();
-      
       if (data.success) {
         setAvailableWorkers(data.availableWorkers);
         // Reset worker selection if current worker is not available
@@ -39,28 +33,22 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
         }
       }
     } catch (err) {
-      console.error('Failed to fetch available workers:', err);
       setAvailableWorkers(workers); // Fallback to all workers
     }
   };
-
   useEffect(() => {
     if (formData.day && formData.time) {
       fetchAvailableWorkers(formData.day, formData.time);
     }
   }, [formData.day, formData.time, workers]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!formData.customerName || !formData.villa || !formData.workerName || formData.cars.some(car => !car.plate.trim())) {
       setError('Customer Name, Villa, Worker and at least one car plate are required');
       return;
     }
-
     setLoading(true);
     setError('');
-
     try {
       // Send each car as separate appointment
       for (const car of formData.cars) {
@@ -89,9 +77,7 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
       setLoading(false);
     }
   };
-
   if (!isOpen) return null;
-
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -99,14 +85,12 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
           <h2>➕ Add New Appointment</h2>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
-
         <form onSubmit={handleSubmit} className="appointment-form">
           {error && (
             <div className="error-message">
               ⚠️ {error}
             </div>
           )}
-
           <div className="form-group">
             <label>👤 Customer Name:</label>
             <input
@@ -117,7 +101,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               required
             />
           </div>
-
           <div className="form-group">
             <label>🏠 Villa:</label>
             <input
@@ -128,7 +111,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               required
             />
           </div>
-
           <div className="form-row">
             <div className="form-group">
               <label>📅 Day:</label>
@@ -143,7 +125,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
                 ))}
               </select>
             </div>
-
             <div className="form-group">
               <label>⏰ Time:</label>
               <select
@@ -158,7 +139,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               </select>
             </div>
           </div>
-
           <div className="form-group">
             <label>👷 Worker: {availableWorkers.length > 0 && `(${availableWorkers.length} available)`}</label>
             <select
@@ -179,7 +159,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               ))}
             </select>
           </div>
-
           <div className="form-group">
             <label>🚗 Cars:</label>
             {formData.cars.map((car, index) => (
@@ -273,7 +252,6 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
               + Add Another Car
             </button>
           </div>
-
           <div className="form-actions">
             <button type="button" onClick={onClose} className="cancel-btn">
               Cancel
@@ -287,5 +265,4 @@ const AddAppointmentModal = ({ isOpen, onClose, onAdd, workers = [] }) => {
     </div>
   );
 };
-
 export default AddAppointmentModal;

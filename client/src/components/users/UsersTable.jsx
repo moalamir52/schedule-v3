@@ -4,18 +4,14 @@ function UsersTable({ users, onUserDeleted }) {
       alert('Cannot delete admin user');
       return;
     }
-    
     if (!confirm(`Are you sure you want to delete user: ${username}?`)) {
       return;
     }
-    
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${username}`, {
         method: 'DELETE'
       });
-      
       const data = await response.json();
-      
       if (response.ok) {
         alert('User deleted successfully!');
         if (onUserDeleted) onUserDeleted();
@@ -26,7 +22,6 @@ function UsersTable({ users, onUserDeleted }) {
       alert('Error: ' + error.message);
     }
   };
-
   return (
     <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -94,5 +89,4 @@ function UsersTable({ users, onUserDeleted }) {
     </div>
   );
 }
-
 export default UsersTable;

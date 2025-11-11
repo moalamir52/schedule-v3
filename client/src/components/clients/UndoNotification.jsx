@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-
 function UndoNotification({ isVisible, message, onUndo, onDismiss, countdown }) {
   useEffect(() => {
     if (isVisible && countdown > 0) {
@@ -11,9 +10,7 @@ function UndoNotification({ isVisible, message, onUndo, onDismiss, countdown }) 
       return () => clearTimeout(timer);
     }
   }, [isVisible, countdown, onDismiss]);
-
   if (!isVisible) return null;
-
   return (
     <div style={{
       position: 'fixed',
@@ -38,7 +35,6 @@ function UndoNotification({ isVisible, message, onUndo, onDismiss, countdown }) 
           Auto-dismiss in {countdown}s
         </div>
       </div>
-      
       <button
         onClick={onUndo}
         style={{
@@ -54,7 +50,6 @@ function UndoNotification({ isVisible, message, onUndo, onDismiss, countdown }) 
       >
         UNDO
       </button>
-      
       <button
         onClick={onDismiss}
         style={{
@@ -73,5 +68,4 @@ function UndoNotification({ isVisible, message, onUndo, onDismiss, countdown }) 
     </div>
   );
 }
-
 export default UndoNotification;

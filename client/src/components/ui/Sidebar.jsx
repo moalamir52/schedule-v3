@@ -2,14 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { FiHome, FiUsers, FiCalendar, FiMenu, FiX, FiCode, FiCheckSquare, FiLogOut, FiSettings, FiBarChart2 } from 'react-icons/fi';
 import authService from '../../services/authService.js';
-
 function Sidebar({ user, onLogout }) {
   const [isOpen, setIsOpen] = useState(() => {
     const saved = localStorage.getItem('sidebarOpen');
     return saved ? JSON.parse(saved) : false;
   });
-
-
   const sidebarStyle = {
     position: 'fixed',
     left: isOpen ? 0 : '-250px',
@@ -21,7 +18,6 @@ function Sidebar({ user, onLogout }) {
     zIndex: 1000,
     boxShadow: '2px 0 10px rgba(0,0,0,0.1)'
   };
-
   const toggleButtonStyle = {
     position: 'fixed',
     top: '20px',
@@ -41,7 +37,6 @@ function Sidebar({ user, onLogout }) {
     zIndex: 1001,
     boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
   };
-
   const linkStyle = {
     display: 'flex',
     alignItems: 'center',
@@ -51,18 +46,15 @@ function Sidebar({ user, onLogout }) {
     transition: 'background-color 0.3s',
     borderBottom: '1px solid #28a745'
   };
-
   const iconStyle = {
     marginRight: '15px',
     fontSize: '18px'
   };
-
   const headerStyle = {
     padding: '30px 20px 20px',
     borderBottom: '2px solid #28a745',
     marginBottom: '10px'
   };
-
   return (
     <>
       {/* Overlay */}
@@ -83,7 +75,6 @@ function Sidebar({ user, onLogout }) {
           }}
         />
       )}
-
       {/* Toggle Button */}
       <button
         style={toggleButtonStyle}
@@ -97,7 +88,6 @@ function Sidebar({ user, onLogout }) {
       >
         {isOpen ? <FiX /> : <FiMenu />}
       </button>
-
       {/* Sidebar */}
       <div style={sidebarStyle}>
         <div style={headerStyle}>
@@ -137,7 +127,6 @@ function Sidebar({ user, onLogout }) {
                     alert('Password must be at least 4 characters');
                     return;
                   }
-                  
                   try {
                     // Get username from JWT token
                     const currentUser = authService.getCurrentUser();
@@ -145,10 +134,8 @@ function Sidebar({ user, onLogout }) {
                       alert('Please login again');
                       return;
                     }
-                    
                     // Use user ID as username for now
                     const username = currentUser.id || 'user';
-                    
                     await authService.changeMyPassword(username, currentPassword, newPassword);
                     alert('Password changed successfully!');
                   } catch (error) {
@@ -171,7 +158,6 @@ function Sidebar({ user, onLogout }) {
             </div>
           )}
         </div>
-
         <nav style={{ paddingTop: '20px' }}>
           <Link 
             to="/" 
@@ -182,7 +168,6 @@ function Sidebar({ user, onLogout }) {
             <FiHome style={iconStyle} />
             Dashboard
           </Link>
-          
           <Link 
             to="/clients" 
             style={linkStyle}
@@ -192,7 +177,6 @@ function Sidebar({ user, onLogout }) {
             <FiUsers style={iconStyle} />
             Clients
           </Link>
-          
           <Link 
             to="/schedule" 
             style={linkStyle}
@@ -202,7 +186,6 @@ function Sidebar({ user, onLogout }) {
             <FiCalendar style={iconStyle} />
             Schedule
           </Link>
-          
           <Link 
             to="/tasks" 
             style={linkStyle}
@@ -212,7 +195,6 @@ function Sidebar({ user, onLogout }) {
             <FiCheckSquare style={iconStyle} />
             Daily Tasks
           </Link>
-          
           <Link 
             to="/operations" 
             style={linkStyle}
@@ -222,7 +204,6 @@ function Sidebar({ user, onLogout }) {
             <FiSettings style={iconStyle} />
             Operations
           </Link>
-          
           <Link 
             to="/reports" 
             style={linkStyle}
@@ -232,7 +213,6 @@ function Sidebar({ user, onLogout }) {
             <FiBarChart2 style={iconStyle} />
             Reports & Analytics
           </Link>
-          
           <Link 
             to="/cleanup" 
             style={linkStyle}
@@ -242,9 +222,6 @@ function Sidebar({ user, onLogout }) {
             <span style={{...iconStyle, fontSize: '16px'}}>🧹</span>
             System Cleanup
           </Link>
-          
-
-          
           {/* Logout Button */}
           <div
             style={{
@@ -266,5 +243,4 @@ function Sidebar({ user, onLogout }) {
     </>
   );
 }
-
 export default Sidebar;

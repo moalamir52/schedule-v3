@@ -5,7 +5,6 @@ import WorkerScheduleView from '../components/schedule/WorkerScheduleView';
 import AddAppointmentModal from '../components/schedule/AddAppointmentModal';
 import ExportModal from '../components/schedule/ExportModal';
 import CronSettingsModal from '../components/schedule/CronSettingsModal';
-
 const SchedulePage = () => {
   const [currentView, setCurrentView] = useState(() => {
     return localStorage.getItem('scheduleCurrentView') || 'weekly';
@@ -23,7 +22,6 @@ const SchedulePage = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showAllSlots, setShowAllSlots] = useState(false);
   const [customerFilter, setCustomerFilter] = useState('');
-
   useEffect(() => {
     const fetchInitialData = async () => {
       try {
@@ -32,18 +30,14 @@ const SchedulePage = () => {
           fetch(`${import.meta.env.VITE_API_URL}/api/schedule/overview`),
           fetch(`${import.meta.env.VITE_API_URL}/api/workers`)
         ]);
-        
         const [overviewData, workersData] = await Promise.all([
           overviewResponse.json(),
           workersResponse.json()
         ]);
-        
         setOverviewData(overviewData);
         const activeWorkers = workersData.filter(worker => worker.Status === 'Active');
         setWorkers(activeWorkers);
-
         // Auto-load schedule on page load/refresh
-        console.log('Auto-loading schedule on page load...');
         await loadCurrentSchedule();
       } catch (err) {
         setError(err.message);
@@ -51,28 +45,30 @@ const SchedulePage = () => {
         setIsLoading(false);
       }
     };
-
     fetchInitialData();
   }, []);
-
   const handleViewChange = (viewName) => {
     setCurrentView(viewName);
     localStorage.setItem('scheduleCurrentView', viewName);
   };
-
   // Update - يقرأ الجدولة الموجودة من قاعدة البيانات فقط (Refresh)
+  // دالة تحديث سلسة بدون إعادة تحميل
+  const refreshData = async () => {
+    try {
+      await loadCurrentSchedule();
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+    }
+  };
+
   const handleAutoAssign = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('Schedule API Response:', data);
-        
         if (data.success && data.assignments) {
-          console.log('Setting schedule with', data.assignments.length, 'assignments');
           // Normalize the data structure to match frontend expectations
           const normalizedAssignments = data.assignments.map(appointment => ({
             day: appointment.Day,
@@ -89,13 +85,10 @@ const SchedulePage = () => {
             appointmentDate: appointment.AppointmentDate,
             scheduleDate: appointment.ScheduleDate
           }));
-          console.log('Normalized assignments:', normalizedAssignments.length, 'items');
-          console.log('Sample normalized appointment:', normalizedAssignments[0]);
           setAssignedSchedule(normalizedAssignments);
           setError(null);
         } else if (Array.isArray(data)) {
           // Handle direct array response
-          console.log('Setting schedule with direct array:', data.length, 'assignments');
           const normalizedAssignments = data.map(appointment => ({
             day: appointment.Day || appointment.day,
             time: appointment.Time || appointment.time,
@@ -127,7 +120,6 @@ const SchedulePage = () => {
       setIsLoading(false);
     }
   };
-  
   // Sync New Customers - يضيف العملاء الجدد فقط
   const handleSyncNewCustomers = async () => {
     setIsLoading(true);
@@ -140,23 +132,18 @@ const SchedulePage = () => {
         },
         body: JSON.stringify({ weekOffset: currentWeekOffset })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to sync new customers');
       }
-      
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
         const addedCount = data.newCustomersCount || 0;
         const newCustomers = data.newCustomers || [];
-        
         if (addedCount > 0) {
           setTimeout(async () => {
-            await loadCurrentSchedule();
+            await refreshData();
           }, 1000);
-          
           // Success - no alert needed
         } else {
           // No new customers - no alert needed
@@ -170,27 +157,22 @@ const SchedulePage = () => {
       setIsLoading(false);
     }
   };
-
   const handleToggleShowAllSlots = async () => {
     const newShowAllSlots = !showAllSlots;
     setShowAllSlots(newShowAllSlots);
-    
     // Just toggle the mode, don't auto-generate
     // User needs to press Auto button to apply changes
   };
-
   const handleClear = () => {
     setAssignedSchedule([]);
     setError(null);
   };
-  
   // Smart Auto-Schedule - يحافظ على العملاء المحميين
   const handleGenerateNew = async () => {
     setIsLoading(true);
     setError(null);
     try {
       const url = `${import.meta.env.VITE_API_URL}/api/schedule/assign/smart/${currentWeekOffset}`;
-      
       const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -198,17 +180,16 @@ const SchedulePage = () => {
         },
         body: JSON.stringify({ showAllSlots })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
-      
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
-        // Auto-refresh to ensure data consistency
-        setTimeout(() => window.location.reload(), 1000);
+        // تحديث البيانات بدلاً من إعادة تحميل الصفحة
+        setTimeout(async () => {
+          await refreshData();
+        }, 1000);
       } else {
         throw new Error(data.error || 'Invalid response format');
       }
@@ -219,13 +200,11 @@ const SchedulePage = () => {
       setIsLoading(false);
     }
   };
-  
   // Clear All Data - يمسح كل البيانات من قاعدة البيانات
   const handleForceReset = async () => {
     if (!confirm('Are you sure you want to clear ALL schedule data from the database? This cannot be undone.')) {
       return;
     }
-    
     setIsLoading(true);
     try {
       // Try multiple endpoints
@@ -234,16 +213,13 @@ const SchedulePage = () => {
         '/api/schedule-reset/clear',
         '/api/schedule/assign/clear'
       ];
-      
       let success = false;
-      
       for (const endpoint of endpoints) {
         try {
           const response = await fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
           });
-          
           if (response.ok) {
             const data = await response.json();
             if (data.success) {
@@ -252,34 +228,32 @@ const SchedulePage = () => {
             }
           }
         } catch (e) {
-          console.log(`Endpoint ${endpoint} failed:`, e.message);
-        }
+          }
       }
-      
       if (success) {
         setAssignedSchedule([]);
         setError(null);
         alert('✅ All schedule data cleared from database successfully!');
-        // Auto-refresh page after clearing
-        setTimeout(() => window.location.reload(), 1500);
+        // تحديث البيانات بدلاً من إعادة تحميل الصفحة
+        setTimeout(async () => {
+          await refreshData();
+        }, 500);
       } else {
         // Force clear local state and refresh
         setAssignedSchedule([]);
         setError(null);
-        
         // Try to force clear by calling the Update button API with empty data
         try {
           await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
             method: 'DELETE'
           });
         } catch (e) {
-          console.log('Delete attempt failed:', e);
-        }
-        
-        alert('✅ Local schedule cleared! The page will refresh to sync with database.');
-        setTimeout(() => window.location.reload(), 1000);
+          }
+        alert('✅ Local schedule cleared! Syncing with database...');
+        setTimeout(async () => {
+          await refreshData();
+        }, 500);
       }
-      
     } catch (err) {
       setError('Failed to clear schedule data');
       alert('❌ Error clearing schedule data: ' + err.message);
@@ -287,24 +261,17 @@ const SchedulePage = () => {
       setIsLoading(false);
     }
   };
-
   const loadCurrentSchedule = async () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`, {
         signal: controller.signal
       });
-      
       clearTimeout(timeoutId);
-      
       if (response.ok) {
         const data = await response.json();
-        console.log('Load Schedule API Response:', data);
-        
         if (data.success && data.assignments) {
-          console.log('Loading schedule with', data.assignments.length, 'assignments');
           // Normalize the data structure to match frontend expectations
           const normalizedAssignments = data.assignments.map(appointment => ({
             day: appointment.Day,
@@ -325,7 +292,6 @@ const SchedulePage = () => {
           setError(null);
         } else if (Array.isArray(data)) {
           // Handle direct array response
-          console.log('Loading schedule with direct array:', data.length, 'assignments');
           const normalizedAssignments = data.map(appointment => ({
             day: appointment.Day || appointment.day,
             time: appointment.Time || appointment.time,
@@ -360,7 +326,6 @@ const SchedulePage = () => {
       setAssignedSchedule([]);
     }
   };
-
   const handleAddAppointment = async (appointmentData) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual`, {
@@ -370,46 +335,37 @@ const SchedulePage = () => {
         },
         body: JSON.stringify(appointmentData)
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to add appointment');
       }
-      
       setIsLoading(true);
       try {
         await loadCurrentSchedule();
         alert(`✅ Appointment added successfully!\n\nVilla: ${appointmentData.villa}\nDay: ${appointmentData.day}\nTime: ${appointmentData.time}\nWorker: ${appointmentData.workerName}\nWash Type: ${appointmentData.washType}`);
       } catch (refreshError) {
-        alert('⚠️ Appointment added but failed to refresh schedule. Press F5 to refresh the page.');
+        alert('⚠️ Appointment added but failed to refresh schedule. Please try clicking Update button.');
       } finally {
         setIsLoading(false);
       }
-      
       // Close the modal
       setShowAddModal(false);
     } catch (err) {
       throw new Error(err.message);
     }
   };
-
   const handleDeleteAppointment = useCallback(async (customerId) => {
     if (!confirm('Are you sure you want to delete this appointment?')) {
       return;
     }
-    
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/manual/${customerId}`, {
         method: 'DELETE',
         signal: controller.signal
       });
-      
       clearTimeout(timeoutId);
-      
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Delete endpoint not found. Please restart the server.');
@@ -417,13 +373,10 @@ const SchedulePage = () => {
         const errorText = await response.text();
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
-      
       const data = await response.json();
-      
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete appointment');
       }
-      
       await loadCurrentSchedule();
     } catch (err) {
       if (err.name === 'AbortError') {
@@ -433,27 +386,20 @@ const SchedulePage = () => {
       }
     }
   }, []);
-
   // Memoize filtered schedule to prevent recalculation on every render
   const filteredSchedule = useMemo(() => {
-    console.log('Filtering schedule - original length:', assignedSchedule.length);
     let filtered = assignedSchedule;
-    
     // Filter by today if needed
     if (viewMode === 'today') {
       const today = new Date();
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const todayName = dayNames[today.getDay()];
       filtered = filtered.filter(item => item.day === todayName);
-      console.log('After today filter:', filtered.length, 'items for day:', todayName);
     }
-    
     // Filter by customer if selected
     if (customerFilter.trim()) {
       filtered = filtered.filter(item => item.customerId === customerFilter);
-      console.log('After customer filter:', filtered.length, 'items for customer:', customerFilter);
     }
-    
     // Filter by search term
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
@@ -462,13 +408,9 @@ const SchedulePage = () => {
         (item.customerName && item.customerName.toLowerCase().includes(search)) ||
         (item.carPlate && item.carPlate.toLowerCase().includes(search))
       );
-      console.log('After search filter:', filtered.length, 'items for search:', search);
     }
-    
-    console.log('Final filtered schedule length:', filtered.length);
     return filtered;
   }, [assignedSchedule, viewMode, customerFilter, searchTerm]);
-
   const handleCustomerFilter = useCallback((customerId) => {
     if (customerFilter === customerId) {
       // If already filtered by this customer, clear filter
@@ -478,25 +420,21 @@ const SchedulePage = () => {
       setCustomerFilter(customerId);
     }
   }, [customerFilter]);
-
   const handleWashTypeUpdate = useCallback(async (taskId, newWashType) => {
     try {
       // Parse taskId to get task components
       const taskParts = taskId.split('-');
       const [customerId, day, ...rest] = taskParts;
       const carPlate = rest[rest.length - 1] === 'NOPLATE' ? '' : rest[rest.length - 1];
-      
       // Find the task to get worker name
       const task = assignedSchedule.find(t => 
         t.customerId === customerId &&
         t.day === day &&
         (t.carPlate || 'NOPLATE') === carPlate
       );
-      
       if (!task) {
         throw new Error('Task not found');
       }
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
         method: 'PUT',
         headers: {
@@ -509,13 +447,10 @@ const SchedulePage = () => {
           keepCustomerTogether: true // إضافة flag للحفاظ على وحدة العميل
         })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update wash type');
       }
-      
       // Update all tasks for this customer to maintain unity
       setAssignedSchedule(prev => 
         prev.map(t => {
@@ -530,29 +465,23 @@ const SchedulePage = () => {
           return t;
         })
       );
-      
     } catch (err) {
       alert(`Error updating wash type: ${err.message}`);
     }
   }, [assignedSchedule]);
-
   const loadScheduleForWeek = async (weekOffset) => {
     try {
       setIsLoading(true);
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/${weekOffset}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         }
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || `HTTP error! status: ${response.status}`);
       }
-      
       if (data.success && data.assignments) {
         setAssignedSchedule(data.assignments);
       } else {
@@ -565,7 +494,6 @@ const SchedulePage = () => {
       setIsLoading(false);
     }
   };
-
   return (
     <div>
       {/* Header with elegant frame - Show in Weekly and Overview */}
@@ -614,7 +542,6 @@ const SchedulePage = () => {
         >
           ←
         </button>
-        
         {/* Elegant Title Frame */}
         <div style={{
           background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
@@ -635,7 +562,6 @@ const SchedulePage = () => {
             background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
             pointerEvents: 'none'
           }}></div>
-          
           {/* Interactive Title Buttons */}
           <div style={{
             display: 'flex',
@@ -683,7 +609,6 @@ const SchedulePage = () => {
             >
               📊 Overview
             </button>
-            
             {/* Workers Schedule Button */}
             <button
               onClick={() => handleViewChange('weekly')}
@@ -723,7 +648,6 @@ const SchedulePage = () => {
               🚗 Workers Schedule
             </button>
           </div>
-          
           {viewMode === 'today' && (
             <div style={{
               color: 'rgba(255, 255, 255, 0.9)',
@@ -738,7 +662,6 @@ const SchedulePage = () => {
             </div>
           )}
         </div>
-        
           {/* Subtitle */}
           <p style={{
             color: '#6c757d',
@@ -752,7 +675,6 @@ const SchedulePage = () => {
               : 'Manage and organize your team\'s daily assignments'
             }
           </p>
-          
           {/* Search Box - Always visible in weekly view */}
           {currentView === 'weekly' && (
             <div style={{
@@ -837,7 +759,6 @@ const SchedulePage = () => {
           )}
         </div>
       )}
-      
       <ScheduleControls 
         onViewChange={handleViewChange}
         onAutoAssign={handleAutoAssign}
@@ -861,23 +782,18 @@ const SchedulePage = () => {
         onWeekChange={async (offset) => {
           // Update the week offset first
           setCurrentWeekOffset(offset);
-          
           // Calculate week dates (Monday to Saturday)
           const today = new Date();
           const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-          
           // Find Monday of current week
           let mondayOfWeek = new Date(today);
           const daysFromMonday = currentDay === 0 ? 6 : currentDay - 1; // Sunday is 6 days from Monday
           mondayOfWeek.setDate(today.getDate() - daysFromMonday);
-          
           // Add offset weeks
           mondayOfWeek.setDate(mondayOfWeek.getDate() + (offset * 7));
-          
           // Saturday is 5 days after Monday
           const saturdayOfWeek = new Date(mondayOfWeek);
           saturdayOfWeek.setDate(mondayOfWeek.getDate() + 5);
-          
           const startDate = mondayOfWeek.toLocaleDateString('en-US', {
             day: '2-digit',
             month: 'short',
@@ -888,15 +804,12 @@ const SchedulePage = () => {
             month: 'short',
             year: 'numeric'
           });
-          
           // Show confirmation dialog
           const confirmed = window.confirm(
             `Generate auto schedule for week ${startDate} to ${endDate}?`
           );
-          
           if (confirmed) {
             setIsLoading(true);
-            
             try {
               const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/${offset}`, {
                 method: 'POST',
@@ -905,13 +818,10 @@ const SchedulePage = () => {
                 },
                 body: JSON.stringify({ showAllSlots })
               });
-              
               const data = await response.json();
-              
               if (!response.ok) {
                 throw new Error(data.error || `HTTP error! status: ${response.status}`);
               }
-              
               if (data.success && data.assignments) {
                 setAssignedSchedule(data.assignments);
               } else {
@@ -928,15 +838,11 @@ const SchedulePage = () => {
         viewMode={viewMode}
         onViewModeChange={setViewMode}
       />
-      
       {isLoading && <div className="text-center">Loading...</div>}
-      
       {error && <div className="text-center" style={{ color: 'red' }}>Error: {error}</div>}
-      
       {currentView === 'overview' && (
         <BookingOverview overviewData={overviewData} />
       )}
-      
       {currentView === 'weekly' && (
         <WorkerScheduleView 
           assignedSchedule={filteredSchedule} 
@@ -950,21 +856,18 @@ const SchedulePage = () => {
           currentWeekOffset={currentWeekOffset}
         />
       )}
-      
       <AddAppointmentModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         onAdd={handleAddAppointment}
         workers={workers}
       />
-      
       <ExportModal
         isOpen={showExportModal}
         onClose={() => setShowExportModal(false)}
         assignedSchedule={assignedSchedule}
         workers={workers}
       />
-      
       <CronSettingsModal
         isOpen={showCronModal}
         onClose={() => setShowCronModal(false)}
@@ -972,5 +875,4 @@ const SchedulePage = () => {
     </div>
   );
 };
-
 export default SchedulePage;

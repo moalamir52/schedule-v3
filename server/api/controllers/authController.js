@@ -5,8 +5,6 @@ const jwt = require('jsonwebtoken');
 const login = async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log(`[AUTH] Login attempt for: ${username}`);
-    
     // Get user from database
     const user = await db.findUserByUsername(username);
     if (!user) {
@@ -26,8 +24,7 @@ const login = async (req, res) => {
           return res.status(401).json({ message: 'Invalid username or password' });
         }
         
-        console.log('[AUTH] Created default admin user');
-      } else {
+        } else {
         return res.status(401).json({ message: 'Invalid username or password' });
       }
     } else {
@@ -37,8 +34,6 @@ const login = async (req, res) => {
         return res.status(401).json({ message: 'Invalid username or password' });
       }
     }
-    
-    console.log(`[AUTH] User authenticated: ${username}`);
     
     // Generate token
     const token = jwt.sign(
@@ -50,7 +45,6 @@ const login = async (req, res) => {
       'YOUR_SECRET_KEY'
     );
     
-    console.log(`[AUTH] Login successful for ${username}`);
     res.status(200).json({ 
       token,
       user: {
@@ -59,7 +53,6 @@ const login = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('[AUTH] Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -81,7 +74,6 @@ const register = async (req, res) => {
     
     res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
-    console.error('Error during user registration:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -98,7 +90,6 @@ const getUsers = async (req, res) => {
     }));
     res.json({ success: true, users: safeUsers });
   } catch (error) {
-    console.error('[USERS] Error getting users:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -130,10 +121,9 @@ const addUser = async (req, res) => {
       Status: 'Active'
     });
     
-    console.log(`[USERS] Added new user: ${username} (${role || 'User'})`);
+    console.log(`User ${username} added successfully`);
     res.json({ success: true, message: 'User added successfully' });
   } catch (error) {
-    console.error('[USERS] Error adding user:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -153,11 +143,8 @@ const deleteUser = async (req, res) => {
     }
     
     await db.deleteUser(user.UserID);
-    console.log(`[USERS] Deleted user: ${username}`);
-    
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
-    console.error('[USERS] Error deleting user:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

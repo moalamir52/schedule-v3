@@ -6,7 +6,6 @@ const getSheetData = async (sheetName) => {
     try {
       return await db.supabase.request('GET', '/WashRules?Status=eq.Active');
     } catch (error) {
-      console.log('WashRules table not found, returning empty array');
       return [];
     }
   }
@@ -23,7 +22,6 @@ const clearAndWriteSheet = async (sheetName, data) => {
         await db.supabase.request('POST', '/WashRules', rule);
       }
     } catch (error) {
-      console.error('Error updating WashRules:', error);
       throw error;
     }
   }
@@ -31,12 +29,8 @@ const clearAndWriteSheet = async (sheetName, data) => {
 
 const getWashRules = async (req, res) => {
   try {
-    console.log('Getting wash rules from Google Sheets...');
     const washRulesData = await getSheetData('WashRules');
-    console.log('Wash rules data:', washRulesData);
-    
     if (!washRulesData || washRulesData.length === 0) {
-      console.log('No wash rules found, creating defaults...');
       // Create default templates and save them to Google Sheets
       const defaultRules = [
         {
@@ -84,11 +78,8 @@ const getWashRules = async (req, res) => {
           Status: 'Active'
         }));
         
-        console.log('Saving default rules to Google Sheets...');
         await clearAndWriteSheet('WashRules', formattedRules);
-        console.log('Default rules saved successfully');
-      } catch (saveError) {
-        console.error('Error saving default rules:', saveError);
+        } catch (saveError) {
         // Continue with default rules even if save fails
       }
       
@@ -105,7 +96,6 @@ const getWashRules = async (req, res) => {
     
     res.json({ success: true, rules });
   } catch (error) {
-    console.error('Error getting wash rules:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -118,7 +108,7 @@ const saveWashRules = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Rules array is required' });
     }
     
-    console.log('Saving rules:', JSON.stringify(rules, null, 2));
+    console.log(`Saving ${rules.length} wash rules`);
     
     // Format rules for Google Sheets
     const formattedRules = rules.map((rule, index) => {
@@ -131,7 +121,6 @@ const saveWashRules = async (req, res) => {
         CreatedDate: new Date().toISOString().split('T')[0],
         Status: 'Active'
       };
-      console.log('Formatted rule:', formatted);
       return formatted;
     });
     
@@ -139,7 +128,6 @@ const saveWashRules = async (req, res) => {
     
     res.json({ success: true, message: 'Wash rules saved successfully' });
   } catch (error) {
-    console.error('Error saving wash rules:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -182,7 +170,6 @@ const addWashRule = async (req, res) => {
     await clearAndWriteSheet('WashRules', formattedRules);
     res.json({ success: true, message: 'Wash rule added successfully' });
   } catch (error) {
-    console.error('Error adding wash rule:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -229,7 +216,6 @@ const updateWashRule = async (req, res) => {
       res.status(404).json({ success: false, error: 'Rule not found' });
     }
   } catch (error) {
-    console.error('Error updating wash rule:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -271,7 +257,6 @@ const deleteWashRule = async (req, res) => {
       res.status(404).json({ success: false, error: 'Rule not found' });
     }
   } catch (error) {
-    console.error('Error deleting wash rule:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

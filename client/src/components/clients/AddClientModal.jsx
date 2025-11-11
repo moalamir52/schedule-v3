@@ -1,918 +1,1 @@
-import { useState, useEffect } from 'react';
-
-function AddClientModal({ isOpen, onClose, onAdd }) {
-  const [formData, setFormData] = useState({
-    CustomerID: '',
-    Name: '',
-    Villa: '',
-    Phone: '',
-    'Number of car': 1,
-    CarPlates: '',
-    Days: '',
-    Time: '',
-    Notes: '',
-    Washman_Package: '',
-    Fee: '',
-    'start date': '',
-    payment: '',
-    Status: 'Active',
-    Serves: ''
-  });
-  
-  const [cars, setCars] = useState([{ plate: '', washType: 'EXT' }]);
-  const [appointments, setAppointments] = useState([{ day: 'Saturday', time: '9:00 AM' }]);
-  const [timeFormat, setTimeFormat] = useState('standard'); // 'standard' or 'advanced'
-  const [advancedTime, setAdvancedTime] = useState('');
-  const [availableTimes, setAvailableTimes] = useState({});
-  const [loadingTimes, setLoadingTimes] = useState({});
-  
-  // Package limits
-  const getPackageLimit = (packageName) => {
-    if (!packageName) return 0;
-    const pkg = packageName.toLowerCase();
-    if (pkg.includes('2 ext 1 int')) return 2;
-    if (pkg.includes('3 ext 1 int')) return 3;
-    if (pkg.includes('2 ext')) return 2;
-    return 0;
-  };
-  const [additionalServices, setAdditionalServices] = useState([]);
-  const [loading, setLoading] = useState(false);
-  
-  // Generate next customer ID when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      generateNextCustomerId();
-    }
-  }, [isOpen]);
-  
-  const generateNextCustomerId = async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/next-id`);
-      const data = await response.json();
-      if (data.success) {
-        setFormData(prev => ({ ...prev, CustomerID: data.nextId }));
-      }
-    } catch (error) {
-      console.error('Error generating customer ID:', error);
-    }
-  };
-  
-  const fetchAvailableTimes = async (day) => {
-    if (availableTimes[day] || loadingTimes[day]) return;
-    
-    setLoadingTimes(prev => ({ ...prev, [day]: true }));
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/available/times?day=${day}`);
-      const data = await response.json();
-      if (data.availableTimes) {
-        setAvailableTimes(prev => ({ ...prev, [day]: data.availableTimes }));
-      }
-    } catch (error) {
-      console.error('Error fetching available times:', error);
-      // Set empty array if API fails to prevent showing unavailable times
-      setAvailableTimes(prev => ({ ...prev, [day]: [] }));
-    } finally {
-      setLoadingTimes(prev => ({ ...prev, [day]: false }));
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    
-    try {
-      // Prepare client data
-      let finalTime, finalDays;
-      
-      if (timeFormat === 'advanced' && advancedTime.trim()) {
-        finalTime = advancedTime.trim();
-        
-        // Extract days from advanced time format
-        if (advancedTime.includes('@')) {
-          // Day-specific format: "Mon@7:00 AM, Thu@2:00 PM"
-          const dayAbbrevToFull = {
-            'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 
-            'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'
-          };
-          const extractedDays = advancedTime.split(', ').map(part => {
-            const day = part.split('@')[0];
-            return dayAbbrevToFull[day] || day;
-          });
-          finalDays = extractedDays.join('-');
-        } else {
-          // Car-specific format: use appointments days as fallback
-          finalDays = appointments.map(apt => apt.day).join('-');
-        }
-      } else {
-        // Convert appointments to Day@Time format
-        const dayAbbrev = {
-          'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed', 
-          'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
-        };
-        finalTime = appointments.map(apt => 
-          `${dayAbbrev[apt.day] || apt.day}@${apt.time}`
-        ).join(', ');
-        finalDays = appointments.map(apt => apt.day).join('-');
-      }
-        
-      const clientData = {
-        ...formData,
-        'Number of car': cars.length,
-        CarPlates: cars.map(car => car.plate).join(', '),
-        Days: finalDays,
-        Time: finalTime,
-        cars: cars,
-        appointments: appointments,
-        additionalServices: additionalServices,
-        timeFormat: timeFormat
-      };
-      
-      await onAdd(clientData);
-      
-      // Reset form
-      setFormData({
-        CustomerID: '',
-        Name: '',
-        Villa: '',
-        Phone: '',
-        'Number of car': 1,
-        CarPlates: '',
-        Days: '',
-        Time: '',
-        Notes: '',
-        Washman_Package: '',
-        Fee: '',
-        'start date': '',
-        payment: '',
-        Status: 'Active',
-        Serves: ''
-      });
-      setCars([{ plate: '', washType: 'EXT' }]);
-      setAppointments([{ day: 'Saturday', time: '9:00 AM' }]);
-      setAdditionalServices([]);
-      setTimeFormat('standard');
-      setAdvancedTime('');
-      
-      onClose();
-    } catch (error) {
-      console.error('Error adding client:', error);
-      alert('Error adding client: ' + error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div 
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000
-      }}
-      onClick={onClose}
-    >
-      <div 
-        style={{
-          backgroundColor: 'white',
-          borderRadius: '12px',
-          padding: '30px',
-          width: '600px',
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.3)'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 style={{ marginBottom: '20px', color: '#548235' }}>Add New Client</h2>
-        
-        <form onSubmit={handleSubmit}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
-            <div>
-              <label>Customer ID:</label>
-              <input
-                type="text"
-                name="CustomerID"
-                value={formData.CustomerID}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            
-            <div>
-              <label>Name:</label>
-              <input
-                type="text"
-                name="Name"
-                value={formData.Name}
-                onChange={handleChange}
-                required
-              />
-            </div>
-            
-            <div>
-              <label>Villa:</label>
-              <input
-                type="text"
-                name="Villa"
-                value={formData.Villa}
-                onChange={handleChange}
-              />
-            </div>
-            
-            <div>
-              <label>Phone:</label>
-              <input
-                type="text"
-                name="Phone"
-                value={formData.Phone}
-                onChange={handleChange}
-              />
-            </div>
-            
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🚗 Cars:</label>
-              {cars.map((car, index) => (
-                <div key={index} style={{ 
-                  border: '1px solid #ddd', 
-                  borderRadius: '8px', 
-                  padding: '15px', 
-                  marginBottom: '10px',
-                  backgroundColor: '#f8f9fa'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                    <span style={{ fontWeight: 'bold', minWidth: '60px' }}>Car {index + 1}:</span>
-                    {cars.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setCars(cars.filter((_, i) => i !== index))}
-                        style={{
-                          background: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '5px 10px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
-                    <input
-                      type="text"
-                      placeholder="Car plate number"
-                      value={car.plate}
-                      onChange={(e) => {
-                        const newCars = [...cars];
-                        newCars[index].plate = e.target.value;
-                        setCars(newCars);
-                      }}
-                      required
-                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    />
-                    <select
-                      value={car.washType}
-                      onChange={(e) => {
-                        const newCars = [...cars];
-                        newCars[index].washType = e.target.value;
-                        setCars(newCars);
-                      }}
-                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    >
-                      <option value="EXT">EXT Only</option>
-                      <option value="INT">EXT + INT</option>
-                    </select>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => setCars([...cars, { plate: '', washType: 'EXT' }])}
-                style={{
-                  background: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '8px 15px',
-                  cursor: 'pointer'
-                }}
-              >
-                + Add Another Car
-              </button>
-            </div>
-            
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>⏰ Time Format:</label>
-              <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="timeFormat"
-                    value="standard"
-                    checked={timeFormat === 'standard'}
-                    onChange={(e) => setTimeFormat(e.target.value)}
-                    style={{ marginRight: '8px' }}
-                  />
-                  <span>📋 Standard Times (Same time for all cars)</span>
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                  <input
-                    type="radio"
-                    name="timeFormat"
-                    value="advanced"
-                    checked={timeFormat === 'advanced'}
-                    onChange={(e) => setTimeFormat(e.target.value)}
-                    style={{ marginRight: '8px' }}
-                  />
-                  <span>🚗 Car-Specific Times (Different times per car)</span>
-                </label>
-              </div>
-            </div>
-            
-            {timeFormat === 'advanced' && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🕐 Advanced Time Options:</label>
-                
-                <div style={{ marginBottom: '15px' }}>
-                  <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Select Format Type:</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <button
-                      type="button"
-                      onClick={() => setAdvancedTime('Mon@7:00 AM')}
-                      style={{
-                        padding: '10px',
-                        border: advancedTime.includes('@') ? '2px solid #28a745' : '1px solid #ddd',
-                        borderRadius: '8px',
-                        backgroundColor: advancedTime.includes('@') ? '#f8fff8' : 'white',
-                        cursor: 'pointer',
-                        textAlign: 'center'
-                      }}
-                    >
-                      🗓️ Day-Specific Times<br/>
-                      <small>Mon@7:00 AM, Wed@2:00 PM</small>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const carNames = cars.map(car => car.plate).filter(plate => plate.trim());
-                        if (carNames.length >= 2) {
-                          setAdvancedTime(`9:00 AM ${carNames[0]}, 5:00 PM ${carNames[1]}`);
-                        } else {
-                          setAdvancedTime('9:00 AM Car1, 5:00 PM Car2');
-                        }
-                      }}
-                      style={{
-                        padding: '10px',
-                        border: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '2px solid #28a745' : '1px solid #ddd',
-                        borderRadius: '8px',
-                        backgroundColor: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '#f8fff8' : 'white',
-                        cursor: 'pointer',
-                        textAlign: 'center'
-                      }}
-                    >
-                      🚗 Car-Specific Times<br/>
-                      <small>9:00 AM Car1, 5:00 PM Car2</small>
-                    </button>
-                  </div>
-                </div>
-                
-                {advancedTime && (
-                  <>
-                    <div style={{
-                      padding: '10px',
-                      border: '2px solid #28a745',
-                      borderRadius: '8px',
-                      backgroundColor: '#f8fff8',
-                      marginBottom: '15px'
-                    }}>
-                      <strong>Generated Format:</strong><br/>
-                      <code style={{ fontSize: '14px', color: '#28a745' }}>{advancedTime}</code>
-                    </div>
-                    
-                    {advancedTime.includes('@') && (
-                      <div style={{ marginBottom: '15px' }}>
-                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Day-Specific Times:</label>
-                        
-                        {advancedTime.split(', ').map((dayTime, index) => {
-                          const [day, time] = dayTime.split('@');
-                          return (
-                            <div key={index} style={{ 
-                              display: 'grid', 
-                              gridTemplateColumns: '1fr 1fr auto auto', 
-                              gap: '8px', 
-                              marginBottom: '8px',
-                              padding: '8px',
-                              border: '1px solid #e0e0e0',
-                              borderRadius: '6px',
-                              backgroundColor: '#f9f9f9'
-                            }}>
-                              <select
-                                value={day || ''}
-                                onChange={(e) => {
-                                  const newDay = e.target.value;
-                                  if (newDay) {
-                                    const parts = advancedTime.split(', ');
-                                    parts[index] = `${newDay}@${time || '7:00 AM'}`;
-                                    setAdvancedTime(parts.join(', '));
-                                  }
-                                }}
-                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
-                              >
-                                <option value="">Select Day</option>
-                                <option value="Mon">Monday</option>
-                                <option value="Tue">Tuesday</option>
-                                <option value="Wed">Wednesday</option>
-                                <option value="Thu">Thursday</option>
-                                <option value="Fri">Friday</option>
-                                <option value="Sat">Saturday</option>
-                              </select>
-                              <select
-                                value={time || ''}
-                                onChange={(e) => {
-                                  const newTime = e.target.value;
-                                  if (newTime) {
-                                    const parts = advancedTime.split(', ');
-                                    parts[index] = `${day || 'Mon'}@${newTime}`;
-                                    setAdvancedTime(parts.join(', '));
-                                  }
-                                }}
-                                onFocus={() => {
-                                  const currentDay = day || 'Mon';
-                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };
-                                  fetchAvailableTimes(dayMap[currentDay] || currentDay);
-                                }}
-                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
-                              >
-                                <option value="">Select Time</option>
-                                {(() => {
-                                  const currentDay = day || 'Mon';
-                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };
-                                  const fullDayName = dayMap[currentDay] || currentDay;
-                                  const times = availableTimes[fullDayName] || [];
-                                  if (times.length === 0) {
-                                    return <option value="" disabled>No available times</option>;
-                                  }
-                                  return times.map(timeOption => (
-                                    <option key={timeOption} value={timeOption}>{timeOption}</option>
-                                  ));
-                                })()}
-                              </select>
-                              {advancedTime.split(', ').length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const parts = advancedTime.split(', ');
-                                    parts.splice(index, 1);
-                                    setAdvancedTime(parts.join(', '));
-                                  }}
-                                  style={{
-                                    background: '#dc3545',
-                                    color: 'white',
-                                    border: 'none',
-                                    borderRadius: '4px',
-                                    padding: '6px 8px',
-                                    cursor: 'pointer',
-                                    fontSize: '12px'
-                                  }}
-                                >
-                                  ×
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                                  const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);
-                                  const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';
-                                  setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);
-                                }}
-                                style={{
-                                  background: '#28a745',
-                                  color: 'white',
-                                  border: 'none',
-                                  borderRadius: '4px',
-                                  padding: '6px 8px',
-                                  cursor: 'pointer',
-                                  fontSize: '12px'
-                                }}
-                              >
-                                +
-                              </button>
-                            </div>
-                          );
-                        })}
-                        
-                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                              const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);
-                              const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';
-                              setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);
-                            }}
-                            style={{
-                              background: '#007bff',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              cursor: 'pointer',
-                              fontSize: '14px',
-                              fontWeight: 'bold'
-                            }}
-                          >
-                            + Add Another Day
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {advancedTime.includes(',') && !advancedTime.includes('@') && (
-                      <div style={{ marginBottom: '15px' }}>
-                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Car-Specific Times:</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
-                          <select
-                            onChange={(e) => {
-                              const time = e.target.value;
-                              if (time) {
-                                const parts = advancedTime.split(', ');
-                                const carName = parts[0].split(' ').slice(2).join(' ');
-                                parts[0] = `${time} ${carName}`;
-                                setAdvancedTime(parts.join(', '));
-                              }
-                            }}
-                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
-                          >
-                            <option value="">First Car Time</option>
-                            <option value="6:00 AM">6:00 AM</option>
-                            <option value="7:00 AM">7:00 AM</option>
-                            <option value="8:00 AM">8:00 AM</option>
-                            <option value="9:00 AM">9:00 AM</option>
-                            <option value="10:00 AM">10:00 AM</option>
-                            <option value="11:00 AM">11:00 AM</option>
-                            <option value="12:00 PM">12:00 PM</option>
-                            <option value="1:00 PM">1:00 PM</option>
-                            <option value="2:00 PM">2:00 PM</option>
-                            <option value="3:00 PM">3:00 PM</option>
-                            <option value="4:00 PM">4:00 PM</option>
-                            <option value="5:00 PM">5:00 PM</option>
-                            <option value="6:00 PM">6:00 PM</option>
-                          </select>
-                          <select
-                            onChange={(e) => {
-                              const time = e.target.value;
-                              if (time) {
-                                const parts = advancedTime.split(', ');
-                                if (parts[1]) {
-                                  const carName = parts[1].split(' ').slice(2).join(' ');
-                                  parts[1] = `${time} ${carName}`;
-                                  setAdvancedTime(parts.join(', '));
-                                }
-                              }
-                            }}
-                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}
-                          >
-                            <option value="">Second Car Time</option>
-                            <option value="6:00 AM">6:00 AM</option>
-                            <option value="7:00 AM">7:00 AM</option>
-                            <option value="8:00 AM">8:00 AM</option>
-                            <option value="9:00 AM">9:00 AM</option>
-                            <option value="10:00 AM">10:00 AM</option>
-                            <option value="11:00 AM">11:00 AM</option>
-                            <option value="12:00 PM">12:00 PM</option>
-                            <option value="1:00 PM">1:00 PM</option>
-                            <option value="2:00 PM">2:00 PM</option>
-                            <option value="3:00 PM">3:00 PM</option>
-                            <option value="4:00 PM">4:00 PM</option>
-                            <option value="5:00 PM">5:00 PM</option>
-                            <option value="6:00 PM">6:00 PM</option>
-                          </select>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const carNames = cars.map(car => car.plate).filter(plate => plate.trim());
-                              const nextCarName = carNames.length > 2 ? carNames[2] : 'Car3';
-                              setAdvancedTime(advancedTime + `, 11:00 AM ${nextCarName}`);
-                            }}
-                            style={{
-                              background: '#007bff',
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '4px',
-                              padding: '6px 10px',
-                              cursor: 'pointer',
-                              fontSize: '12px'
-                            }}
-                          >
-                            + Add Time
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-                
-                <div style={{ fontSize: '12px', color: '#6c757d' }}>
-                  <strong>Available formats:</strong><br/>
-                  • 🗓️ Day-specific: "Mon@7:00 AM, Wed@2:00 PM"<br/>
-                  • 🚗 Car-specific: "9:00 AM Kia, 5:00 PM Jetour"<br/>
-                  • Standard format auto-converts to: "Sat@1:00 PM, Wed@2:00 PM"
-                </div>
-              </div>
-            )}
-            
-            {timeFormat === 'standard' && (
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>📅 Appointments:</label>
-              {appointments.map((apt, index) => (
-                <div key={index} style={{ 
-                  border: '1px solid #ddd', 
-                  borderRadius: '8px', 
-                  padding: '15px', 
-                  marginBottom: '10px',
-                  backgroundColor: '#f0f8ff'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                    <span style={{ fontWeight: 'bold', minWidth: '100px' }}>Appointment {index + 1}:</span>
-                    {appointments.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => setAppointments(appointments.filter((_, i) => i !== index))}
-                        style={{
-                          background: '#dc3545',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          padding: '5px 10px',
-                          fontSize: '12px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                    <select
-                      value={apt.day}
-                      onChange={(e) => {
-                        const newApts = [...appointments];
-                        newApts[index].day = e.target.value;
-                        setAppointments(newApts);
-                      }}
-                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    >
-                      <option value="Saturday">Saturday</option>
-                      <option value="Monday">Monday</option>
-                      <option value="Tuesday">Tuesday</option>
-                      <option value="Wednesday">Wednesday</option>
-                      <option value="Thursday">Thursday</option>
-                      <option value="Friday">Friday</option>
-                    </select>
-                    <select
-                      value={apt.time}
-                      onChange={(e) => {
-                        const newApts = [...appointments];
-                        newApts[index].time = e.target.value;
-                        setAppointments(newApts);
-                      }}
-                      onFocus={() => fetchAvailableTimes(apt.day)}
-                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                    >
-                      {(() => {
-                        const times = availableTimes[apt.day] || [];
-                        if (times.length === 0) {
-                          return <option value="" disabled>No available times</option>;
-                        }
-                        return times.map(timeOption => (
-                          <option key={timeOption} value={timeOption}>{timeOption}</option>
-                        ));
-                      })()}
-                    </select>
-                  </div>
-                </div>
-              ))}
-              <button
-                type="button"
-                onClick={() => {
-                  const packageLimit = getPackageLimit(formData.Washman_Package);
-                  if (packageLimit === 0) {
-                    alert('Please select a package first to determine appointment limits.');
-                    return;
-                  }
-                  if (appointments.length >= packageLimit) {
-                    alert(`Package "${formData.Washman_Package}" allows maximum ${packageLimit} appointments per week.`);
-                    return;
-                  }
-                  setAppointments([...appointments, { day: 'Saturday', time: '9:00 AM' }]);
-                }}
-                style={{
-                  background: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '8px 15px',
-                  cursor: 'pointer'
-                }}
-              >
-                + Add Another Appointment
-              </button>
-              {formData.Washman_Package && (
-                <p style={{ fontSize: '12px', color: '#6c757d', margin: '5px 0 0 0' }}>
-                  Package "{formData.Washman_Package}" allows maximum {getPackageLimit(formData.Washman_Package)} appointments per week.
-                  Current: {appointments.length}/{getPackageLimit(formData.Washman_Package)}
-                </p>
-              )}
-              </div>
-            )}
-            
-            <div>
-              <label>Package:</label>
-              <select
-                name="Washman_Package"
-                value={formData.Washman_Package}
-                onChange={handleChange}
-              >
-                <option value="">Select Package</option>
-                <option value="2 Ext ">2 Ext</option>
-                <option value="2 Ext 1 INT week">2 Ext 1 INT week</option>
-                <option value="3 Ext 1 INT week">3 Ext 1 INT week</option>
-                <option value="2 Ext 1 INT bi week">2 Ext 1 INT bi week</option>
-                <option value="3 Ext 1 INT bi week">3 Ext 1 INT bi week</option>
-                <option value="3 Ext 1 INT bi week ">3 Ext 1 INT bi week</option>
-              </select>
-            </div>
-            
-            <div>
-              <label>Fees:</label>
-              <input
-                type="text"
-                name="Fee"
-                value={formData.Fee}
-                onChange={handleChange}
-              />
-            </div>
-            
-            <div>
-              <label>Start Date:</label>
-              <input
-                type="date"
-                name="start date"
-                value={formData['start date']}
-                onChange={handleChange}
-              />
-            </div>
-            
-            <div>
-              <label>Status:</label>
-              <select
-                name="Status"
-                value={formData.Status}
-                onChange={handleChange}
-              >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-          </div>
-          
-          <div style={{ gridColumn: '1 / -1', marginTop: '15px' }}>
-            <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🛠️ Additional Services:</label>
-            {additionalServices.map((service, index) => (
-              <div key={index} style={{ 
-                border: '1px solid #ddd', 
-                borderRadius: '8px', 
-                padding: '15px', 
-                marginBottom: '10px',
-                backgroundColor: '#fff8dc'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
-                  <span style={{ fontWeight: 'bold', minWidth: '80px' }}>Service {index + 1}:</span>
-                  <button
-                    type="button"
-                    onClick={() => setAdditionalServices(additionalServices.filter((_, i) => i !== index))}
-                    style={{
-                      background: '#dc3545',
-                      color: 'white',
-                      border: 'none',
-                      borderRadius: '4px',
-                      padding: '5px 10px',
-                      fontSize: '12px',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Remove
-                  </button>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
-                  <input
-                    type="text"
-                    placeholder="Service name (e.g., Engine cleaning, Tire shine)"
-                    value={service.name}
-                    onChange={(e) => {
-                      const newServices = [...additionalServices];
-                      newServices[index].name = e.target.value;
-                      setAdditionalServices(newServices);
-                    }}
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Price"
-                    value={service.price}
-                    onChange={(e) => {
-                      const newServices = [...additionalServices];
-                      newServices[index].price = e.target.value;
-                      setAdditionalServices(newServices);
-                    }}
-                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-                  />
-                </div>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={() => setAdditionalServices([...additionalServices, { name: '', price: '' }])}
-              style={{
-                background: '#ffc107',
-                color: '#212529',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '8px 15px',
-                cursor: 'pointer',
-                marginBottom: '15px'
-              }}
-            >
-              + Add Additional Service
-            </button>
-          </div>
-          
-          <div style={{ gridColumn: '1 / -1' }}>
-            <label>Notes:</label>
-            <textarea
-              name="Notes"
-              value={formData.Notes}
-              onChange={handleChange}
-              rows="3"
-              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
-            />
-          </div>
-          
-          <div style={{ display: 'flex', gap: '10px', marginTop: '20px', gridColumn: '1 / -1' }}>
-            <button 
-              type="submit" 
-              disabled={loading}
-              style={{
-                background: loading ? '#6c757d' : '#28a745',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '12px 24px',
-                fontSize: '16px',
-                cursor: loading ? 'not-allowed' : 'pointer'
-              }}
-            >
-              {loading ? 'Adding...' : 'Add Client'}
-            </button>
-            <button 
-              type="button" 
-              onClick={onClose}
-              style={{
-                background: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                padding: '12px 24px',
-                fontSize: '16px',
-                cursor: 'pointer'
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-export default AddClientModal;
+import { useState, useEffect } from 'react';function AddClientModal({ isOpen, onClose, onAdd }) {  const [formData, setFormData] = useState({    CustomerID: '',    Name: '',    Villa: '',    Phone: '',    'Number of car': 1,    CarPlates: '',    Days: '',    Time: '',    Notes: '',    Washman_Package: '',    Fee: '',    'start date': '',    payment: '',    Status: 'Active',    Serves: ''  });  const [cars, setCars] = useState([{ plate: '', washType: 'EXT' }]);  const [appointments, setAppointments] = useState([{ day: 'Saturday', time: '9:00 AM' }]);  const [timeFormat, setTimeFormat] = useState('standard'); // 'standard' or 'advanced'  const [advancedTime, setAdvancedTime] = useState('');  const [availableTimes, setAvailableTimes] = useState({});  const [loadingTimes, setLoadingTimes] = useState({});  // Package limits  const getPackageLimit = (packageName) => {    if (!packageName) return 0;    const pkg = packageName.toLowerCase();    if (pkg.includes('2 ext 1 int')) return 2;    if (pkg.includes('3 ext 1 int')) return 3;    if (pkg.includes('2 ext')) return 2;    return 0;  };  const [additionalServices, setAdditionalServices] = useState([]);  const [loading, setLoading] = useState(false);  // Generate next customer ID when modal opens  useEffect(() => {    if (isOpen) {      generateNextCustomerId();    }  }, [isOpen]);  const generateNextCustomerId = async () => {    try {      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/next-id`);      const data = await response.json();      if (data.success) {        setFormData(prev => ({ ...prev, CustomerID: data.nextId }));      }    } catch (error) {      }  };  const fetchAvailableTimes = async (day) => {    if (availableTimes[day] || loadingTimes[day]) return;    setLoadingTimes(prev => ({ ...prev, [day]: true }));    try {      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/available/times?day=${day}`);      const data = await response.json();      if (data.availableTimes) {        setAvailableTimes(prev => ({ ...prev, [day]: data.availableTimes }));      }    } catch (error) {      // Set empty array if API fails to prevent showing unavailable times      setAvailableTimes(prev => ({ ...prev, [day]: [] }));    } finally {      setLoadingTimes(prev => ({ ...prev, [day]: false }));    }  };  const handleSubmit = async (e) => {    e.preventDefault();    setLoading(true);    try {      // Prepare client data      let finalTime, finalDays;      if (timeFormat === 'advanced' && advancedTime.trim()) {        finalTime = advancedTime.trim();        // Extract days from advanced time format        if (advancedTime.includes('@')) {          // Day-specific format: "Mon@7:00 AM, Thu@2:00 PM"          const dayAbbrevToFull = {            'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',             'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday', 'Sun': 'Sunday'          };          const extractedDays = advancedTime.split(', ').map(part => {            const day = part.split('@')[0];            return dayAbbrevToFull[day] || day;          });          finalDays = extractedDays.join('-');        } else {          // Car-specific format: use appointments days as fallback          finalDays = appointments.map(apt => apt.day).join('-');        }      } else {        // Convert appointments to Day@Time format        const dayAbbrev = {          'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed',           'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'        };        finalTime = appointments.map(apt =>           `${dayAbbrev[apt.day] || apt.day}@${apt.time}`        ).join(', ');        finalDays = appointments.map(apt => apt.day).join('-');      }      const clientData = {        ...formData,        'Number of car': cars.length,        CarPlates: cars.map(car => car.plate).join(', '),        Days: finalDays,        Time: finalTime,        cars: cars,        appointments: appointments,        additionalServices: additionalServices,        timeFormat: timeFormat      };      await onAdd(clientData);      // Reset form      setFormData({        CustomerID: '',        Name: '',        Villa: '',        Phone: '',        'Number of car': 1,        CarPlates: '',        Days: '',        Time: '',        Notes: '',        Washman_Package: '',        Fee: '',        'start date': '',        payment: '',        Status: 'Active',        Serves: ''      });      setCars([{ plate: '', washType: 'EXT' }]);      setAppointments([{ day: 'Saturday', time: '9:00 AM' }]);      setAdditionalServices([]);      setTimeFormat('standard');      setAdvancedTime('');      onClose();    } catch (error) {      alert('Error adding client: ' + error.message);    } finally {      setLoading(false);    }  };  const handleChange = (e) => {    setFormData({      ...formData,      [e.target.name]: e.target.value    });  };  if (!isOpen) return null;  return (    <div       style={{        position: 'fixed',        top: 0,        left: 0,        right: 0,        bottom: 0,        backgroundColor: 'rgba(0,0,0,0.5)',        display: 'flex',        alignItems: 'center',        justifyContent: 'center',        zIndex: 1000      }}      onClick={onClose}    >      <div         style={{          backgroundColor: 'white',          borderRadius: '12px',          padding: '30px',          width: '600px',          maxHeight: '80vh',          overflowY: 'auto',          boxShadow: '0 10px 30px rgba(0,0,0,0.3)'        }}        onClick={(e) => e.stopPropagation()}      >        <h2 style={{ marginBottom: '20px', color: '#548235' }}>Add New Client</h2>        <form onSubmit={handleSubmit}>          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>            <div>              <label>Customer ID:</label>              <input                type="text"                name="CustomerID"                value={formData.CustomerID}                onChange={handleChange}                required              />            </div>            <div>              <label>Name:</label>              <input                type="text"                name="Name"                value={formData.Name}                onChange={handleChange}                required              />            </div>            <div>              <label>Villa:</label>              <input                type="text"                name="Villa"                value={formData.Villa}                onChange={handleChange}              />            </div>            <div>              <label>Phone:</label>              <input                type="text"                name="Phone"                value={formData.Phone}                onChange={handleChange}              />            </div>            <div style={{ gridColumn: '1 / -1' }}>              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🚗 Cars:</label>              {cars.map((car, index) => (                <div key={index} style={{                   border: '1px solid #ddd',                   borderRadius: '8px',                   padding: '15px',                   marginBottom: '10px',                  backgroundColor: '#f8f9fa'                }}>                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>                    <span style={{ fontWeight: 'bold', minWidth: '60px' }}>Car {index + 1}:</span>                    {cars.length > 1 && (                      <button                        type="button"                        onClick={() => setCars(cars.filter((_, i) => i !== index))}                        style={{                          background: '#dc3545',                          color: 'white',                          border: 'none',                          borderRadius: '4px',                          padding: '5px 10px',                          fontSize: '12px',                          cursor: 'pointer'                        }}                      >                        Remove                      </button>                    )}                  </div>                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>                    <input                      type="text"                      placeholder="Car plate number"                      value={car.plate}                      onChange={(e) => {                        const newCars = [...cars];                        newCars[index].plate = e.target.value;                        setCars(newCars);                      }}                      required                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                    />                    <select                      value={car.washType}                      onChange={(e) => {                        const newCars = [...cars];                        newCars[index].washType = e.target.value;                        setCars(newCars);                      }}                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                    >                      <option value="EXT">EXT Only</option>                      <option value="INT">EXT + INT</option>                    </select>                  </div>                </div>              ))}              <button                type="button"                onClick={() => setCars([...cars, { plate: '', washType: 'EXT' }])}                style={{                  background: '#28a745',                  color: 'white',                  border: 'none',                  borderRadius: '4px',                  padding: '8px 15px',                  cursor: 'pointer'                }}              >                + Add Another Car              </button>            </div>            <div style={{ gridColumn: '1 / -1' }}>              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>⏰ Time Format:</label>              <div style={{ marginBottom: '15px' }}>                <label style={{ display: 'flex', alignItems: 'center', marginBottom: '8px', cursor: 'pointer' }}>                  <input                    type="radio"                    name="timeFormat"                    value="standard"                    checked={timeFormat === 'standard'}                    onChange={(e) => setTimeFormat(e.target.value)}                    style={{ marginRight: '8px' }}                  />                  <span>📋 Standard Times (Same time for all cars)</span>                </label>                <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>                  <input                    type="radio"                    name="timeFormat"                    value="advanced"                    checked={timeFormat === 'advanced'}                    onChange={(e) => setTimeFormat(e.target.value)}                    style={{ marginRight: '8px' }}                  />                  <span>🚗 Car-Specific Times (Different times per car)</span>                </label>              </div>            </div>            {timeFormat === 'advanced' && (              <div style={{ gridColumn: '1 / -1' }}>                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🕐 Advanced Time Options:</label>                <div style={{ marginBottom: '15px' }}>                  <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Select Format Type:</label>                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>                    <button                      type="button"                      onClick={() => setAdvancedTime('Mon@7:00 AM')}                      style={{                        padding: '10px',                        border: advancedTime.includes('@') ? '2px solid #28a745' : '1px solid #ddd',                        borderRadius: '8px',                        backgroundColor: advancedTime.includes('@') ? '#f8fff8' : 'white',                        cursor: 'pointer',                        textAlign: 'center'                      }}                    >                      🗓️ Day-Specific Times<br/>                      <small>Mon@7:00 AM, Wed@2:00 PM</small>                    </button>                    <button                      type="button"                      onClick={() => {                        const carNames = cars.map(car => car.plate).filter(plate => plate.trim());                        if (carNames.length >= 2) {                          setAdvancedTime(`9:00 AM ${carNames[0]}, 5:00 PM ${carNames[1]}`);                        } else {                          setAdvancedTime('9:00 AM Car1, 5:00 PM Car2');                        }                      }}                      style={{                        padding: '10px',                        border: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '2px solid #28a745' : '1px solid #ddd',                        borderRadius: '8px',                        backgroundColor: (advancedTime.includes(',') && !advancedTime.includes('@')) ? '#f8fff8' : 'white',                        cursor: 'pointer',                        textAlign: 'center'                      }}                    >                      🚗 Car-Specific Times<br/>                      <small>9:00 AM Car1, 5:00 PM Car2</small>                    </button>                  </div>                </div>                {advancedTime && (                  <>                    <div style={{                      padding: '10px',                      border: '2px solid #28a745',                      borderRadius: '8px',                      backgroundColor: '#f8fff8',                      marginBottom: '15px'                    }}>                      <strong>Generated Format:</strong><br/>                      <code style={{ fontSize: '14px', color: '#28a745' }}>{advancedTime}</code>                    </div>                    {advancedTime.includes('@') && (                      <div style={{ marginBottom: '15px' }}>                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Day-Specific Times:</label>                        {advancedTime.split(', ').map((dayTime, index) => {                          const [day, time] = dayTime.split('@');                          return (                            <div key={index} style={{                               display: 'grid',                               gridTemplateColumns: '1fr 1fr auto auto',                               gap: '8px',                               marginBottom: '8px',                              padding: '8px',                              border: '1px solid #e0e0e0',                              borderRadius: '6px',                              backgroundColor: '#f9f9f9'                            }}>                              <select                                value={day || ''}                                onChange={(e) => {                                  const newDay = e.target.value;                                  if (newDay) {                                    const parts = advancedTime.split(', ');                                    parts[index] = `${newDay}@${time || '7:00 AM'}`;                                    setAdvancedTime(parts.join(', '));                                  }                                }}                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}                              >                                <option value="">Select Day</option>                                <option value="Mon">Monday</option>                                <option value="Tue">Tuesday</option>                                <option value="Wed">Wednesday</option>                                <option value="Thu">Thursday</option>                                <option value="Fri">Friday</option>                                <option value="Sat">Saturday</option>                              </select>                              <select                                value={time || ''}                                onChange={(e) => {                                  const newTime = e.target.value;                                  if (newTime) {                                    const parts = advancedTime.split(', ');                                    parts[index] = `${day || 'Mon'}@${newTime}`;                                    setAdvancedTime(parts.join(', '));                                  }                                }}                                onFocus={() => {                                  const currentDay = day || 'Mon';                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };                                  fetchAvailableTimes(dayMap[currentDay] || currentDay);                                }}                                style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}                              >                                <option value="">Select Time</option>                                {(() => {                                  const currentDay = day || 'Mon';                                  const dayMap = { 'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday', 'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday' };                                  const fullDayName = dayMap[currentDay] || currentDay;                                  const times = availableTimes[fullDayName] || [];                                  if (times.length === 0) {                                    return <option value="" disabled>No available times</option>;                                  }                                  return times.map(timeOption => (                                    <option key={timeOption} value={timeOption}>{timeOption}</option>                                  ));                                })()}                              </select>                              {advancedTime.split(', ').length > 1 && (                                <button                                  type="button"                                  onClick={() => {                                    const parts = advancedTime.split(', ');                                    parts.splice(index, 1);                                    setAdvancedTime(parts.join(', '));                                  }}                                  style={{                                    background: '#dc3545',                                    color: 'white',                                    border: 'none',                                    borderRadius: '4px',                                    padding: '6px 8px',                                    cursor: 'pointer',                                    fontSize: '12px'                                  }}                                >                                  ×                                </button>                              )}                              <button                                type="button"                                onClick={() => {                                  const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];                                  const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);                                  const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';                                  setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);                                }}                                style={{                                  background: '#28a745',                                  color: 'white',                                  border: 'none',                                  borderRadius: '4px',                                  padding: '6px 8px',                                  cursor: 'pointer',                                  fontSize: '12px'                                }}                              >                                +                              </button>                            </div>                          );                        })}                        <div style={{ textAlign: 'center', marginTop: '10px' }}>                          <button                            type="button"                            onClick={() => {                              const availableDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];                              const usedDays = advancedTime.split(', ').map(dt => dt.split('@')[0]);                              const nextDay = availableDays.find(d => !usedDays.includes(d)) || 'Mon';                              setAdvancedTime(advancedTime + `, ${nextDay}@7:00 AM`);                            }}                            style={{                              background: '#007bff',                              color: 'white',                              border: 'none',                              borderRadius: '6px',                              padding: '8px 16px',                              cursor: 'pointer',                              fontSize: '14px',                              fontWeight: 'bold'                            }}                          >                            + Add Another Day                          </button>                        </div>                      </div>                    )}                    {advancedTime.includes(',') && !advancedTime.includes('@') && (                      <div style={{ marginBottom: '15px' }}>                        <label style={{ fontWeight: 'bold', marginBottom: '8px', display: 'block' }}>Customize Car-Specific Times:</label>                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>                          <select                            onChange={(e) => {                              const time = e.target.value;                              if (time) {                                const parts = advancedTime.split(', ');                                const carName = parts[0].split(' ').slice(2).join(' ');                                parts[0] = `${time} ${carName}`;                                setAdvancedTime(parts.join(', '));                              }                            }}                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}                          >                            <option value="">First Car Time</option>                            <option value="6:00 AM">6:00 AM</option>                            <option value="7:00 AM">7:00 AM</option>                            <option value="8:00 AM">8:00 AM</option>                            <option value="9:00 AM">9:00 AM</option>                            <option value="10:00 AM">10:00 AM</option>                            <option value="11:00 AM">11:00 AM</option>                            <option value="12:00 PM">12:00 PM</option>                            <option value="1:00 PM">1:00 PM</option>                            <option value="2:00 PM">2:00 PM</option>                            <option value="3:00 PM">3:00 PM</option>                            <option value="4:00 PM">4:00 PM</option>                            <option value="5:00 PM">5:00 PM</option>                            <option value="6:00 PM">6:00 PM</option>                          </select>                          <select                            onChange={(e) => {                              const time = e.target.value;                              if (time) {                                const parts = advancedTime.split(', ');                                if (parts[1]) {                                  const carName = parts[1].split(' ').slice(2).join(' ');                                  parts[1] = `${time} ${carName}`;                                  setAdvancedTime(parts.join(', '));                                }                              }                            }}                            style={{ padding: '6px', border: '1px solid #ddd', borderRadius: '4px' }}                          >                            <option value="">Second Car Time</option>                            <option value="6:00 AM">6:00 AM</option>                            <option value="7:00 AM">7:00 AM</option>                            <option value="8:00 AM">8:00 AM</option>                            <option value="9:00 AM">9:00 AM</option>                            <option value="10:00 AM">10:00 AM</option>                            <option value="11:00 AM">11:00 AM</option>                            <option value="12:00 PM">12:00 PM</option>                            <option value="1:00 PM">1:00 PM</option>                            <option value="2:00 PM">2:00 PM</option>                            <option value="3:00 PM">3:00 PM</option>                            <option value="4:00 PM">4:00 PM</option>                            <option value="5:00 PM">5:00 PM</option>                            <option value="6:00 PM">6:00 PM</option>                          </select>                          <button                            type="button"                            onClick={() => {                              const carNames = cars.map(car => car.plate).filter(plate => plate.trim());                              const nextCarName = carNames.length > 2 ? carNames[2] : 'Car3';                              setAdvancedTime(advancedTime + `, 11:00 AM ${nextCarName}`);                            }}                            style={{                              background: '#007bff',                              color: 'white',                              border: 'none',                              borderRadius: '4px',                              padding: '6px 10px',                              cursor: 'pointer',                              fontSize: '12px'                            }}                          >                            + Add Time                          </button>                        </div>                      </div>                    )}                  </>                )}                <div style={{ fontSize: '12px', color: '#6c757d' }}>                  <strong>Available formats:</strong><br/>                  • 🗓️ Day-specific: "Mon@7:00 AM, Wed@2:00 PM"<br/>                  • 🚗 Car-specific: "9:00 AM Kia, 5:00 PM Jetour"<br/>                  • Standard format auto-converts to: "Sat@1:00 PM, Wed@2:00 PM"                </div>              </div>            )}            {timeFormat === 'standard' && (              <div style={{ gridColumn: '1 / -1' }}>                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>📅 Appointments:</label>              {appointments.map((apt, index) => (                <div key={index} style={{                   border: '1px solid #ddd',                   borderRadius: '8px',                   padding: '15px',                   marginBottom: '10px',                  backgroundColor: '#f0f8ff'                }}>                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>                    <span style={{ fontWeight: 'bold', minWidth: '100px' }}>Appointment {index + 1}:</span>                    {appointments.length > 1 && (                      <button                        type="button"                        onClick={() => setAppointments(appointments.filter((_, i) => i !== index))}                        style={{                          background: '#dc3545',                          color: 'white',                          border: 'none',                          borderRadius: '4px',                          padding: '5px 10px',                          fontSize: '12px',                          cursor: 'pointer'                        }}                      >                        Remove                      </button>                    )}                  </div>                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>                    <select                      value={apt.day}                      onChange={(e) => {                        const newApts = [...appointments];                        newApts[index].day = e.target.value;                        setAppointments(newApts);                      }}                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                    >                      <option value="Saturday">Saturday</option>                      <option value="Monday">Monday</option>                      <option value="Tuesday">Tuesday</option>                      <option value="Wednesday">Wednesday</option>                      <option value="Thursday">Thursday</option>                      <option value="Friday">Friday</option>                    </select>                    <select                      value={apt.time}                      onChange={(e) => {                        const newApts = [...appointments];                        newApts[index].time = e.target.value;                        setAppointments(newApts);                      }}                      onFocus={() => fetchAvailableTimes(apt.day)}                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                    >                      {(() => {                        const times = availableTimes[apt.day] || [];                        if (times.length === 0) {                          return <option value="" disabled>No available times</option>;                        }                        return times.map(timeOption => (                          <option key={timeOption} value={timeOption}>{timeOption}</option>                        ));                      })()}                    </select>                  </div>                </div>              ))}              <button                type="button"                onClick={() => {                  const packageLimit = getPackageLimit(formData.Washman_Package);                  if (packageLimit === 0) {                    alert('Please select a package first to determine appointment limits.');                    return;                  }                  if (appointments.length >= packageLimit) {                    alert(`Package "${formData.Washman_Package}" allows maximum ${packageLimit} appointments per week.`);                    return;                  }                  setAppointments([...appointments, { day: 'Saturday', time: '9:00 AM' }]);                }}                style={{                  background: '#007bff',                  color: 'white',                  border: 'none',                  borderRadius: '4px',                  padding: '8px 15px',                  cursor: 'pointer'                }}              >                + Add Another Appointment              </button>              {formData.Washman_Package && (                <p style={{ fontSize: '12px', color: '#6c757d', margin: '5px 0 0 0' }}>                  Package "{formData.Washman_Package}" allows maximum {getPackageLimit(formData.Washman_Package)} appointments per week.                  Current: {appointments.length}/{getPackageLimit(formData.Washman_Package)}                </p>              )}              </div>            )}            <div>              <label>Package:</label>              <select                name="Washman_Package"                value={formData.Washman_Package}                onChange={handleChange}              >                <option value="">Select Package</option>                <option value="2 Ext ">2 Ext</option>                <option value="2 Ext 1 INT week">2 Ext 1 INT week</option>                <option value="3 Ext 1 INT week">3 Ext 1 INT week</option>                <option value="2 Ext 1 INT bi week">2 Ext 1 INT bi week</option>                <option value="3 Ext 1 INT bi week">3 Ext 1 INT bi week</option>                <option value="3 Ext 1 INT bi week ">3 Ext 1 INT bi week</option>              </select>            </div>            <div>              <label>Fees:</label>              <input                type="text"                name="Fee"                value={formData.Fee}                onChange={handleChange}              />            </div>            <div>              <label>Start Date:</label>              <input                type="date"                name="start date"                value={formData['start date']}                onChange={handleChange}              />            </div>            <div>              <label>Status:</label>              <select                name="Status"                value={formData.Status}                onChange={handleChange}              >                <option value="Active">Active</option>                <option value="Inactive">Inactive</option>              </select>            </div>          </div>          <div style={{ gridColumn: '1 / -1', marginTop: '15px' }}>            <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🛠️ Additional Services:</label>            {additionalServices.map((service, index) => (              <div key={index} style={{                 border: '1px solid #ddd',                 borderRadius: '8px',                 padding: '15px',                 marginBottom: '10px',                backgroundColor: '#fff8dc'              }}>                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>                  <span style={{ fontWeight: 'bold', minWidth: '80px' }}>Service {index + 1}:</span>                  <button                    type="button"                    onClick={() => setAdditionalServices(additionalServices.filter((_, i) => i !== index))}                    style={{                      background: '#dc3545',                      color: 'white',                      border: 'none',                      borderRadius: '4px',                      padding: '5px 10px',                      fontSize: '12px',                      cursor: 'pointer'                    }}                  >                    Remove                  </button>                </div>                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>                  <input                    type="text"                    placeholder="Service name (e.g., Engine cleaning, Tire shine)"                    value={service.name}                    onChange={(e) => {                      const newServices = [...additionalServices];                      newServices[index].name = e.target.value;                      setAdditionalServices(newServices);                    }}                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                  />                  <input                    type="number"                    placeholder="Price"                    value={service.price}                    onChange={(e) => {                      const newServices = [...additionalServices];                      newServices[index].price = e.target.value;                      setAdditionalServices(newServices);                    }}                    style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}                  />                </div>              </div>            ))}            <button              type="button"              onClick={() => setAdditionalServices([...additionalServices, { name: '', price: '' }])}              style={{                background: '#ffc107',                color: '#212529',                border: 'none',                borderRadius: '4px',                padding: '8px 15px',                cursor: 'pointer',                marginBottom: '15px'              }}            >              + Add Additional Service            </button>          </div>          <div style={{ gridColumn: '1 / -1' }}>            <label>Notes:</label>            <textarea              name="Notes"              value={formData.Notes}              onChange={handleChange}              rows="3"              style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}            />          </div>          <div style={{ display: 'flex', gap: '10px', marginTop: '20px', gridColumn: '1 / -1' }}>            <button               type="submit"               disabled={loading}              style={{                background: loading ? '#6c757d' : '#28a745',                color: 'white',                border: 'none',                borderRadius: '4px',                padding: '12px 24px',                fontSize: '16px',                cursor: loading ? 'not-allowed' : 'pointer'              }}            >              {loading ? 'Adding...' : 'Add Client'}            </button>            <button               type="button"               onClick={onClose}              style={{                background: '#6c757d',                color: 'white',                border: 'none',                borderRadius: '4px',                padding: '12px 24px',                fontSize: '16px',                cursor: 'pointer'              }}            >              Cancel            </button>          </div>        </form>      </div>    </div>  );}export default AddClientModal;

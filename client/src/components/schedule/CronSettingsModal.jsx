@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const CronSettingsModal = ({ isOpen, onClose }) => {
   const [settings, setSettings] = useState({
     enabled: false,
@@ -9,7 +8,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
   });
   const [loading, setLoading] = useState(false);
   const [nextRun, setNextRun] = useState(null);
-
   const days = [
     { value: 0, label: 'Sunday' },
     { value: 1, label: 'Monday' },
@@ -19,24 +17,20 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
     { value: 5, label: 'Friday' },
     { value: 6, label: 'Saturday' }
   ];
-
   const hours = Array.from({ length: 24 }, (_, i) => ({
     value: i,
     label: i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`
   }));
-
   useEffect(() => {
     if (isOpen) {
       loadSettings();
     }
   }, [isOpen]);
-
   const loadSettings = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/cron/settings`);
       const data = await response.json();
-      
       if (data.success) {
         setSettings(data.settings);
         setNextRun(data.settings.nextRun);
@@ -47,7 +41,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
       setLoading(false);
     }
   };
-
   const handleSave = async () => {
     try {
       setLoading(true);
@@ -58,9 +51,7 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
         },
         body: JSON.stringify(settings)
       });
-      
       const data = await response.json();
-      
       if (data.success) {
         setNextRun(data.settings.nextRun);
         onClose();
@@ -73,16 +64,13 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
       setLoading(false);
     }
   };
-
   const handleTestRun = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/cron/trigger`, {
         method: 'POST'
       });
-      
       const data = await response.json();
-      
       if (data.success) {
         alert(`Test run completed! Generated ${data.totalAppointments} appointments.`);
       } else {
@@ -94,7 +82,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
       setLoading(false);
     }
   };
-
   const formatNextRun = (dateString) => {
     if (!dateString) return 'Not scheduled';
     const date = new Date(dateString);
@@ -107,9 +94,7 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
       hour12: true
     });
   };
-
   if (!isOpen) return null;
-
   return (
     <div style={{
       position: 'fixed',
@@ -155,10 +140,8 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
             ×
           </button>
         </div>
-        
         <div style={{ padding: '20px' }}>
           {loading && <div style={{ textAlign: 'center', marginBottom: '20px' }}>Loading...</div>}
-          
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '16px', fontWeight: 'bold' }}>
               <input
@@ -170,7 +153,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
               Enable Automatic Schedule Generation
             </label>
           </div>
-
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
               📅 Day:
@@ -194,7 +176,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
               ))}
             </select>
           </div>
-
           <div style={{ marginBottom: '20px' }}>
             <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold' }}>
               🕐 Time:
@@ -218,7 +199,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
               ))}
             </select>
           </div>
-
           {settings.enabled && (
             <div style={{
               background: '#f0f9ff',
@@ -235,7 +215,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
               </div>
             </div>
           )}
-
           <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
             <button
               onClick={handleTestRun}
@@ -253,7 +232,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
             >
               🧪 Test Run
             </button>
-            
             <button
               onClick={onClose}
               disabled={loading}
@@ -269,7 +247,6 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
             >
               Cancel
             </button>
-            
             <button
               onClick={handleSave}
               disabled={loading}
@@ -292,5 +269,4 @@ const CronSettingsModal = ({ isOpen, onClose }) => {
     </div>
   );
 };
-
 export default CronSettingsModal;

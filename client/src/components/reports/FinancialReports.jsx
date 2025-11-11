@@ -1,28 +1,21 @@
 import React, { useState, useEffect } from 'react';
-
 const FinancialReports = ({ onBack }) => {
   const [financialData, setFinancialData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('current-month');
-
   useEffect(() => {
     loadFinancialData();
   }, [selectedPeriod]);
-
   const loadFinancialData = async () => {
     try {
       setLoading(true);
-      
       // Load clients and calculate financial metrics
       const clientsRes = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
       const clients = await clientsRes.json();
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
-      
       // Calculate revenue based on selected period
       let periodMultiplier = 1;
       let periodLabel = 'Monthly';
-      
       switch(selectedPeriod) {
         case 'current-month':
           periodMultiplier = 1;
@@ -41,14 +34,11 @@ const FinancialReports = ({ onBack }) => {
           periodLabel = 'Annual';
           break;
       }
-      
       const baseRevenue = activeClients.reduce((sum, client) => {
         const fee = parseFloat(client.Fee) || 0;
         return sum + fee;
       }, 0);
-      
       const periodRevenue = Math.floor(baseRevenue * periodMultiplier);
-
       // Group by package types
       const packageRevenue = activeClients.reduce((acc, client) => {
         const pkg = client.Washman_Package || 'Unknown';
@@ -56,7 +46,6 @@ const FinancialReports = ({ onBack }) => {
         acc[pkg] = (acc[pkg] || 0) + fee;
         return acc;
       }, {});
-
       // Group by areas (Villa phases)
       const areaRevenue = activeClients.reduce((acc, client) => {
         const villa = client.Villa || 'Unknown';
@@ -65,14 +54,12 @@ const FinancialReports = ({ onBack }) => {
         acc[`Phase ${phase}`] = (acc[`Phase ${phase}`] || 0) + fee;
         return acc;
       }, {});
-
       // Payment status analysis
       const paymentStatus = activeClients.reduce((acc, client) => {
         const status = client.payment || 'Unknown';
         acc[status] = (acc[status] || 0) + 1;
         return acc;
       }, {});
-
       setFinancialData({
         totalRevenue: periodRevenue,
         periodLabel,
@@ -100,12 +87,10 @@ const FinancialReports = ({ onBack }) => {
         periodMultiplier
       });
     } catch (error) {
-      console.error('Error loading financial data:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -114,7 +99,6 @@ const FinancialReports = ({ onBack }) => {
       </div>
     );
   }
-
   return (
     <div className="home-page">
       <div className="page-header">
@@ -123,11 +107,9 @@ const FinancialReports = ({ onBack }) => {
             ← Back to Reports
           </button>
         </div>
-        
         <div className="header-center">
           <h1>💰 Financial Reports</h1>
         </div>
-        
         <div className="header-actions">
           <select
             value={selectedPeriod}
@@ -146,7 +128,6 @@ const FinancialReports = ({ onBack }) => {
           </select>
         </div>
       </div>
-
       {/* Revenue Overview */}
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card">
@@ -157,7 +138,6 @@ const FinancialReports = ({ onBack }) => {
             <small>from {financialData.activeClients} active clients</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#17a2b8' }}>📊</div>
           <div className="stat-content">
@@ -166,7 +146,6 @@ const FinancialReports = ({ onBack }) => {
             <small>{financialData.periodLabel.toLowerCase()} revenue</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#fd7e14' }}>📈</div>
           <div className="stat-content">
@@ -175,7 +154,6 @@ const FinancialReports = ({ onBack }) => {
             <small>based on {financialData.periodLabel.toLowerCase()} rate</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#6f42c1' }}>👥</div>
           <div className="stat-content">
@@ -185,7 +163,6 @@ const FinancialReports = ({ onBack }) => {
           </div>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
         {/* Package Revenue Breakdown */}
         <div className="card">
@@ -222,7 +199,6 @@ const FinancialReports = ({ onBack }) => {
               </div>
             ))}
         </div>
-
         {/* Area Revenue Breakdown */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -259,7 +235,6 @@ const FinancialReports = ({ onBack }) => {
             ))}
         </div>
       </div>
-
       {/* Payment Status */}
       <div className="card">
         <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -290,5 +265,4 @@ const FinancialReports = ({ onBack }) => {
     </div>
   );
 };
-
 export default FinancialReports;

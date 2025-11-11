@@ -2,12 +2,9 @@ const db = require('../../services/databaseService');
 
 async function getAllClients(req, res) {
   try {
-    console.log('[GET-CLIENTS] Starting to fetch clients...');
     const clients = await db.getCustomers();
-    console.log('[GET-CLIENTS] Found', clients.length, 'clients');
     res.status(200).json(clients);
   } catch (error) {
-    console.error('[GET-CLIENTS] Error:', error);
     res.status(500).json({ error: 'Internal Server Error: ' + error.message });
   }
 }
@@ -67,21 +64,9 @@ async function createClient(req, res) {
     // Set default lock status for new clients
     clientData.isLocked = 'FALSE';
     
-    console.log('[CREATE-CLIENT] Processing client data:', {
-      customerId: clientData.CustomerID,
-      name: clientData.Name,
-      cars: clientData.cars?.length || 0,
-      appointments: clientData.appointments?.length || 0,
-      additionalServices: clientData.additionalServices?.length || 0,
-      formattedDays: clientData.Days,
-      formattedTime: clientData.Time,
-      formattedDate: clientData['start date']
-    });
-    
     const newClient = await db.addCustomer(clientData);
     res.status(201).json(newClient);
   } catch (error) {
-    console.error('[CREATE-CLIENT] Error:', error);
     res.status(500).json({ error: 'Failed to create client: ' + error.message });
   }
 }
@@ -110,7 +95,6 @@ async function updateClient(req, res) {
     const result = await db.updateCustomer(decodedId, mappedData);
     res.status(200).json(result);
   } catch (error) {
-    console.error('Update client error:', error);
     res.status(500).json({ error: 'Failed to update client: ' + error.message });
   }
 }
@@ -122,7 +106,6 @@ async function deleteClient(req, res) {
     const deletedData = await db.deleteCustomer(decodedId);
     res.status(200).json({ message: 'Client deleted', data: deletedData });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to delete client' });
   }
 }
@@ -133,7 +116,6 @@ async function restoreClient(req, res) {
     const restoredClient = await db.addCustomer(clientData);
     res.status(200).json(restoredClient);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to restore client' });
   }
 }
@@ -144,7 +126,6 @@ async function searchClients(req, res) {
     const clients = await db.searchCustomers(q);
     res.status(200).json(clients);
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Search failed' });
   }
 }
@@ -157,7 +138,6 @@ async function getNextCustomerId(req, res) {
     
     res.status(200).json({ success: true, nextId });
   } catch (error) {
-    console.error('Error generating next customer ID:', error);
     res.status(500).json({ success: false, error: 'Failed to generate customer ID' });
   }
 }

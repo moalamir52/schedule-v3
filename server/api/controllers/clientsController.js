@@ -3,14 +3,9 @@ const { getCustomers, getInvoices } = require('../../services/googleSheetsServic
 
 const getAvailableClients = async (req, res) => {
   try {
-    console.log('[CLIENTS] Fetching available clients...');
     const customers = await db.getCustomers();
-    console.log('[CLIENTS] Found', customers.length, 'customers');
     const invoices = await db.getInvoices();
-    console.log('[CLIENTS] Found', invoices.length, 'invoices');
     const activeCustomers = customers.filter(customer => customer.Status === 'Active');
-    console.log('[CLIENTS] Found', activeCustomers.length, 'active customers');
-    
     // Get current month invoices
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -31,9 +26,6 @@ const getAvailableClients = async (req, res) => {
     const availableClients = activeCustomers.filter(customer => !invoicedCustomerIDs.includes(customer.CustomerID));
     const invoicedClients = activeCustomers.filter(customer => invoicedCustomerIDs.includes(customer.CustomerID));
     
-    console.log('[CLIENTS] Available clients:', availableClients.length);
-    console.log('[CLIENTS] Invoiced clients:', invoicedClients.length);
-    
     res.json({
       success: true,
       availableClients,
@@ -41,8 +33,6 @@ const getAvailableClients = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[CLIENTS] Error getting available clients:', error);
-    console.error('[CLIENTS] Stack trace:', error.stack);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -59,7 +49,6 @@ const getCustomerById = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Customer not found' });
     }
     
-    console.log('Customer data:', customer);
     res.json(customer);
     
   } catch (error) {
@@ -99,8 +88,6 @@ const getNextCustomerId = async (req, res) => {
 
 const createClient = async (req, res) => {
   try {
-    console.log('[CREATE-CLIENT] Request body:', req.body);
-    
     // Ensure all required fields are included
     const customerData = {
       ...req.body,
@@ -117,24 +104,16 @@ const createClient = async (req, res) => {
       })()
     };
     
-    console.log('[CREATE-CLIENT] Processed data:', customerData);
-    
     const result = await db.addCustomer(customerData);
-    
-    console.log('[CREATE-CLIENT] Customer created successfully:', result);
     
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[CREATE-CLIENT] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
 const updateClient = async (req, res) => {
   try {
-    console.log('[UPDATE-CLIENT] Request params:', req.params);
-    console.log('[UPDATE-CLIENT] Request body:', req.body);
-    
     const { id } = req.params;
     
     if (!id) {
@@ -171,17 +150,11 @@ const updateClient = async (req, res) => {
       }
     });
     
-    console.log('[UPDATE-CLIENT] Processed update data:', updateData);
-    
     const result = await db.updateCustomer(id, updateData);
-    
-    console.log('[UPDATE-CLIENT] Update result:', result);
     
     res.json({ success: true, data: result, message: 'Customer updated successfully' });
     
   } catch (error) {
-    console.error('[UPDATE-CLIENT] Error:', error);
-    console.error('[UPDATE-CLIENT] Stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       error: error.message,

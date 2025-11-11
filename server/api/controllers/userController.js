@@ -11,7 +11,6 @@ const getAllUsers = async (req, res) => {
     const users = await getUsers();
     res.json({ success: true, users: users, message: `Found ${users.length} users` });
   } catch (error) {
-    console.error('Error fetching users:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -24,7 +23,6 @@ const updateUserRole = async (req, res) => {
     await updateUser(userId, { Role: role });
     res.status(200).json({ message: 'User role updated successfully' });
   } catch (error) {
-    console.error('Error updating user role:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -43,7 +41,6 @@ const changeUserPassword = async (req, res) => {
     });
     res.status(200).json({ message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Error changing password:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -62,7 +59,6 @@ const resetUserPassword = async (req, res) => {
     });
     res.status(200).json({ message: 'Password reset to default (123456)' });
   } catch (error) {
-    console.error('Error resetting password:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -99,7 +95,6 @@ const changeMyPassword = async (req, res) => {
     
     res.status(200).json({ message: 'Password changed successfully' });
   } catch (error) {
-    console.error('Error changing own password:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -128,7 +123,6 @@ const createUser = async (req, res) => {
     
     res.status(201).json({ message: 'User created successfully' });
   } catch (error) {
-    console.error('Error creating user:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
@@ -140,7 +134,6 @@ const deleteUserById = async (req, res) => {
     await deleteUser(userId);
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error('Error deleting user:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

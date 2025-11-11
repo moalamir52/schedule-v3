@@ -1,29 +1,22 @@
 import React, { useState, useEffect } from 'react';
-
 const ClientAnalytics = ({ onBack }) => {
   const [analyticsData, setAnalyticsData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     loadAnalyticsData();
   }, []);
-
   const loadAnalyticsData = async () => {
     try {
       setLoading(true);
-      
       const clientsRes = await fetch(`${import.meta.env.VITE_API_URL}/api/clients`);
       const clients = await clientsRes.json();
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
-      
       // Package distribution
       const packageDistribution = activeClients.reduce((acc, client) => {
         const pkg = client.Washman_Package || 'Unknown';
         acc[pkg] = (acc[pkg] || 0) + 1;
         return acc;
       }, {});
-
       // Area distribution
       const areaDistribution = activeClients.reduce((acc, client) => {
         const villa = client.Villa || 'Unknown';
@@ -31,7 +24,6 @@ const ClientAnalytics = ({ onBack }) => {
         acc[`Phase ${phase}`] = (acc[`Phase ${phase}`] || 0) + 1;
         return acc;
       }, {});
-
       // Car count analysis
       const carCountAnalysis = activeClients.reduce((acc, client) => {
         const carPlates = (client.CarPlates || '').split(',').filter(p => p.trim());
@@ -39,7 +31,6 @@ const ClientAnalytics = ({ onBack }) => {
         acc[carCount] = (acc[carCount] || 0) + 1;
         return acc;
       }, {});
-
       // Service frequency analysis
       const frequencyAnalysis = activeClients.reduce((acc, client) => {
         const days = (client.Days || '').split('-').length;
@@ -47,7 +38,6 @@ const ClientAnalytics = ({ onBack }) => {
         acc[frequency] = (acc[frequency] || 0) + 1;
         return acc;
       }, {});
-
       // Revenue tier analysis
       const revenueTiers = activeClients.reduce((acc, client) => {
         const fee = parseFloat(client.Fee) || 0;
@@ -56,11 +46,9 @@ const ClientAnalytics = ({ onBack }) => {
         else if (fee >= 300) tier = 'Standard (300-499 AED)';
         else if (fee >= 150) tier = 'Basic (150-299 AED)';
         else tier = 'Budget (<150 AED)';
-        
         acc[tier] = (acc[tier] || 0) + 1;
         return acc;
       }, {});
-
       // Recent clients (based on start date)
       const recentClients = activeClients
         .filter(c => c['start date'])
@@ -70,7 +58,6 @@ const ClientAnalytics = ({ onBack }) => {
         }))
         .sort((a, b) => b.startDate - a.startDate)
         .slice(0, 10);
-
       setAnalyticsData({
         totalClients: clients.length,
         activeClients: activeClients.length,
@@ -103,12 +90,10 @@ const ClientAnalytics = ({ onBack }) => {
         recentClients
       });
     } catch (error) {
-      console.error('Error loading analytics data:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -117,7 +102,6 @@ const ClientAnalytics = ({ onBack }) => {
       </div>
     );
   }
-
   return (
     <div className="home-page">
       <div className="page-header">
@@ -126,12 +110,10 @@ const ClientAnalytics = ({ onBack }) => {
             ← Back to Reports
           </button>
         </div>
-        
         <div className="header-center">
           <h1>👥 Client Analytics</h1>
         </div>
       </div>
-
       {/* Client Overview */}
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card">
@@ -142,7 +124,6 @@ const ClientAnalytics = ({ onBack }) => {
             <small>{((analyticsData.activeClients / analyticsData.totalClients) * 100).toFixed(1)}% of total</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#dc3545' }}>😴</div>
           <div className="stat-content">
@@ -151,7 +132,6 @@ const ClientAnalytics = ({ onBack }) => {
             <small>{((analyticsData.inactiveClients / analyticsData.totalClients) * 100).toFixed(1)}% of total</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#17a2b8' }}>📊</div>
           <div className="stat-content">
@@ -160,7 +140,6 @@ const ClientAnalytics = ({ onBack }) => {
             <small>in database</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#fd7e14' }}>📈</div>
           <div className="stat-content">
@@ -172,7 +151,6 @@ const ClientAnalytics = ({ onBack }) => {
           </div>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
         {/* Package Distribution */}
         <div className="card">
@@ -206,7 +184,6 @@ const ClientAnalytics = ({ onBack }) => {
               </div>
             ))}
         </div>
-
         {/* Area Distribution */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -240,7 +217,6 @@ const ClientAnalytics = ({ onBack }) => {
             ))}
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
         {/* Car Count Analysis */}
         <div className="card">
@@ -276,7 +252,6 @@ const ClientAnalytics = ({ onBack }) => {
               </div>
             ))}
         </div>
-
         {/* Revenue Tiers */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -310,7 +285,6 @@ const ClientAnalytics = ({ onBack }) => {
             ))}
         </div>
       </div>
-
       {/* Recent Clients */}
       <div className="card">
         <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -351,5 +325,4 @@ const ClientAnalytics = ({ onBack }) => {
     </div>
   );
 };
-
 export default ClientAnalytics;

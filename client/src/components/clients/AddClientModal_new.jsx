@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-
 function AddClientModal({ isOpen, onClose, onAdd }) {
   const [formData, setFormData] = useState({
     CustomerID: '',
@@ -18,7 +17,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     Status: 'Active',
     Serves: ''
   });
-  
   const [scheduleType, setScheduleType] = useState('same'); // 'same' or 'different'
   const [cars, setCars] = useState([{ 
     plate: '', 
@@ -26,7 +24,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     appointments: [{ day: 'Saturday', time: '9:00 AM' }] 
   }]);
   const [sharedAppointment, setSharedAppointment] = useState({ day: 'Saturday', time: '9:00 AM' });
-  
   // Package limits
   const getPackageLimit = (packageName) => {
     if (!packageName) return 0;
@@ -38,13 +35,9 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
   };
   const [additionalServices, setAdditionalServices] = useState([]);
   const [loading, setLoading] = useState(false);
-  
-
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
     try {
       // Prepare client data
       const clientData = {
@@ -56,9 +49,7 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         cars: cars,
         additionalServices: additionalServices
       };
-      
       await onAdd(clientData);
-      
       // Reset form
       setFormData({
         CustomerID: '',
@@ -85,25 +76,20 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         appointments: [{ day: 'Saturday', time: '9:00 AM' }] 
       }]);
       setAdditionalServices([]);
-      
       onClose();
     } catch (error) {
-      console.error('Error adding client:', error);
       alert('Error adding client: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
-
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
-
   if (!isOpen) return null;
-
   return (
     <div 
       style={{
@@ -133,7 +119,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginBottom: '20px', color: '#548235' }}>Add New Client</h2>
-        
         {/* Schedule Type Selection */}
         <div style={{ 
           backgroundColor: '#e8f5e8', 
@@ -197,7 +182,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
             </label>
           </div>
         </div>
-        
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
             <div>
@@ -210,7 +194,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 required
               />
             </div>
-            
             <div>
               <label>Name:</label>
               <input
@@ -221,7 +204,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 required
               />
             </div>
-            
             <div>
               <label>Villa:</label>
               <input
@@ -231,7 +213,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Phone:</label>
               <input
@@ -241,7 +222,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 onChange={handleChange}
               />
             </div>
-            
             {/* Shared Appointment (when all cars same time) */}
             {scheduleType === 'same' && (
               <div style={{ gridColumn: '1 / -1', marginBottom: '20px' }}>
@@ -322,7 +302,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 </div>
               </div>
             )}
-            
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>
                 🚗 Cars {scheduleType === 'same' ? '(All same appointment)' : '& Individual Appointments'}:
@@ -356,7 +335,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                       </button>
                     )}
                   </div>
-                  
                   {/* Car Details */}
                   <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px', marginBottom: '15px' }}>
                     <div>
@@ -402,7 +380,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                       </select>
                     </div>
                   </div>
-                  
                   {/* Appointments for this car */}
                   {scheduleType === 'same' ? (
                     /* Show shared appointment (read-only) */
@@ -447,7 +424,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                           ➕ Add Appointment
                         </button>
                       </div>
-                      
                       {car.appointments.map((appointment, aptIndex) => (
                         <div key={aptIndex} style={{
                           backgroundColor: 'rgba(255,255,255,0.7)',
@@ -564,7 +540,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 🚗➕ Add Another Car
               </button>
             </div>
-            
             <div>
               <label>Package:</label>
               <select
@@ -581,7 +556,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 <option value="3 Ext 1 INT bi week ">3 Ext 1 INT bi week</option>
               </select>
             </div>
-            
             <div>
               <label>Fees:</label>
               <input
@@ -591,7 +565,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Start Date:</label>
               <input
@@ -601,7 +574,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Status:</label>
               <select
@@ -614,7 +586,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
               </select>
             </div>
           </div>
-          
           <div style={{ gridColumn: '1 / -1', marginTop: '15px' }}>
             <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🛠️ Additional Services:</label>
             {additionalServices.map((service, index) => (
@@ -685,7 +656,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
               + Add Additional Service
             </button>
           </div>
-          
           <div style={{ gridColumn: '1 / -1' }}>
             <label>Notes:</label>
             <textarea
@@ -696,7 +666,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
               style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
             />
           </div>
-          
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px', gridColumn: '1 / -1' }}>
             <button 
               type="submit" 
@@ -734,5 +703,4 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     </div>
   );
 }
-
 export default AddClientModal;

@@ -30,9 +30,7 @@ class UpdateQueue {
     // Batch update all tasks at once
     try {
       await this.batchUpdate(updates);
-      console.log(`[QUEUE] Flushed ${updates.length} updates`);
-    } catch (error) {
-      console.error('[QUEUE] Flush failed:', error.message);
+      } catch (error) {
       // Re-queue failed updates
       updates.forEach(([taskId, update]) => this.addUpdate(taskId, update));
     }

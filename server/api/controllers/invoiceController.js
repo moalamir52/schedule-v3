@@ -23,12 +23,6 @@ const createInvoice = async (req, res) => {
 
     const isRegularInvoice = customerID && customerID !== 'ONE_TIME';
     
-    console.log('customerID:', customerID);
-    console.log('isRegularInvoice:', isRegularInvoice);
-    console.log('paymentStatus received:', paymentStatus);
-    console.log('paymentStatus type:', typeof paymentStatus);
-    console.log('paymentMethod received:', req.body.paymentMethod);
-    
     let customerData = null;
     let billingCycle = null;
     
@@ -68,7 +62,6 @@ const createInvoice = async (req, res) => {
       let startDateStr = customerData['start date'] || customerData.Start_Date || customerData['Start Date'] || customerData.StartDate || customerData.CreatedAt;
       
       if (!startDateStr) {
-        console.warn(`No start date found for customer ${customerID}, leaving empty for manual entry`);
         // Don't set automatic dates - let user specify billing period
         return res.status(400).json({ 
           success: false, 
@@ -76,8 +69,6 @@ const createInvoice = async (req, res) => {
           requiresStartDate: true
         });
       }
-      
-      console.log('Raw start date string:', startDateStr);
       
       // Parse different date formats
       let contractStartDate;
@@ -110,12 +101,9 @@ const createInvoice = async (req, res) => {
         throw new Error('Invalid customer start date: ' + startDateStr);
       }
       
-      console.log('Parsed contract start date:', contractStartDate);
-      console.log('Contract start day of month:', contractStartDate.getDate());
+      console.log(`Contract start date parsed: ${contractStartDate}`);
       
       const today = new Date();
-      console.log('Today:', today);
-      
       // Calculate current billing cycle based on contract start day
       const contractDay = contractStartDate.getDate();
       
@@ -127,13 +115,9 @@ const createInvoice = async (req, res) => {
         billingStartDate = new Date(today.getFullYear(), today.getMonth() - 1, contractDay);
       }
       
-      console.log('Calculated billing start date:', billingStartDate);
-      
       const billingEndDate = new Date(billingStartDate);
       billingEndDate.setMonth(billingEndDate.getMonth() + 1);
       billingEndDate.setDate(billingEndDate.getDate() - 1); // End day before next cycle
-      
-      console.log('Calculated billing end date:', billingEndDate);
       
       billingCycle = {
         startDate: billingStartDate,
@@ -158,9 +142,7 @@ const createInvoice = async (req, res) => {
       createdAt: new Date().toISOString()
     };
 
-    console.log('Final invoice data:', invoiceData);
-
-        // Calculate billing cycle immediately for display
+    // Calculate billing cycle immediately for display
     let displayStart = '';
     let displayEnd = '';
     
@@ -206,24 +188,19 @@ const createInvoice = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Error creating invoice:', error);
-    console.error('Request body:', req.body);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
 const getAllInvoices = async (req, res) => {
   try {
-    console.log('[INVOICES] Fetching all invoices...');
     const invoices = await db.getInvoices();
-    console.log('[INVOICES] Found', invoices.length, 'invoices');
     res.json({
       success: true,
       invoices: invoices,
       message: `Found ${invoices.length} invoices`
     });
   } catch (error) {
-    console.error('[INVOICES] Error getting invoices:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -239,8 +216,6 @@ const updateInvoice = async (req, res) => {
       totalAmount
     } = req.body;
     
-    console.log('Updating invoice:', id, 'with totalAmount:', totalAmount);
-    
     await db.updateInvoice(id, {
       CustomerName: customerName,
       Villa: villa,
@@ -250,7 +225,6 @@ const updateInvoice = async (req, res) => {
     
     res.json({ success: true, message: 'Invoice updated successfully' });
   } catch (error) {
-    console.error('Error updating invoice:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -261,7 +235,6 @@ const deleteInvoice = async (req, res) => {
     await db.deleteInvoice(id);
     res.json({ success: true, message: 'Invoice deleted successfully' });
   } catch (error) {
-    console.error('Error deleting invoice:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -287,7 +260,6 @@ const getInvoiceNumber = async (req, res) => {
     const invoiceNumber = await db.getNextInvoiceRef();
     res.json({ success: true, invoiceNumber });
   } catch (error) {
-    console.error('Error getting invoice number:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -319,7 +291,6 @@ const getInvoiceStats = async (req, res) => {
       allTime: { total: allTimeTotal, count: invoices.length }
     });
   } catch (error) {
-    console.error('Error getting invoice stats:', error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -336,7 +307,6 @@ const checkDuplicateInvoices = async (req, res) => {
         : 'No duplicate invoices found'
     });
   } catch (error) {
-    console.error('Error checking duplicate invoices:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

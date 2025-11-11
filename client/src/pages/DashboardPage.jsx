@@ -3,10 +3,8 @@ import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { FaCar } from 'react-icons/fa';
 import { FiUsers, FiCalendar, FiClipboard, FiFileText, FiBarChart2, FiSettings } from 'react-icons/fi';
-
 function DashboardPage() {
   const [weekStatus, setWeekStatus] = useState(null);
-  
   useEffect(() => {
     // Check week status on load
     const checkWeekStatus = async () => {
@@ -15,10 +13,8 @@ function DashboardPage() {
         const data = await response.json();
         setWeekStatus(data);
       } catch (err) {
-        console.warn('Failed to check week status:', err.message);
-      }
+        }
     };
-    
     checkWeekStatus();
   }, []);
   const menuItems = [
@@ -77,14 +73,12 @@ function DashboardPage() {
       link: '/operations'
     }
   ];
-
   return (
     <div className="home-page">
       {/* Header */}
       <div className="home-header">
         <h1>🚗 GLOGO Car Wash</h1>
         <p>Management System Dashboard</p>
-        
         {/* Week Status Notification */}
         {weekStatus && weekStatus.weekGenerated && (
           <div style={{
@@ -100,7 +94,6 @@ function DashboardPage() {
             ✅ <strong>New Week Generated!</strong> {weekStatus.message}
           </div>
         )}
-        
         {weekStatus && !weekStatus.weekGenerated && weekStatus.day && (weekStatus.day === 'Sunday' || weekStatus.day === 'Monday') && (
           <div style={{
             backgroundColor: '#fff3cd',
@@ -116,7 +109,6 @@ function DashboardPage() {
           </div>
         )}
       </div>
-
       {/* Quick Actions */}
       <div style={{
         display: 'flex',
@@ -130,7 +122,6 @@ function DashboardPage() {
             try {
               const response = await fetch(`${import.meta.env.VITE_API_URL}/api/auto-schedule/check-new-week`);
               const data = await response.json();
-              
               if (data.success) {
                 alert(`✅ ${data.message}\n\nDay: ${data.day}\nStatus: ${data.weekGenerated || data.currentWeekStatus}`);
               } else {
@@ -163,15 +154,12 @@ function DashboardPage() {
         >
           🗓️ Check/Generate New Week
         </button>
-        
         <button
           onClick={async () => {
-            console.log('🔄 [FORCE-GEN] Button clicked');
             // Show week options with actual dates
             const getWeekDates = (offset) => {
               const today = new Date();
               const currentDay = today.getDay();
-              
               let mondayOfWeek = new Date(today);
               if (currentDay === 0) {
                 mondayOfWeek.setDate(today.getDate() + 1);
@@ -180,11 +168,9 @@ function DashboardPage() {
               } else {
                 mondayOfWeek.setDate(today.getDate() - currentDay + 1);
               }
-              
               mondayOfWeek.setDate(mondayOfWeek.getDate() + (offset * 7));
               const saturdayOfWeek = new Date(mondayOfWeek);
               saturdayOfWeek.setDate(mondayOfWeek.getDate() + 5);
-              
               const startDate = mondayOfWeek.toLocaleDateString('en-US', {
                 day: 'numeric',
                 month: 'short'
@@ -193,57 +179,39 @@ function DashboardPage() {
                 day: 'numeric',
                 month: 'short'
               });
-              
               return `${startDate} - ${endDate}`;
             };
-            
             const weekOptions = [
               { offset: 0, label: `This Week (${getWeekDates(0)})` },
               { offset: 1, label: `Next Week (${getWeekDates(1)})` },
               { offset: 2, label: `Week After Next (${getWeekDates(2)})` },
               { offset: 3, label: `3 Weeks Ahead (${getWeekDates(3)})` }
             ];
-            
             const optionsText = weekOptions.map((opt, index) => 
               `${index + 1}. ${opt.label}`
             ).join('\n');
-            
             const choice = prompt(
               `Select which week to generate:\n\n${optionsText}\n\nEnter number (1-4):`
             );
-            
             if (!choice) return;
-            
             const choiceNum = parseInt(choice);
             if (isNaN(choiceNum) || choiceNum < 1 || choiceNum > 4) {
               alert('❌ Please enter a valid number (1-4)');
               return;
             }
-            
             const selectedWeek = weekOptions[choiceNum - 1];
-            
             try {
-              console.log('🔄 [FORCE-GEN] Starting force generation...');
-              console.log('🔄 [FORCE-GEN] Selected week:', selectedWeek);
-              
               const apiUrl = 'http://localhost:5001'; // Force localhost
               const response = await fetch(`${apiUrl}/api/auto-schedule/force-generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ weekOffset: selectedWeek.offset })
               });
-              
-              console.log('🔄 [FORCE-GEN] Response status:', response.status);
-              
               if (!response.ok) {
                 const errorText = await response.text();
-                console.log('🔄 [FORCE-GEN] Error response:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
               }
-              
               const data = await response.json();
-              console.log('🔄 [FORCE-GEN] Response data:', data);
-              
               if (data.success) {
                 const tasksCount = data.generatedData?.totalAppointments || data.generatedData?.assignments?.length || 'N/A';
                 alert(`✅ Schedule Generated!\n\n📅 Week: ${selectedWeek.label}\n📋 Tasks Generated: ${tasksCount}`);
@@ -251,7 +219,6 @@ function DashboardPage() {
                 alert('❌ Failed to generate week: ' + (data.error || 'Unknown error'));
               }
             } catch (err) {
-              console.error('🔄 [FORCE-GEN] Error:', err);
               alert('❌ Error: ' + err.message + '\n\nCheck console for details.');
             }
           }}
@@ -279,7 +246,6 @@ function DashboardPage() {
           ⚡ Force Generate Week
         </button>
       </div>
-
       {/* Menu Cards Grid */}
       <div className="modules-grid">
         {menuItems.map(item => (
@@ -287,9 +253,7 @@ function DashboardPage() {
             key={item.id}
             to={item.link}
             onClick={() => {
-
               if (item.id === 'daily-tasks') {
-
               }
             }}
             style={{
@@ -304,10 +268,8 @@ function DashboardPage() {
                 <div className="module-icon" style={{ color: item.color }}>
                   {item.icon}
                 </div>
-
                 {/* Title */}
                 <h3>{item.title}</h3>
-
                 {/* Description */}
                 <p>{item.description}</p>
               </div>
@@ -315,7 +277,6 @@ function DashboardPage() {
           </Link>
         ))}
       </div>
-
       {/* Footer */}
       <div style={{
         textAlign: 'center',
@@ -328,5 +289,4 @@ function DashboardPage() {
     </div>
   );
 }
-
 export default DashboardPage;

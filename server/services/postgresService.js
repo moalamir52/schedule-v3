@@ -8,7 +8,6 @@ class PostgresService {
   }
 
   init() {
-    console.log('🐘 Initializing PostgreSQL connection...');
     this.client = new Client({
       connectionString: process.env.DATABASE_URL,
       ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -32,7 +31,6 @@ class PostgresService {
         WashTime: customer.Time      // Add alias for compatibility
       }));
     } catch (error) {
-      console.error('Error fetching customers:', error);
       return [];
     }
   }
@@ -43,7 +41,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM workers WHERE "Status" = $1 ORDER BY "Name"', ['Active']);
       return result.rows;
     } catch (error) {
-      console.error('Error fetching workers:', error);
       return [];
     }
   }
@@ -54,7 +51,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM wash_history ORDER BY "WashDate" DESC');
       return result.rows;
     } catch (error) {
-      console.error('Error fetching history:', error);
       return [];
     }
   }
@@ -63,17 +59,13 @@ class PostgresService {
     try {
       await this.connect();
       const result = await this.client.query('SELECT * FROM "ScheduledTasks" ORDER BY "AppointmentDate", "Time"');
-      console.log(`[POSTGRES] Retrieved ${result.rows.length} tasks from ScheduledTasks`);
       return result.rows;
     } catch (error) {
-      console.error('Error fetching scheduled tasks:', error);
       return [];
     }
   }
 
   async clearAndWriteSchedule(tasks) {
-    console.log(`[POSTGRES] Starting transaction to save ${tasks.length} tasks to ScheduledTasks`);
-    
     try {
       await this.connect();
       
@@ -82,8 +74,6 @@ class PostgresService {
       
       // Clear existing tasks
       await this.client.query('DELETE FROM "ScheduledTasks"');
-      console.log(`[POSTGRES] Cleared all existing tasks`);
-      
       // Insert new tasks
       for (const task of tasks) {
         await this.client.query(`
@@ -109,10 +99,7 @@ class PostgresService {
       
       // Commit transaction
       await this.client.query('COMMIT');
-      console.log(`[POSTGRES] Successfully committed ${tasks.length} tasks to ScheduledTasks`);
-      
-    } catch (error) {
-      console.error(`[POSTGRES] Error during transaction, rolling back:`, error);
+      } catch (error) {
       await this.client.query('ROLLBACK');
       throw error;
     }
@@ -148,7 +135,6 @@ class PostgresService {
       ]);
       return result.rows[0];
     } catch (error) {
-      console.error('Error adding customer:', error);
       throw error;
     }
   }
@@ -159,7 +145,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM "Users" WHERE "Username" = $1', [username]);
       return result.rows[0] || null;
     } catch (error) {
-      console.error('Error finding user:', error);
       return null;
     }
   }
@@ -170,7 +155,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM "Users" ORDER BY "Username"');
       return result.rows;
     } catch (error) {
-      console.error('Error fetching users:', error);
       return [];
     }
   }
@@ -192,7 +176,6 @@ class PostgresService {
       ]);
       return result.rows[0];
     } catch (error) {
-      console.error('Error adding user:', error);
       throw error;
     }
   }
@@ -203,7 +186,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM "Services" WHERE "Status" = $1 ORDER BY "ServiceName"', ['Active']);
       return result.rows;
     } catch (error) {
-      console.error('Error fetching services:', error);
       return [];
     }
   }
@@ -214,7 +196,6 @@ class PostgresService {
       const result = await this.client.query('SELECT * FROM invoices ORDER BY "CreatedAt" DESC');
       return result.rows;
     } catch (error) {
-      console.error('Error fetching invoices:', error);
       return [];
     }
   }
@@ -237,7 +218,6 @@ class PostgresService {
       ]);
       return result.rows[0];
     } catch (error) {
-      console.error('Error adding invoice:', error);
       throw error;
     }
   }
@@ -260,7 +240,6 @@ class PostgresService {
       
       return 'GLOGO-2511055';
     } catch (error) {
-      console.error('Error getting next invoice ref:', error);
       return 'GLOGO-2511055';
     }
   }
@@ -275,7 +254,6 @@ class PostgresService {
       const result = await this.client.query(`UPDATE customers SET ${fields} WHERE "CustomerID" = $${values.length}`, values);
       return result.rows[0];
     } catch (error) {
-      console.error('Error updating customer:', error);
       throw error;
     }
   }
@@ -286,7 +264,6 @@ class PostgresService {
       const result = await this.client.query('DELETE FROM customers WHERE "CustomerID" = $1', [customerId]);
       return result.rows[0];
     } catch (error) {
-      console.error('Error deleting customer:', error);
       throw error;
     }
   }

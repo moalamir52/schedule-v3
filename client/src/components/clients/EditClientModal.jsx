@@ -1,25 +1,20 @@
 import { useState, useEffect } from 'react';
-
 function EditClientModal({ isOpen, onClose, onUpdate, client }) {
   const [formData, setFormData] = useState({});
-  
   // Convert date from "02-Sep-2025" to "2025-09-02" format
   const convertDateToInput = (dateStr) => {
     if (!dateStr) return '';
     try {
       const date = new Date(dateStr + ' 12:00:00'); // Add time to avoid timezone issues
       if (isNaN(date.getTime())) return '';
-      
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
-      
       return `${year}-${month}-${day}`;
     } catch {
       return '';
     }
   };
-
   useEffect(() => {
     if (client) {
       setFormData({
@@ -28,26 +23,21 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
       });
     }
   }, [client]);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await onUpdate(client.CustomerID, formData);
       onClose();
     } catch (error) {
-      console.error('Error updating client:', error);
-    }
+      }
   };
-
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
-
   if (!isOpen || !client) return null;
-
   return (
     <div 
       style={{
@@ -77,7 +67,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginBottom: '20px', color: '#548235' }}>Edit Client</h2>
-        
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
             <div>
@@ -91,7 +80,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 style={{ backgroundColor: '#f5f5f5' }}
               />
             </div>
-            
             <div>
               <label>Name:</label>
               <input
@@ -102,7 +90,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 required
               />
             </div>
-            
             <div>
               <label>Villa:</label>
               <input
@@ -112,7 +99,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Phone:</label>
               <input
@@ -122,7 +108,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Number of Cars:</label>
               <input
@@ -132,7 +117,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Car Plates:</label>
               <input
@@ -142,7 +126,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Days:</label>
               <input
@@ -152,7 +135,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Time:</label>
               <input
@@ -162,7 +144,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Package:</label>
               <select
@@ -179,7 +160,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 <option value="3 Ext 1 INT bi week ">3 Ext 1 INT bi week</option>
               </select>
             </div>
-            
             <div>
               <label>Fees:</label>
               <input
@@ -189,7 +169,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Start Date:</label>
               <input
@@ -199,7 +178,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            
             <div>
               <label>Status:</label>
               <select
@@ -212,7 +190,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
               </select>
             </div>
           </div>
-          
           <div style={{ marginTop: '15px' }}>
             <label>Notes:</label>
             <textarea
@@ -222,7 +199,6 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
               rows="3"
             />
           </div>
-          
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
             <button type="submit" className="btn btn-primary">
               Update Client
@@ -236,5 +212,4 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
     </div>
   );
 }
-
 export default EditClientModal;

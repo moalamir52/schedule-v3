@@ -1,6 +1,5 @@
 // Operations Service for V3 - Migrated from V2
 class OperationsService {
-  
   // Get daily operations data
   async getDailyOperations(date = new Date()) {
     try {
@@ -8,18 +7,14 @@ class OperationsService {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const dayName = date.toLocaleDateString('en-US', { weekday: 'long' });
-      
       // Get actual scheduled appointments for this day
       const todayAssignments = assignments.filter(assignment => {
         return assignment.day === dayName;
       });
-      
       // Group by time slots
       const timeSlots = {};
       todayAssignments.forEach(assignment => {
@@ -29,7 +24,6 @@ class OperationsService {
         }
         timeSlots[time].push(assignment);
       });
-      
       // Group by areas (villa phases)
       const areas = {};
       todayAssignments.forEach(assignment => {
@@ -43,7 +37,6 @@ class OperationsService {
           areas[areaKey].push(assignment);
         }
       });
-      
       return {
         date: date.toDateString(),
         dayName,
@@ -53,7 +46,6 @@ class OperationsService {
         scheduledClients: todayAssignments
       };
     } catch (error) {
-      console.error('Error loading daily operations:', error);
       return {
         date: date.toDateString(),
         dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
@@ -64,7 +56,6 @@ class OperationsService {
       };
     }
   }
-  
   // Get worker performance data
   async getWorkerPerformance() {
     try {
@@ -73,48 +64,31 @@ class OperationsService {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const workersData = await workersRes.json();
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
       const assignments = scheduleData.assignments || [];
-      
       // Calculate total company revenue
       const totalCompanyRevenue = activeClients.reduce((sum, client) => sum + (parseFloat(client.Fee) || 0), 0);
       const totalTasks = assignments.length;
-      
-
-
-
-
-      
       const workers = workersData.map((worker, index) => {
         const workerName = worker.Name || worker.WorkerName || 'Unknown Worker';
-        
         // Get actual assignments for this worker
         const workerAssignments = assignments.filter(a => 
           a.workerName === workerName || a.workerId === (worker.WorkerID || worker.Name)
         );
-        
         // Get unique clients assigned to this worker
         const assignedClientIds = [...new Set(workerAssignments.map(a => a.customerId))];
         const assignedClients = assignedClientIds.length;
-        
         // Total tasks (appointments) for this worker
         const workerTasks = workerAssignments.length;
-        
         // Calculate revenue based on worker's share of total tasks
         const revenueShare = totalTasks > 0 ? (workerTasks / totalTasks) : 0;
         const workerRevenue = Math.floor(totalCompanyRevenue * revenueShare);
-        
-
-        
         // Calculate efficiency based on workload distribution
         const avgTasksPerWorker = totalTasks / workersData.length;
         const efficiency = avgTasksPerWorker > 0 ? Math.min(100, Math.floor((workerTasks / avgTasksPerWorker) * 100)) : 100;
-        
         return {
           id: worker.WorkerID || index + 1,
           name: workerName,
@@ -125,14 +99,11 @@ class OperationsService {
           efficiency
         };
       });
-      
       return workers;
     } catch (error) {
-      console.error('Error loading worker performance:', error);
       return [];
     }
   }
-  
   // Get service efficiency metrics
   async getServiceEfficiency() {
     try {
@@ -140,13 +111,10 @@ class OperationsService {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
-      
       // Analyze actual service types from assignments
       const serviceTypes = assignments.reduce((acc, assignment) => {
         const type = assignment.washType || 'EXT';
@@ -154,7 +122,6 @@ class OperationsService {
         acc[displayType] = (acc[displayType] || 0) + 1;
         return acc;
       }, {});
-      
       // Package analysis from actual scheduled clients
       const scheduledClientIds = [...new Set(assignments.map(a => a.customerId))];
       const packages = {};
@@ -165,11 +132,9 @@ class OperationsService {
           packages[pkg] = (packages[pkg] || 0) + 1;
         }
       });
-      
       const totalServices = assignments.length;
       const expectedServices = activeClients.length * 4; // Expected monthly services
       const completionRate = expectedServices > 0 ? Math.round((totalServices / expectedServices) * 100) : 0;
-      
       return {
         carTypes: Object.entries(serviceTypes).map(([type, count]) => ({ 
           type, 
@@ -183,7 +148,6 @@ class OperationsService {
           Math.round(totalServices / scheduledClientIds.length) : 0
       };
     } catch (error) {
-      console.error('Error loading service efficiency:', error);
       return {
         carTypes: [],
         packages: [],
@@ -194,7 +158,6 @@ class OperationsService {
       };
     }
   }
-  
   // Get route optimization data
   async getRouteOptimization() {
     try {
@@ -202,13 +165,10 @@ class OperationsService {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
-      
       // Group by areas based on actual assignments
       const areas = {};
       assignments.forEach(assignment => {
@@ -224,12 +184,10 @@ class OperationsService {
           areas[areaKey].revenue += parseFloat(client.Fee) || 0;
         }
       });
-      
       // Calculate area statistics
       const areaStats = Object.entries(areas).map(([area, data]) => {
         const clientCount = data.clients.size;
         const totalRevenue = data.revenue;
-        
         return {
           area,
           clientCount,
@@ -238,7 +196,6 @@ class OperationsService {
           assignmentCount: data.assignments.length
         };
       });
-      
       return {
         areas: areaStats,
         totalAreas: areaStats.length,
@@ -250,7 +207,6 @@ class OperationsService {
         )
       };
     } catch (error) {
-      console.error('Error loading route optimization:', error);
       return {
         areas: [],
         totalAreas: 0,
@@ -259,40 +215,32 @@ class OperationsService {
       };
     }
   }
-  
   // Get schedule management data
   async getScheduleManagement() {
     try {
       const scheduleRes = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      
       const weeklySchedule = weekDays.map(day => {
         const dayAssignments = assignments.filter(a => a.day === day);
-        
         // Find peak time for this day
         const timeSlots = {};
         dayAssignments.forEach(assignment => {
           timeSlots[assignment.time] = (timeSlots[assignment.time] || 0) + 1;
         });
-        
         const peakTime = Object.entries(timeSlots).reduce((max, [time, count]) => 
           count > (max?.count || 0) ? { time, count } : max, null
         );
-        
         return {
           day,
           clientCount: dayAssignments.length,
           peakTime
         };
       });
-      
       const peakDay = weeklySchedule.reduce((max, day) => 
         day.clientCount > (max?.clientCount || 0) ? day : max, null
       );
-      
       return {
         weeklySchedule,
         peakDay,
@@ -302,7 +250,6 @@ class OperationsService {
         )
       };
     } catch (error) {
-      console.error('Error loading schedule management:', error);
       return {
         weeklySchedule: [],
         peakDay: null,
@@ -311,18 +258,15 @@ class OperationsService {
       };
     }
   }
-  
   // Get equipment and supplies data
   async getEquipmentSupplies() {
     try {
       const scheduleRes = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`);
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const totalServices = assignments.length;
       const intServices = assignments.filter(a => a.washType === 'INT').length;
       const extServices = assignments.filter(a => a.washType === 'EXT').length;
-      
       // Calculate supplies based on actual service types
       const supplies = {
         shampoo: Math.ceil(totalServices * 0.8), // All services need shampoo
@@ -331,14 +275,12 @@ class OperationsService {
         towels: Math.ceil(totalServices * 1.5), // Multiple towels per service
         brushes: Math.ceil(totalServices * 0.1), // Brushes wear out slowly
       };
-      
       const equipment = [
         { name: 'Pressure Washers', count: 3, status: 'Good', lastMaintenance: '2024-01-15' },
         { name: 'Vacuum Cleaners', count: 2, status: intServices > 20 ? 'Needs Service' : 'Good', lastMaintenance: '2023-12-20' },
         { name: 'Water Tanks', count: 5, status: 'Good', lastMaintenance: '2024-01-10' },
         { name: 'Microfiber Cloths', count: Math.ceil(totalServices / 5), status: 'Good', lastMaintenance: 'Weekly' }
       ];
-      
       return {
         supplies,
         equipment,
@@ -352,7 +294,6 @@ class OperationsService {
         )
       };
     } catch (error) {
-      console.error('Error loading equipment supplies:', error);
       return {
         supplies: {},
         equipment: [],
@@ -361,7 +302,6 @@ class OperationsService {
       };
     }
   }
-  
   // Get productivity reports
   async getProductivityReports() {
     try {
@@ -369,30 +309,24 @@ class OperationsService {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
       const assignments = scheduleData.assignments || [];
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
       const totalRevenue = activeClients.reduce((sum, client) => sum + (parseFloat(client.Fee) || 0), 0);
-      
       // Calculate current month data based on actual assignments
       const currentMonthServices = assignments.length;
       const currentMonthRevenue = totalRevenue;
-      
       // Generate realistic monthly data based on current performance
       const monthlyData = [];
       for (let i = 5; i >= 0; i--) {
         const date = new Date();
         date.setMonth(date.getMonth() - i);
         const monthKey = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-        
         // Use current month as baseline and add some variation
         const variation = (Math.random() - 0.5) * 0.2; // ±10% variation
         const services = i === 0 ? currentMonthServices : Math.floor(currentMonthServices * (1 + variation));
         const revenue = i === 0 ? currentMonthRevenue : Math.floor(currentMonthRevenue * (1 + variation));
-        
         monthlyData.push({
           month: monthKey,
           services,
@@ -400,21 +334,16 @@ class OperationsService {
           efficiency: Math.floor(Math.random() * 15) + 85 // 85-100%
         });
       }
-      
       const currentMonth = monthlyData[monthlyData.length - 1];
       const lastMonth = monthlyData[monthlyData.length - 2];
-      
       const growth = lastMonth ? 
         Math.round(((currentMonth.services - lastMonth.services) / lastMonth.services) * 100) : 0;
-      
       // Calculate realistic KPIs based on actual data
       const serviceTypes = assignments.reduce((acc, a) => {
         acc[a.washType] = (acc[a.washType] || 0) + 1;
         return acc;
       }, {});
-      
       const intPercentage = serviceTypes.INT ? (serviceTypes.INT / assignments.length * 100) : 0;
-      
       return {
         monthlyData,
         currentMonth,
@@ -431,7 +360,6 @@ class OperationsService {
         }
       };
     } catch (error) {
-      console.error('Error loading productivity reports:', error);
       return {
         monthlyData: [],
         currentMonth: null,
@@ -442,41 +370,31 @@ class OperationsService {
       };
     }
   }
-  
   // Workers management
   async getWorkers() {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
       return await response.json();
     } catch (error) {
-      console.error('Error loading workers:', error);
       return [];
     }
   }
-  
   async addWorker(workerName, job, status) {
     try {
-
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: workerName, job, status })
       });
-      
       const result = await response.json();
-
-      
       if (!response.ok) {
         throw new Error(result.error || `HTTP ${response.status}: ${response.statusText}`);
       }
-      
       return result;
     } catch (error) {
-      console.error('Error adding worker:', error);
       throw error;
     }
   }
-  
   async deleteWorker(workerName) {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers/${encodeURIComponent(workerName)}`, {
@@ -484,17 +402,14 @@ class OperationsService {
       });
       return await response.json();
     } catch (error) {
-      console.error('Error deleting worker:', error);
       throw error;
     }
   }
-  
   // Additional services management
   async getAdditionalServices() {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`);
       const data = await response.json();
-      
       // Handle different response formats
       let services;
       if (Array.isArray(data)) {
@@ -502,20 +417,16 @@ class OperationsService {
       } else if (data.services && Array.isArray(data.services)) {
         services = data.services;
       } else {
-        console.warn('Services response format unexpected:', data);
         return ['garage bi-weekly', 'garage weekly'];
       }
-      
       return services.map(s => {
         if (typeof s === 'string') return s;
         return s.Name || s.ServiceName || 'Unknown Service';
       });
     } catch (error) {
-      console.error('Error loading services:', error);
       return ['garage bi-weekly', 'garage weekly'];
     }
   }
-  
   async addAdditionalService(serviceName) {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services`, {
@@ -525,11 +436,9 @@ class OperationsService {
       });
       return await response.json();
     } catch (error) {
-      console.error('Error adding service:', error);
       throw error;
     }
   }
-  
   async deleteAdditionalService(serviceName) {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/services/${encodeURIComponent(serviceName)}`, {
@@ -537,10 +446,8 @@ class OperationsService {
       });
       return await response.json();
     } catch (error) {
-      console.error('Error deleting service:', error);
       throw error;
     }
   }
 }
-
 export default new OperationsService();

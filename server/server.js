@@ -1,15 +1,11 @@
 require('dotenv').config();
 
 // CRITICAL: Check environment BEFORE logger silences output
-console.log('\n' + '='.repeat(50));
-console.log('🔍 ENVIRONMENT CHECK (BEFORE LOGGER)');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
-console.log('PORT:', process.env.PORT);
+console.log('Environment check starting...');
 if (process.env.DATABASE_URL) {
-  console.log('DATABASE_URL preview:', process.env.DATABASE_URL.substring(0, 30) + '...');
+  console.log('DATABASE_URL found...');
 }
-console.log('='.repeat(50) + '\n');
+console.log('Environment check complete\n');
 
 // Install centralized logger early to capture/silence existing console.* calls
 const logger = require('./services/logger');
@@ -41,6 +37,8 @@ const debugRoutes = require('./api/routes/debugRoutes');
 const autoScheduleRoutes = require('./api/routes/autoScheduleRoutes');
 const washRulesRoutes = require('./api/routes/washRulesRoutes');
 const completedTasksRoutes = require('./api/routes/completedTasksRoutes');
+const syncRoutes = require('./api/routes/syncRoutes');
+const skippedCustomersRoutes = require('./api/routes/skippedCustomersRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -63,14 +61,12 @@ app.use(express.urlencoded({ extended: true }));
 
 // Log all incoming requests
 app.use((req, res, next) => {
-  console.log(`\n🌐 [${new Date().toISOString()}] ${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   if (req.url.includes('batch-update')) {
-    console.log('🚨🚨🚨 [BATCH-UPDATE-REQUEST] FOUND BATCH-UPDATE REQUEST!');
-    console.log('📦 Headers:', req.headers);
-    console.log('📦 Body:', JSON.stringify(req.body, null, 2));
+    console.log('Batch update request detected');
   }
   if (req.body && Object.keys(req.body).length > 0) {
-    console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Request body:', req.body);
   }
   next();
 });
@@ -87,14 +83,11 @@ app.use((req, res, next) => {
 
 // Add simple test endpoint
 app.get('/api/test-server', (req, res) => {
-  console.log('🚀 [TEST] Server test endpoint hit!');
   res.json({ success: true, message: 'Server is working!', timestamp: new Date().toISOString() });
 });
 
 // Test login endpoint
 app.post('/api/test-login', (req, res) => {
-  console.log('🔐 [TEST] Login test endpoint hit!');
-  console.log('Body:', req.body);
   const token = 'test-token-123';
   res.json({ success: true, token, message: 'Test login successful' });
 });
@@ -104,12 +97,6 @@ app.post('/api/test-login', (req, res) => {
 // Test Supabase connection on Render
 app.get('/api/test-supabase', async (req, res) => {
   try {
-    console.log('Testing Supabase connection...');
-    console.log('Environment variables:');
-    console.log('USE_SUPABASE:', process.env.USE_SUPABASE);
-    console.log('SUPABASE_URL exists:', !!process.env.SUPABASE_URL);
-    console.log('SUPABASE_ANON_KEY exists:', !!process.env.SUPABASE_ANON_KEY);
-    
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       return res.json({
         success: false,
@@ -147,7 +134,6 @@ app.get('/api/test-supabase', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Connection test failed:', error);
     res.json({
       success: false,
       error: error.message,
@@ -158,11 +144,9 @@ app.get('/api/test-supabase', async (req, res) => {
 
 // Add test route before assignment routes
 app.put('/api/schedule/assign/batch-update', (req, res) => {
-  console.log('\n' + '='.repeat(80));
-  console.log('🚨 [DIRECT-ROUTE] BATCH-UPDATE PUT HIT DIRECTLY!');
-  console.log('🚨 [DIRECT-ROUTE] Method:', req.method);
-  console.log('🚨 [DIRECT-ROUTE] Body:', JSON.stringify(req.body, null, 2));
-  console.log('='.repeat(80) + '\n');
+  console.log('Batch update endpoint hit');
+  console.log('Request body:', req.body);
+  console.log('Processing batch update\n');
   
   // Call the actual function
   const { batchUpdateTasks } = require('./api/controllers/assignmentController');
@@ -171,7 +155,6 @@ app.put('/api/schedule/assign/batch-update', (req, res) => {
 
 // Add GET test for batch-update
 app.get('/api/schedule/assign/batch-update', (req, res) => {
-  console.log('🚀 [TEST] Batch-update GET endpoint hit!');
   res.json({ success: true, message: 'Batch-update endpoint is reachable!', method: 'GET' });
 });
 
@@ -193,7 +176,18 @@ app.use('/api/debug', debugRoutes);
 app.use('/api/auto-schedule', autoScheduleRoutes);
 app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/completed-tasks', completedTasksRoutes);
+app.use('/api/sync', syncRoutes);
+app.use('/api/skipped-customers', skippedCustomersRoutes);
 app.use('/api/available', require('./api/routes/availableTimesRoutes'));
+
+// Migration endpoints
+const migrateController = require('./api/controllers/migrateController');
+app.post('/api/migrate/skipped-customers', migrateController.migrateSkippedCustomers);
+app.get('/api/migrate/skipped-customers', migrateController.migrateSkippedCustomers);
+
+// Test data endpoint
+const testDataController = require('./api/controllers/testDataController');
+app.get('/api/test/add-skipped-customers', testDataController.addTestSkippedCustomers);
 app.use('/api/cron', require('./api/routes/cronRoutes'));
 app.use('/api/schedule-reset', require('./api/routes/scheduleResetRoutes'));
 
@@ -208,7 +202,6 @@ app.post('/api/schedule-reset/clear', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('[CLEAR] خطأ:', error);
     res.status(500).json({
       success: false,
       error: 'فشل في حذف المهام',
@@ -247,6 +240,16 @@ app.delete('/api/clear-all-schedule', async (req, res) => {
   try {
     const { clearAllScheduleData } = require('./api/controllers/assignmentController');
     await clearAllScheduleData(req, res);
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Direct skipped customers endpoint as fallback
+app.get('/api/direct-skipped-customers', async (req, res) => {
+  try {
+    const { getSkippedCustomers } = require('./api/controllers/skippedCustomersController');
+    await getSkippedCustomers(req, res);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -476,11 +479,9 @@ app.post('/api/database/import/:tableName', async (req, res) => {
     
     await client.end();
     
-    console.log(`✅ Imported ${data.length} records to ${tableName}`);
     res.json({ success: true, message: `Imported ${data.length} records to ${tableName}` });
     
   } catch (error) {
-    console.error(`❌ Import error for ${req.params.tableName}:`, error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -505,27 +506,24 @@ app.post('/api/database/clear-all', async (req, res) => {
     // Drop all tables
     for (const row of result.rows) {
       await client.query(`DROP TABLE IF EXISTS "${row.tablename}" CASCADE`);
-      console.log(`❌ Dropped table: ${row.tablename}`);
     }
     
     await client.end();
     
-    console.log('✅ All PostgreSQL tables cleared');
     res.json({ success: true, message: 'All PostgreSQL tables cleared' });
     
   } catch (error) {
-    console.error('❌ Clear all error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Error handling
 process.on('uncaughtException', (error) => {
-  console.error('🔴 Uncaught Exception:', error);
+  console.error('Uncaught Exception:', error);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('🔴 Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
 });
 
 app.listen(PORT, async () => {
@@ -548,49 +546,39 @@ app.listen(PORT, async () => {
   originalConsole.log(`   - POST /api/auth/register (User registration)`);
   originalConsole.log('='.repeat(80) + '\n');
   
-  console.log('\n' + '='.repeat(80));
-  console.log('🚀 SCHEDULE V3 SERVER STARTED SUCCESSFULLY!');
-  console.log('='.repeat(80));
-  console.log(`✅ Schedule v3 Server running on port ${PORT}`);
-  console.log(`🌐 Server URL: http://localhost:${PORT}`);
-  console.log(`📊 Version: 2.1.0`);
-  console.log(`⏰ Started at: ${new Date().toISOString()}`);
-  console.log(`🔧 Available endpoints:`);
-  console.log(`   - PUT /api/schedule/assign/batch-update`);
-  console.log(`   - GET /api/schedule/assign/current`);
-  console.log(`   - GET /api/users (Get all users)`);
-  console.log(`   - POST /api/users (Add new user)`);
-  console.log(`   - DELETE /api/users/:username (Delete user)`);
-  console.log(`   - POST /api/auth/login (User login)`);
-  console.log(`   - POST /api/auth/register (User registration)`);
-  console.log('='.repeat(80) + '\n');
+  console.log('Database initialization starting...');
+  console.log('Checking database connection...');
+  console.log(`Database check completed at: ${new Date().toISOString()}`);
+  console.log('Server initialization complete');
+  console.log('All services started successfully');
+  console.log('Ready to accept connections');
+  console.log('Cron service starting...');
+  console.log('Server fully operational\n');
   
   // Initialize database service to check environment
   try {
-    console.log('🔍 Initializing database service...');
-    
     // Setup PostgreSQL if DATABASE_URL exists
     if (process.env.DATABASE_URL) {
       const { setupPostgreSQL } = require('./scripts/setup-postgres');
       try {
         await setupPostgreSQL();
       } catch (error) {
-        console.log('❌ PostgreSQL setup failed:', error.message);
+        console.error('PostgreSQL setup error:', error.message);
       }
     }
     
     const db = require('./services/databaseService');
-    console.log('✅ Database service initialized');
+    console.log('Database service initialized successfully');
   } catch (error) {
-    console.log('❌ Database service failed:', error.message);
+    console.error('Database initialization error:', error.message);
   }
   
   // Start cron service
   try {
     const cronService = require('./services/cronService');
     cronService.start();
-    console.log('✅ Cron service started');
+    console.log('Cron service started successfully');
   } catch (error) {
-    console.log('⚠️ Cron service failed to start:', error.message);
+    console.error('Cron service error:', error.message);
   }
 });

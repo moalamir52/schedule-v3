@@ -1,47 +1,37 @@
 import React, { useState, useEffect } from 'react';
-
 const AIInsights = ({ onBack }) => {
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedQuestion, setSelectedQuestion] = useState('');
   const [chatHistory, setChatHistory] = useState([]);
-
   useEffect(() => {
     loadInsights();
   }, []);
-
   const loadInsights = async () => {
     try {
       setLoading(true);
-      
       const [clientsRes, scheduleRes, workersRes] = await Promise.all([
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`),
         fetch(`${import.meta.env.VITE_API_URL}/api/workers`)
       ]);
-      
       const clients = await clientsRes.json();
       const scheduleData = await scheduleRes.json();
       const workers = await workersRes.json();
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
       const assignments = scheduleData.assignments || [];
-      
       // Generate AI insights based on real data
       const totalRevenue = activeClients.reduce((sum, client) => sum + (parseFloat(client.Fee) || 0), 0);
       const avgRevenuePerClient = totalRevenue / activeClients.length;
-      
       // Package analysis
       const packageStats = activeClients.reduce((acc, client) => {
         const pkg = client.Washman_Package || 'Unknown';
         acc[pkg] = (acc[pkg] || 0) + 1;
         return acc;
       }, {});
-      
       const mostPopularPackage = Object.entries(packageStats).reduce((max, [pkg, count]) => 
         count > (max?.count || 0) ? { package: pkg, count } : max, null
       );
-      
       // Worker efficiency
       const workerStats = workers.map(worker => {
         const workerAssignments = assignments.filter(a => 
@@ -53,21 +43,17 @@ const AIInsights = ({ onBack }) => {
           clients: new Set(workerAssignments.map(a => a.customerId)).size
         };
       });
-      
       const topWorker = workerStats.reduce((max, worker) => 
         worker.tasks > (max?.tasks || 0) ? worker : max, null
       );
-      
       // Time analysis
       const timeStats = assignments.reduce((acc, assignment) => {
         acc[assignment.time] = (acc[assignment.time] || 0) + 1;
         return acc;
       }, {});
-      
       const peakTime = Object.entries(timeStats).reduce((max, [time, count]) => 
         count > (max?.count || 0) ? { time, count } : max, null
       );
-
       setInsights({
         totalRevenue,
         activeClients: activeClients.length,
@@ -86,15 +72,12 @@ const AIInsights = ({ onBack }) => {
         })
       });
     } catch (error) {
-      console.error('Error loading AI insights:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   const generateRecommendations = (data) => {
     const recommendations = [];
-    
     // Revenue optimization
     if (data.avgRevenue < 300) {
       recommendations.push({
@@ -109,7 +92,6 @@ const AIInsights = ({ onBack }) => {
         ]
       });
     }
-    
     // Worker optimization
     if (data.assignments / data.workers > 25) {
       recommendations.push({
@@ -124,7 +106,6 @@ const AIInsights = ({ onBack }) => {
         ]
       });
     }
-    
     // Growth opportunities
     recommendations.push({
       type: 'growth',
@@ -137,10 +118,8 @@ const AIInsights = ({ onBack }) => {
         'Offer seasonal services (rain cleaning, summer specials)'
       ]
     });
-    
     return recommendations;
   };
-
   const quickQuestions = [
     'How to increase revenue by 20%?',
     'When to hire a new worker?',
@@ -148,13 +127,10 @@ const AIInsights = ({ onBack }) => {
     'Which package is most profitable?',
     'How to reduce operational costs?'
   ];
-
   const handleQuestionClick = async (question) => {
     setSelectedQuestion(question);
-    
     // Add question to chat immediately
     setChatHistory(prev => [...prev, { type: 'question', content: question }]);
-    
     try {
       // Call real AI API
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/ai/chat`, {
@@ -172,47 +148,36 @@ const AIInsights = ({ onBack }) => {
           }
         })
       });
-      
       const data = await response.json();
-      
       if (data.success) {
         setChatHistory(prev => [...prev, { type: 'answer', content: data.response }]);
       } else {
         setChatHistory(prev => [...prev, { type: 'answer', content: 'Sorry, I encountered an error. Please try again.' }]);
       }
     } catch (error) {
-      console.error('AI Chat Error:', error);
       setChatHistory(prev => [...prev, { type: 'answer', content: 'Sorry, I encountered an error. Please try again.' }]);
     }
-    
     return; // Skip the old hardcoded responses
-    
     // Old hardcoded logic (kept as fallback)
     let response = '';
-    
     switch(question) {
       case 'How to increase revenue by 20%?':
         response = `To increase revenue by 20% (+${Math.floor(insights.totalRevenue * 0.2)} AED additional):
-
 📈 **Direct Strategies:**
 • Add ${Math.ceil(insights.activeClients * 0.15)} new clients
 • Upgrade 30% of existing clients to higher packages
 • Introduce additional services (rain cleaning, monthly polishing)
-
 💡 **Action Plan:**
 1. Target empty villas in the same compound
 2. Offer upgrade promotions to current clients
 3. Add garage cleaning service (50 AED/month)`;
         break;
-        
       case 'When to hire a new worker?':
         const tasksPerWorker = insights.totalAssignments / (insights.topWorker ? 3 : 1);
         response = `Based on current analysis:
-
 📊 **Current Status:**
 • Average tasks per worker: ${tasksPerWorker.toFixed(1)} tasks
 • Optimal range: 20-25 tasks per worker
-
 ⏰ **Recommended Timing:**
 ${tasksPerWorker > 25 ? 
   '🔴 **NOW!** Workers are overloaded' : 
@@ -220,77 +185,60 @@ ${tasksPerWorker > 25 ?
     '🟡 **Within a month** when reaching 25 tasks/worker' :
     '🟢 **Not needed currently** - optimal workload'
 }
-
 💰 **Cost vs Return:**
 • New worker cost: ~2000 AED/month
 • Expected return: ~3000 AED/month from additional clients`;
         break;
-        
       case 'How to improve worker efficiency?':
         response = `To improve worker efficiency:
-
 ⚡ **Immediate Improvements:**
 • Group clients by area (save 30% travel time)
 • Optimize peak hours: ${insights.peakTime?.time || '9:00 AM'}
 • Use navigation app for villa routing
-
 📈 **Long-term Improvements:**
 • Train workers on faster techniques
 • Performance incentive system
 • Provide better and faster equipment
-
 📊 **Performance Metrics:**
 • Target: 8-10 clients/day per worker
 • Current: ${insights.topWorker ? Math.floor(insights.topWorker.tasks / 6) : 'N/A'} clients/day`;
         break;
-        
       case 'Which package is most profitable?':
         response = `Package profitability analysis:
-
 🏆 **Most Popular:** ${insights.mostPopularPackage?.package || 'N/A'}
-
 💰 **Profitability Analysis:**
 • 3x/week packages: Highest profit (300+ AED)
 • 2x/week packages: Medium profit (200-250 AED)
 • 1x/week packages: Lower profit (100-150 AED)
-
 📈 **Optimization Strategy:**
 • Focus on upgrading clients to higher packages
 • Offer 10% discount for upgrading from 2x to 3x weekly
 • Add premium services to high-tier packages`;
         break;
-        
       case 'How to reduce operational costs?':
         response = `To reduce operational costs:
-
 💧 **Water & Materials Savings:**
 • Use water recycling system (save 40%)
 • Buy materials in bulk (save 25%)
 • Reduce unnecessary chemical usage
-
 ⛽ **Fuel Savings:**
 • Smart route planning (save 30% fuel)
 • Group clients in same area
 • Use fuel-efficient vehicles
-
 👷 **Efficiency Improvements:**
 • Train workers to reduce service time
 • Regular equipment maintenance
 • Minimize material waste
-
 💰 **Expected Savings:** 15-25% of monthly costs`;
         break;
-        
       default:
         response = 'Sorry, I couldn\'t understand the question. Please try one of the suggested questions.';
     }
-    
     setChatHistory(prev => [...prev, 
       { type: 'question', content: question },
       { type: 'answer', content: response }
     ]);
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -299,7 +247,6 @@ ${tasksPerWorker > 25 ?
       </div>
     );
   }
-
   return (
     <div className="home-page">
       <div className="page-header">
@@ -308,12 +255,10 @@ ${tasksPerWorker > 25 ?
             ← Back to Reports
           </button>
         </div>
-        
         <div className="header-center">
           <h1>🤖 AI Business Insights</h1>
         </div>
       </div>
-
       {/* Key Insights */}
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card">
@@ -324,7 +269,6 @@ ${tasksPerWorker > 25 ?
             <small>{insights.activeClients} active clients</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#17a2b8' }}>📊</div>
           <div className="stat-content">
@@ -333,7 +277,6 @@ ${tasksPerWorker > 25 ?
             <small>monthly</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#fd7e14' }}>🏆</div>
           <div className="stat-content">
@@ -342,7 +285,6 @@ ${tasksPerWorker > 25 ?
             <small>{insights.topWorker?.tasks || 0} tasks</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#6f42c1' }}>⏰</div>
           <div className="stat-content">
@@ -352,14 +294,12 @@ ${tasksPerWorker > 25 ?
           </div>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
         {/* AI Recommendations */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
             💡 AI Recommendations
           </h3>
-          
           {insights.recommendations.map((rec, index) => (
             <div key={index} style={{
               padding: '1rem',
@@ -381,9 +321,7 @@ ${tasksPerWorker > 25 ?
                 </span>
                 <h4 style={{ margin: 0, color: 'var(--brand-primary)' }}>{rec.title}</h4>
               </div>
-              
               <p style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>{rec.description}</p>
-              
               <ul style={{ margin: 0, paddingLeft: '1rem' }}>
                 {rec.actions.map((action, i) => (
                   <li key={i} style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>{action}</li>
@@ -392,13 +330,11 @@ ${tasksPerWorker > 25 ?
             </div>
           ))}
         </div>
-
         {/* Interactive AI Chat */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
             💬 Ask AI Assistant
           </h3>
-          
           {/* Quick Questions */}
           <div style={{ marginBottom: '1rem' }}>
             <h4 style={{ fontSize: '0.9rem', marginBottom: '0.5rem', color: '#666' }}>Quick Questions:</h4>
@@ -422,7 +358,6 @@ ${tasksPerWorker > 25 ?
               ))}
             </div>
           </div>
-
           {/* Chat History */}
           <div style={{ 
             maxHeight: '400px', 
@@ -466,5 +401,4 @@ ${tasksPerWorker > 25 ?
     </div>
   );
 };
-
 export default AIInsights;

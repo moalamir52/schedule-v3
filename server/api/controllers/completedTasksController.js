@@ -16,23 +16,17 @@ const getCompletedTasks = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[COMPLETED-TASKS] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
 
 const removeCompletedTasks = async (req, res) => {
   try {
-    console.log('[REMOVE-COMPLETED] Starting to remove completed tasks from schedule...');
-    
     // Get current schedule and history
     const [scheduledTasks, allHistory] = await Promise.all([
       db.getScheduledTasks(),
       db.getAllHistory()
     ]);
-    
-    console.log(`[REMOVE-COMPLETED] Found ${scheduledTasks.length} scheduled tasks`);
-    console.log(`[REMOVE-COMPLETED] Found ${allHistory.length} history records`);
     
     // Debug matching
     debugTaskMatching(scheduledTasks, allHistory);
@@ -53,15 +47,13 @@ const removeCompletedTasks = async (req, res) => {
       });
       
       if (isCompleted) {
-        console.log(`[REMOVE-COMPLETED] Removing completed task: ${task.CustomerID} - ${task.CarPlate} on ${taskDate.toDateString()}`);
+        console.log(`Task completed: ${task.CustomerID} - ${task.CarPlate}`);
         return false;
       }
       return true;
     });
     
     const removedCount = scheduledTasks.length - activeTasks.length;
-    console.log(`[REMOVE-COMPLETED] Removed ${removedCount} completed tasks`);
-    
     if (removedCount > 0) {
       // Update database with active tasks only
       const formattedTasks = activeTasks.map(task => ({
@@ -81,8 +73,7 @@ const removeCompletedTasks = async (req, res) => {
       }));
       
       await db.clearAndWriteSchedule(formattedTasks);
-      console.log(`[REMOVE-COMPLETED] Updated schedule with ${formattedTasks.length} active tasks`);
-    }
+      }
     
     res.json({
       success: true,
@@ -92,7 +83,6 @@ const removeCompletedTasks = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[REMOVE-COMPLETED] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -118,27 +108,11 @@ function parseHistoryDate(dateStr) {
 
 // Debug function to check matching
 function debugTaskMatching(scheduledTasks, allHistory) {
-  console.log('\n[DEBUG] Task Matching Analysis:');
-  console.log(`Scheduled tasks: ${scheduledTasks.length}`);
-  console.log(`History records: ${allHistory.length}`);
-  
   if (scheduledTasks.length > 0 && allHistory.length > 0) {
     const sampleTask = scheduledTasks[0];
     const sampleHistory = allHistory[0];
     
-    console.log('\nSample scheduled task:', {
-      CustomerID: sampleTask.CustomerID,
-      CarPlate: sampleTask.CarPlate,
-      AppointmentDate: sampleTask.AppointmentDate,
-      Day: sampleTask.Day
-    });
-    
-    console.log('\nSample history record:', {
-      CustomerID: sampleHistory.CustomerID,
-      CarPlate: sampleHistory.CarPlate,
-      WashDate: sampleHistory.WashDate,
-      Status: sampleHistory.Status
-    });
+    console.log('Sample task:', sampleTask.CustomerID, sampleTask.CarPlate);
   }
 }
 

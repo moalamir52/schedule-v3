@@ -1,52 +1,40 @@
 import React, { useState, useEffect } from 'react';
-
 const PerformanceMetrics = ({ onBack }) => {
   const [performanceData, setPerformanceData] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     loadPerformanceData();
   }, []);
-
   const loadPerformanceData = async () => {
     try {
       setLoading(true);
-      
       const [clientsRes, workersRes, scheduleRes] = await Promise.all([
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/workers`),
         fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/current`)
       ]);
-      
       const clients = await clientsRes.json();
       const workers = await workersRes.json();
       const scheduleData = await scheduleRes.json();
-      
       const activeClients = clients.filter(c => c.Status === 'Active');
       const activeWorkers = workers.filter(w => w.Status === 'Active');
       const assignments = scheduleData.assignments || [];
-
       // Calculate total company revenue
       const totalCompanyRevenue = activeClients.reduce((sum, client) => sum + (parseFloat(client.Fee) || 0), 0);
       const totalTasks = assignments.length;
-      
       // Worker performance analysis
       const workerPerformance = activeWorkers.map(worker => {
         const workerAssignments = assignments.filter(a => 
           a.workerName === worker.Name || a.workerId === worker.WorkerID
         );
-        
         const clientsAssigned = new Set(workerAssignments.map(a => a.customerId)).size;
         const workerTasks = workerAssignments.length;
-        
         // Calculate revenue based on worker's share of total tasks
         const revenueShare = totalTasks > 0 ? (workerTasks / totalTasks) : 0;
         const revenue = Math.floor(totalCompanyRevenue * revenueShare);
-        
         // Calculate efficiency based on workload distribution
         const avgTasksPerWorker = totalTasks / activeWorkers.length;
         const efficiency = avgTasksPerWorker > 0 ? Math.min(100, Math.floor((workerTasks / avgTasksPerWorker) * 100)) : 100;
-
         return {
           name: worker.Name,
           workerId: worker.WorkerID,
@@ -57,49 +45,40 @@ const PerformanceMetrics = ({ onBack }) => {
           area: worker.Area || 'Unassigned'
         };
       });
-
       // Schedule efficiency metrics
       const totalPossibleSlots = activeWorkers.length * 6 * 13; // 6 days * 13 time slots
       const utilizedSlots = assignments.length;
       const scheduleEfficiency = (utilizedSlots / totalPossibleSlots * 100).toFixed(1);
-
       // Service type distribution
       const serviceTypes = assignments.reduce((acc, assignment) => {
         const type = assignment.washType || 'Unknown';
         acc[type] = (acc[type] || 0) + 1;
         return acc;
       }, {});
-
       // Daily distribution
       const dailyDistribution = assignments.reduce((acc, assignment) => {
         const day = assignment.day || 'Unknown';
         acc[day] = (acc[day] || 0) + 1;
         return acc;
       }, {});
-
       // Time slot distribution
       const timeDistribution = assignments.reduce((acc, assignment) => {
         const time = assignment.time || 'Unknown';
         acc[time] = (acc[time] || 0) + 1;
         return acc;
       }, {});
-
       // Package performance
       const packagePerformance = activeClients.reduce((acc, client) => {
         const pkg = client.Washman_Package || 'Unknown';
         const clientAssignments = assignments.filter(a => a.customerId === client.CustomerID);
-        
         if (!acc[pkg]) {
           acc[pkg] = { clients: 0, assignments: 0, revenue: 0 };
         }
-        
         acc[pkg].clients += 1;
         acc[pkg].assignments += clientAssignments.length;
         acc[pkg].revenue += parseFloat(client.Fee) || 0;
-        
         return acc;
       }, {});
-
       setPerformanceData({
         workerPerformance: workerPerformance.sort((a, b) => b.monthlyRevenue - a.monthlyRevenue),
         scheduleEfficiency: parseFloat(scheduleEfficiency),
@@ -134,12 +113,10 @@ const PerformanceMetrics = ({ onBack }) => {
         }))
       });
     } catch (error) {
-      console.error('Error loading performance data:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -148,7 +125,6 @@ const PerformanceMetrics = ({ onBack }) => {
       </div>
     );
   }
-
   return (
     <div className="home-page">
       <div className="page-header">
@@ -157,12 +133,10 @@ const PerformanceMetrics = ({ onBack }) => {
             ← Back to Reports
           </button>
         </div>
-        
         <div className="header-center">
           <h1>📈 Performance Metrics</h1>
         </div>
       </div>
-
       {/* Performance Overview */}
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card">
@@ -173,7 +147,6 @@ const PerformanceMetrics = ({ onBack }) => {
             <small>{performanceData.utilizedSlots} of {performanceData.totalPossibleSlots} slots</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#17a2b8' }}>📋</div>
           <div className="stat-content">
@@ -182,7 +155,6 @@ const PerformanceMetrics = ({ onBack }) => {
             <small>current schedule</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#fd7e14' }}>👷</div>
           <div className="stat-content">
@@ -191,7 +163,6 @@ const PerformanceMetrics = ({ onBack }) => {
             <small>operational staff</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#6f42c1' }}>⚡</div>
           <div className="stat-content">
@@ -203,7 +174,6 @@ const PerformanceMetrics = ({ onBack }) => {
           </div>
         </div>
       </div>
-
       {/* Worker Performance */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -254,7 +224,6 @@ const PerformanceMetrics = ({ onBack }) => {
           </table>
         </div>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
         {/* Service Type Distribution */}
         <div className="card">
@@ -288,7 +257,6 @@ const PerformanceMetrics = ({ onBack }) => {
             </div>
           ))}
         </div>
-
         {/* Daily Distribution */}
         <div className="card">
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -325,7 +293,6 @@ const PerformanceMetrics = ({ onBack }) => {
             ))}
         </div>
       </div>
-
       {/* Time Distribution */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -353,7 +320,6 @@ const PerformanceMetrics = ({ onBack }) => {
           ))}
         </div>
       </div>
-
       {/* Package Performance */}
       <div className="card">
         <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
@@ -401,5 +367,4 @@ const PerformanceMetrics = ({ onBack }) => {
     </div>
   );
 };
-
 export default PerformanceMetrics;

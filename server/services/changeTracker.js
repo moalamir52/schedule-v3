@@ -9,15 +9,13 @@ class ChangeTracker {
   // تسجيل مستخدم نشط
   registerUser(userId) {
     this.activeUsers.add(userId);
-    console.log(`[TRACKER] User ${userId} is now active`);
-  }
+    }
 
   // إلغاء تسجيل مستخدم
   unregisterUser(userId) {
     this.activeUsers.delete(userId);
     this.pendingChanges.delete(userId);
-    console.log(`[TRACKER] User ${userId} disconnected`);
-  }
+    }
 
   // إضافة تغيير معلق
   addPendingChange(userId, changeData) {
@@ -30,8 +28,7 @@ class ChangeTracker {
       timestamp: Date.now()
     });
     
-    console.log(`[TRACKER] Change added for user ${userId}`);
-  }
+    }
 
   // التحقق من وجود تغييرات معلقة
   hasUnsavedChanges(userId = null) {
@@ -52,8 +49,7 @@ class ChangeTracker {
   clearPendingChanges(userId) {
     this.pendingChanges.delete(userId);
     this.lastSaveTime = Date.now();
-    console.log(`[TRACKER] Changes cleared for user ${userId}`);
-  }
+    }
 
   // الحصول على حالة جميع المستخدمين
   getSystemStatus() {
@@ -74,13 +70,9 @@ class ChangeTracker {
     const status = this.getSystemStatus();
     
     if (!status.canSafelyRestart) {
-      console.warn(`[TRACKER] ⚠️  Cannot restart safely!`);
-      console.warn(`[TRACKER] ${status.usersWithUnsavedChanges} users have unsaved changes`);
-      console.warn(`[TRACKER] Total pending changes: ${status.totalPendingChanges}`);
       return false;
     }
     
-    console.log(`[TRACKER] ✅ Safe to restart - no pending changes`);
     return true;
   }
 }

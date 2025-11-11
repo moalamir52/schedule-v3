@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const AuditReportPage = () => {
   const [logs, setLogs] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -11,11 +10,9 @@ const AuditReportPage = () => {
     limit: 50
   });
   const [summary, setSummary] = useState({});
-
   useEffect(() => {
     loadAuditLogs();
   }, []);
-
   const loadAuditLogs = async () => {
     try {
       setIsLoading(true);
@@ -23,21 +20,17 @@ const AuditReportPage = () => {
       Object.keys(filters).forEach(key => {
         if (filters[key]) queryParams.append(key, filters[key]);
       });
-
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/audit/logs?${queryParams}`);
       const data = await response.json();
-      
       if (data.success) {
         setLogs(data.logs);
         generateSummary(data.logs);
       }
     } catch (error) {
-      console.error('Error loading audit logs:', error);
-    } finally {
+      } finally {
       setIsLoading(false);
     }
   };
-
   const generateSummary = (logs) => {
     const summary = logs.reduce((acc, log) => {
       acc[log.Action] = (acc[log.Action] || 0) + 1;
@@ -45,11 +38,9 @@ const AuditReportPage = () => {
     }, {});
     setSummary(summary);
   };
-
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
-
   const getActionColor = (action) => {
     const colors = {
       'TASK_UPDATE': '#17a2b8',
@@ -59,7 +50,6 @@ const AuditReportPage = () => {
     };
     return colors[action] || '#6c757d';
   };
-
   const formatTimestamp = (timestamp) => {
     return new Date(timestamp).toLocaleString('en-US', {
       year: 'numeric',
@@ -69,7 +59,6 @@ const AuditReportPage = () => {
       minute: '2-digit'
     });
   };
-
   return (
     <div style={{ padding: '20px', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
@@ -98,7 +87,6 @@ const AuditReportPage = () => {
         >
           ← Back to Reports
         </button>
-        
         <h1 style={{
           color: '#28a745',
           fontSize: '2rem',
@@ -107,10 +95,8 @@ const AuditReportPage = () => {
         }}>
           📊 Schedule Audit Report
         </h1>
-        
         <div style={{ width: '40px' }}></div>
       </div>
-
       {/* Filters */}
       <div style={{
         backgroundColor: 'white',
@@ -208,7 +194,6 @@ const AuditReportPage = () => {
           </button>
         </div>
       </div>
-
       {/* Summary */}
       {Object.keys(summary).length > 0 && (
         <div style={{
@@ -239,7 +224,6 @@ const AuditReportPage = () => {
           </div>
         </div>
       )}
-
       {/* Logs Table */}
       <div style={{
         backgroundColor: 'white',
@@ -256,7 +240,6 @@ const AuditReportPage = () => {
         }}>
           <h3 style={{ margin: 0, color: '#495057' }}>Audit Logs ({logs.length})</h3>
         </div>
-
         {isLoading ? (
           <div style={{ padding: '40px', textAlign: 'center' }}>
             <div style={{ color: '#6c757d', fontSize: '1.1rem' }}>Loading audit logs...</div>
@@ -337,5 +320,4 @@ const AuditReportPage = () => {
     </div>
   );
 };
-
 export default AuditReportPage;

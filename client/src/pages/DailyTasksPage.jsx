@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const DailyTasksPage = () => {
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -17,13 +16,10 @@ const DailyTasksPage = () => {
     return todayName === 'Sunday' ? 'Monday' : todayName;
   });
   const [weekOffset, setWeekOffset] = useState(0); // 0 = this week, -1 = last week, 1 = next week
-  
   const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  
   const getWeekDateRange = (offset) => {
     const today = new Date();
     const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-    
     // Find the Monday of current work week (Monday is start of work week)
     let mondayOfWeek = new Date(today);
     if (currentDay === 0) { // Sunday - go to next Monday
@@ -33,24 +29,19 @@ const DailyTasksPage = () => {
     } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
       mondayOfWeek.setDate(today.getDate() - currentDay + 1);
     }
-    
     // Add week offset
     mondayOfWeek.setDate(mondayOfWeek.getDate() + (offset * 7));
-    
     const endOfWeek = new Date(mondayOfWeek);
     endOfWeek.setDate(mondayOfWeek.getDate() + 5); // Saturday
-    
     return {
       start: mondayOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       end: endOfWeek.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     };
   };
-
   useEffect(() => {
     loadTodayTasks(selectedDay, weekOffset);
     loadWorkers();
   }, [selectedDay, weekOffset]);
-
   const loadWorkers = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers`);
@@ -60,7 +51,6 @@ const DailyTasksPage = () => {
       // Failed to load workers
     }
   };
-
   const loadTodayTasks = async (dayToLoad, offset) => {
     const day = dayToLoad || selectedDay;
     const weekOff = offset !== undefined ? offset : weekOffset;
@@ -68,13 +58,9 @@ const DailyTasksPage = () => {
       setIsLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/today?day=${day}&weekOffset=${weekOff}`);
       const data = await response.json();
-      
-
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load tasks');
       }
-      
       setTasks(data.tasks || []);
     } catch (err) {
       setError(err.message);
@@ -82,7 +68,6 @@ const DailyTasksPage = () => {
       setIsLoading(false);
     }
   };
-
   const updateTask = async (taskId, newWashType, newWorkerName) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-wash-type`, {
@@ -92,13 +77,10 @@ const DailyTasksPage = () => {
         },
         body: JSON.stringify({ taskId, newWashType, newWorkerName })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to update task');
       }
-      
       // Update local state
       setTasks(prev => 
         prev.map(task => 
@@ -107,19 +89,15 @@ const DailyTasksPage = () => {
             : task
         )
       );
-      
       setEditingTask(null);
     } catch (err) {
       alert(`Error updating task: ${err.message}`);
     }
   };
-
   const completeTask = async (task) => {
     if (completingTasks.has(task.id)) return;
-    
     try {
       setCompletingTasks(prev => new Set([...prev, task.id]));
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/complete`, {
         method: 'POST',
         headers: {
@@ -136,27 +114,21 @@ const DailyTasksPage = () => {
           actualWashDate: task.actualWashDate
         })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to complete task');
       }
-      
       // تأكد من نجاح العملية قبل حذف المهمة من الـ UI
       if (data.success) {
         // Remove completed task from list
         setTasks(prev => prev.filter(t => t.id !== task.id));
-        
         // إظهار رسالة نجاح
         alert(`✅ Task completed successfully: ${task.customerName} - Villa ${task.villa}`);
       } else {
         throw new Error(data.error || 'Task completion was not confirmed');
       }
-      
     } catch (err) {
       alert(`❌ Error completing task: ${err.message}\n\nPlease try again or check if the task was actually completed.`);
-      
       // إعادة تحميل المهام للتأكد من الحالة الحقيقية
       setTimeout(() => {
         loadTodayTasks(selectedDay, weekOffset);
@@ -169,16 +141,12 @@ const DailyTasksPage = () => {
       });
     }
   };
-
   const cancelTask = async (task) => {
     if (completingTasks.has(task.id)) return;
-    
     const confirmed = window.confirm(`Are you sure you want to cancel this task?\n\nCustomer: ${task.customerName}\nVilla: ${task.villa}\nCar: ${task.carPlate || 'N/A'}\nTime: ${task.time}`);
     if (!confirmed) return;
-    
     try {
       setCompletingTasks(prev => new Set([...prev, task.id]));
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/cancel`, {
         method: 'POST',
         headers: {
@@ -188,26 +156,20 @@ const DailyTasksPage = () => {
           taskId: task.id
         })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to cancel task');
       }
-      
       // تأكد من نجاح العملية قبل حذف المهمة من الـ UI
       if (data.success) {
         // Remove cancelled task from list
         setTasks(prev => prev.filter(t => t.id !== task.id));
-        
         alert(`✅ Task cancelled successfully: ${task.customerName} - Villa ${task.villa}`);
       } else {
         throw new Error(data.error || 'Task cancellation was not confirmed');
       }
-      
     } catch (err) {
       alert(`❌ Error cancelling task: ${err.message}\n\nPlease try again or refresh to check current status.`);
-      
       // إعادة تحميل المهام للتأكد من الحالة الحقيقية
       setTimeout(() => {
         loadTodayTasks(selectedDay, weekOffset);
@@ -220,16 +182,12 @@ const DailyTasksPage = () => {
       });
     }
   };
-
   const completeAllTasks = async () => {
     if (completingAll || tasks.length === 0) return;
-    
     const confirmed = window.confirm(`Are you sure you want to complete all ${tasks.length} tasks? This action cannot be undone.`);
     if (!confirmed) return;
-    
     try {
       setCompletingAll(true);
-      
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/complete-all`, {
         method: 'POST',
         headers: {
@@ -237,30 +195,23 @@ const DailyTasksPage = () => {
         },
         body: JSON.stringify({ tasks })
       });
-      
       const data = await response.json();
-      
       if (!response.ok) {
         throw new Error(data.error || 'Failed to complete all tasks');
       }
-      
       // تأكد من نجاح العملية قبل حذف المهام من الـ UI
       if (data.success) {
         // Clear all tasks
         setTasks([]);
-        
         const message = data.skippedCount > 0 
           ? `✅ Successfully completed ${data.completedCount} tasks!\n⚠️ Skipped ${data.skippedCount} already completed tasks.`
           : `✅ Successfully completed ${data.completedCount} tasks!`;
-        
         alert(message);
       } else {
         throw new Error(data.error || 'Task completion was not confirmed');
       }
-      
     } catch (err) {
       alert(`❌ Error completing all tasks: ${err.message}\n\nPlease refresh and check which tasks were actually completed.`);
-      
       // إعادة تحميل المهام للتأكد من الحالة الحقيقية
       setTimeout(() => {
         loadTodayTasks(selectedDay, weekOffset);
@@ -269,11 +220,9 @@ const DailyTasksPage = () => {
       setCompletingAll(false);
     }
   };
-
   const getWashTypeColor = (washType) => {
     return washType === 'INT' ? '#ADD8E6' : '#FFE5B4';
   };
-
   const getCurrentDate = () => {
     const today = new Date();
     return today.toLocaleDateString('en-US', { 
@@ -283,7 +232,6 @@ const DailyTasksPage = () => {
       day: 'numeric' 
     });
   };
-
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
@@ -326,7 +274,6 @@ const DailyTasksPage = () => {
         >
           ←
         </button>
-        
         <div style={{ textAlign: 'center', flex: 1 }}>
           <h1 style={{
             color: '#28a745',
@@ -378,7 +325,6 @@ const DailyTasksPage = () => {
                 Next Week →
               </button>
             </div>
-            
             {/* Day Selection */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
               <p style={{
@@ -407,7 +353,6 @@ const DailyTasksPage = () => {
                   // Calculate date for this day
                   const today = new Date();
                   const currentDay = today.getDay();
-                  
                   let mondayOfWeek = new Date(today);
                   if (currentDay === 0) {
                     mondayOfWeek.setDate(today.getDate() + 1);
@@ -416,29 +361,23 @@ const DailyTasksPage = () => {
                   } else {
                     mondayOfWeek.setDate(today.getDate() - currentDay + 1);
                   }
-                  
                   mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
-                  
                   const dayOffsets = {
                     'Monday': 0, 'Tuesday': 1, 'Wednesday': 2,
                     'Thursday': 3, 'Friday': 4, 'Saturday': 5
                   };
-                  
                   const dayDate = new Date(mondayOfWeek);
                   dayDate.setDate(mondayOfWeek.getDate() + dayOffsets[day]);
-                  
                   const dateStr = dayDate.toLocaleDateString('en-US', {
                     month: 'short',
                     day: 'numeric'
                   });
-                  
                   return (
                     <option key={day} value={day}>{day} ({dateStr})</option>
                   );
                 })}
               </select>
             </div>
-            
             {/* Selected Date Display */}
             <div style={{
               backgroundColor: '#e8f5e9',
@@ -452,7 +391,6 @@ const DailyTasksPage = () => {
               📅 {(() => {
                 const today = new Date();
                 const currentDay = today.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-                
                 // Find the Monday of current work week
                 let mondayOfWeek = new Date(today);
                 if (currentDay === 0) { // Sunday - go to next Monday
@@ -462,19 +400,15 @@ const DailyTasksPage = () => {
                 } else { // Tuesday-Saturday (2-6) - go back to Monday of this work week
                   mondayOfWeek.setDate(today.getDate() - currentDay + 1);
                 }
-                
                 // Add week offset
                 mondayOfWeek.setDate(mondayOfWeek.getDate() + (weekOffset * 7));
-                
                 // Calculate target date based on selected day
                 const dayOffsets = {
                   'Monday': 0, 'Tuesday': 1, 'Wednesday': 2,
                   'Thursday': 3, 'Friday': 4, 'Saturday': 5
                 };
-                
                 const targetDate = new Date(mondayOfWeek);
                 targetDate.setDate(mondayOfWeek.getDate() + dayOffsets[selectedDay]);
-                
                 return targetDate.toLocaleDateString('en-US', { 
                   weekday: 'long', 
                   year: 'numeric', 
@@ -485,17 +419,14 @@ const DailyTasksPage = () => {
             </div>
           </div>
         </div>
-        
         <div style={{ width: '40px' }}></div>
       </div>
-
       {/* Content */}
       {isLoading && (
         <div style={{ textAlign: 'center', padding: '40px' }}>
           <div style={{ color: '#6c757d', fontSize: '1.1rem' }}>Loading today's tasks...</div>
         </div>
       )}
-
       {error && (
         <div style={{
           backgroundColor: '#f8d7da',
@@ -508,7 +439,6 @@ const DailyTasksPage = () => {
           Error: {error}
         </div>
       )}
-
       {!isLoading && !error && tasks.length === 0 && (
         <div style={{
           textAlign: 'center',
@@ -522,7 +452,6 @@ const DailyTasksPage = () => {
           <p style={{ color: '#6c757d' }}>All tasks have been completed or no tasks were scheduled.</p>
         </div>
       )}
-
       {!isLoading && !error && tasks.length > 0 && (
         <div>
           <div style={{
@@ -570,7 +499,6 @@ const DailyTasksPage = () => {
                   try {
                     const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/debug-status?day=${selectedDay}&weekOffset=${weekOffset}`);
                     const data = await response.json();
-                    
                     if (data.success) {
                       const message = `🔍 Debug Info for ${selectedDay}:\n\n` +
                         `📋 Scheduled Tasks: ${data.scheduledCount}\n` +
@@ -579,7 +507,6 @@ const DailyTasksPage = () => {
                         `⏳ Remaining Tasks: ${data.remainingCount}\n\n` +
                         `📅 Target Date: ${data.targetDate}\n\n` +
                         `${data.details || ''}`;
-                      
                       alert(message);
                     } else {
                       alert('❌ Failed to get debug info: ' + data.error);
@@ -612,24 +539,19 @@ const DailyTasksPage = () => {
                     `Use this ONLY if tasks are stuck after completion.\n\n` +
                     `Continue?`
                   );
-                  
                   if (!confirmed) return;
-                  
                   try {
                     const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/force-cleanup`, {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ day: selectedDay, weekOffset: weekOffset })
                     });
-                    
                     const data = await response.json();
-                    
                     if (data.success) {
                       alert(`✅ Force cleanup completed!\n\n` +
                         `🧹 Cleaned up: ${data.cleanedCount} tasks\n` +
                         `⏭️ Skipped: ${data.skippedCount} tasks\n\n` +
                         `${data.message || ''}`);
-                      
                       // Refresh tasks after cleanup
                       loadTodayTasks(selectedDay, weekOffset);
                     } else {
@@ -654,7 +576,6 @@ const DailyTasksPage = () => {
               </button>
             </div>
           </div>
-
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
@@ -734,7 +655,6 @@ const DailyTasksPage = () => {
                     </button>
                   </div>
                 </div>
-
                 <div style={{ marginBottom: '15px' }}>
                   <div style={{
                     display: 'grid',
@@ -767,7 +687,6 @@ const DailyTasksPage = () => {
                     )}
                   </div>
                 </div>
-
                 {editingTask === task.id ? (
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
@@ -876,5 +795,4 @@ const DailyTasksPage = () => {
     </div>
   );
 };
-
 export default DailyTasksPage;

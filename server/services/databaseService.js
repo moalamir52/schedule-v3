@@ -1,23 +1,16 @@
 
 
-
-
 class DatabaseService {
   constructor() {
     this.init();
   }
 
   init() {
-    console.log('🚀 Initializing Supabase database service...');
     this.supabase = require('./supabaseService');
-    console.log('✅ Supabase service initialized');
-  }
-
-
+    }
 
   // Customers methods
   async getCustomers() {
-    console.log('[DB] Using Supabase for customers');
     return await this.supabase.getCustomers();
   }
 
@@ -56,7 +49,6 @@ class DatabaseService {
     try {
       return await this.supabase.getWorkers();
     } catch (error) {
-      console.error('[DB] Error fetching workers:', error);
       return [];
     }
   }
@@ -72,23 +64,16 @@ class DatabaseService {
   // Scheduled tasks methods
   async getScheduledTasks() {
     try {
-      console.log('[DB] Fetching ScheduledTasks from Supabase...');
       const tasks = await this.supabase.request('GET', '/ScheduledTasks?order=AppointmentDate.asc,Time.asc');
-      console.log(`[DB] Retrieved ${tasks.length} tasks from ScheduledTasks`);
       if (tasks.length > 0) {
-        console.log('[DB] Sample task:', tasks[0]);
-      }
+        }
       return tasks;
     } catch (error) {
-      console.log(`[DB] Error fetching ScheduledTasks:`, error.message);
       // Try without ordering
       try {
-        console.log('[DB] Trying without ordering...');
         const tasks = await this.supabase.request('GET', '/ScheduledTasks');
-        console.log(`[DB] Retrieved ${tasks.length} tasks without ordering`);
         return tasks;
       } catch (error2) {
-        console.log(`[DB] Second attempt failed:`, error2.message);
         return [];
       }
     }
@@ -137,7 +122,6 @@ class DatabaseService {
       
       return 'GLOGO-2511055';
     } catch (error) {
-      console.error('Error getting next invoice ref:', error);
       return 'GLOGO-2511055';
     }
   }
@@ -213,7 +197,6 @@ class DatabaseService {
 
   // Batch operations for better performance
   async batchDeleteTasks(taskIds) {
-    console.log(`[DB] Batch deleting ${taskIds.length} tasks...`);
     return await this.supabase.deleteScheduledTasks(taskIds);
   }
 
@@ -237,17 +220,35 @@ class DatabaseService {
         const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
         const carPlate = taskId.substring(carPlateStart) || '';
         
-        console.log(`[DB] Completing task optimized: ${customerID} - ${day} - ${time} - ${carPlate}`);
         await this.deleteScheduledTask(customerID, day, time, carPlate);
-        console.log(`[DB] Task completed and removed from schedule`);
         return true;
       }
-      console.log(`[DB] Invalid taskId format: ${taskId}`);
       return false;
     } catch (error) {
-      console.error('[DB] Error in optimized task completion:', error);
       throw error;
     }
+  }
+
+  // Skipped customers methods
+  async addSkippedCustomer(skippedRecord) {
+    return await this.supabase.request('POST', '/SkippedCustomers', skippedRecord);
+  }
+
+  async getSkippedCustomers() {
+    try {
+      const result = await this.supabase.request('GET', '/SkippedCustomers?order=SkippedDate.desc');
+      return Array.isArray(result) ? result : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  async deleteSkippedCustomer(skippedId) {
+    return await this.supabase.request('DELETE', `/SkippedCustomers?SkippedID=eq.${skippedId}`);
+  }
+
+  async clearAllSkippedCustomers() {
+    return await this.supabase.request('DELETE', '/SkippedCustomers');
   }
 
   close() {

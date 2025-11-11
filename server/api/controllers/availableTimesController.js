@@ -12,7 +12,6 @@ const getAvailableTimes = async (req, res) => {
     res.json({ availableTimes });
     
   } catch (error) {
-    console.error('[AVAILABLE-TIMES] Error:', error);
     res.status(500).json({ error: 'Failed to get available times' });
   }
 };

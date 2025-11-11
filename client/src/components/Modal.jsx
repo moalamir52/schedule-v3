@@ -1,14 +1,11 @@
 import React from 'react';
-
 const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, showInput = false, inputValue = '', onInputChange, inputPlaceholder = '' }) => {
   if (!isOpen) return null;
-
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) {
       onClose();
     }
   };
-
   const getIcon = () => {
     switch (type) {
       case 'success': return '✅';
@@ -19,7 +16,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
       default: return 'ℹ️';
     }
   };
-
   const getButtonColor = () => {
     switch (type) {
       case 'success': return '#28a745';
@@ -29,7 +25,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
       default: return '#6c757d';
     }
   };
-
   return (
     <div style={{
       position: 'fixed',
@@ -55,7 +50,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
         <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>
           {getIcon()}
         </div>
-        
         {title && (
           <h3 style={{
             margin: '0 0 1rem 0',
@@ -65,7 +59,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
             {title}
           </h3>
         )}
-        
         <p style={{
           margin: '0 0 1.5rem 0',
           color: '#666',
@@ -74,7 +67,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
         }}>
           {message}
         </p>
-
         {showInput && (
           <input
             type="text"
@@ -93,7 +85,6 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
             autoFocus
           />
         )}
-        
         <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
           {type === 'confirm' || showInput ? (
             <>
@@ -150,5 +141,4 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
     </div>
   );
 };
-
 export default Modal;

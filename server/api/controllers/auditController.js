@@ -30,7 +30,6 @@ const getAuditLogs = async (filters = {}) => {
     
     return filteredLogs;
   } catch (error) {
-    console.error('Error fetching audit logs:', error);
     return [];
   }
 };

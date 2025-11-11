@@ -2,8 +2,6 @@ const db = require('../../services/databaseService');
 
 const getAvailableWorkers = async (req, res) => {
   try {
-    console.log('[AVAILABLE-WORKERS] Request received:', req.query);
-    
     const { day, time } = req.query;
     
     if (!day || !time) {
@@ -22,8 +20,6 @@ const getAvailableWorkers = async (req, res) => {
       { WorkerID: 'WORK-005', Name: 'Khaled', Status: 'Active' }
     ];
 
-    console.log('[AVAILABLE-WORKERS] Returning default workers');
-
     res.json({
       success: true,
       availableWorkers: defaultWorkers,
@@ -32,8 +28,6 @@ const getAvailableWorkers = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[AVAILABLE-WORKERS] Error:', error);
-    
     // Always return workers even on error
     res.json({ 
       success: true,
@@ -49,10 +43,7 @@ const getAvailableWorkers = async (req, res) => {
 
 const getSchedule = async (req, res) => {
   try {
-    console.log('[GET-SCHEDULE] Fetching scheduled tasks...');
     const assignments = await db.getScheduledTasks();
-    console.log('[GET-SCHEDULE] Found', assignments.length, 'scheduled tasks');
-    console.log('[GET-SCHEDULE] Sample tasks:', assignments.slice(0, 2));
     
     res.json({
       success: true,
@@ -62,8 +53,6 @@ const getSchedule = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[GET-SCHEDULE] Error:', error);
-    console.error('[GET-SCHEDULE] Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       error: error.message || 'Server error',
@@ -79,28 +68,15 @@ module.exports = {
   // Add other required exports as empty functions
   autoAssignSchedule: async (req, res) => {
     try {
-      console.log('[AUTO-ASSIGN] Starting auto assignment...');
-      console.log('[AUTO-ASSIGN] Request params:', req.params);
-      console.log('[AUTO-ASSIGN] Request body:', req.body);
-      
       // Build new schedule
       const { buildWeeklySchedule } = require('../../services/logicService');
       const weekOffset = parseInt(req.params?.weekOffset) || 0;
       
-      console.log(`[AUTO-ASSIGN] Building schedule for week offset: ${weekOffset}`);
       const newSchedule = await buildWeeklySchedule(weekOffset);
       
-      console.log(`[AUTO-ASSIGN] Generated ${newSchedule.length} tasks`);
-      
       if (newSchedule.length > 0) {
-        console.log('[AUTO-ASSIGN] Sample task:', newSchedule[0]);
-        
         // Save the new schedule
-        console.log('[AUTO-ASSIGN] Saving schedule to database...');
         await db.clearAndWriteSchedule(newSchedule);
-        console.log('[AUTO-ASSIGN] Schedule saved to database successfully');
-      } else {
-        console.log('[AUTO-ASSIGN] No tasks generated - check customers and workers data');
       }
       
       res.json({
@@ -111,8 +87,6 @@ module.exports = {
       });
       
     } catch (error) {
-      console.error('[AUTO-ASSIGN] Error:', error);
-      console.error('[AUTO-ASSIGN] Error stack:', error.stack);
       res.status(500).json({
         success: false,
         error: 'Auto-assignment failed',
@@ -124,10 +98,6 @@ module.exports = {
   updateTaskAssignment: (req, res) => res.json({ success: true, message: 'Not implemented' }),
   deleteTask: async (req, res) => {
     try {
-      console.log('[DELETE-TASK] Deleting task...');
-      console.log('[DELETE-TASK] Request params:', req.params);
-      console.log('[DELETE-TASK] Request body:', req.body);
-      
       const { customerId } = req.params;
       const { taskId } = req.body;
       
@@ -144,7 +114,6 @@ module.exports = {
       const result = await db.completeTaskOptimized(idToDelete);
       
       if (result) {
-        console.log('[DELETE-TASK] Task deleted successfully');
         res.json({
           success: true,
           message: 'Task deleted successfully',
@@ -158,7 +127,6 @@ module.exports = {
       }
       
     } catch (error) {
-      console.error('[DELETE-TASK] Error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to delete task',
@@ -168,9 +136,6 @@ module.exports = {
   },
   batchUpdateTasks: async (req, res) => {
     try {
-      console.log('[BATCH-UPDATE] Processing batch update...');
-      console.log('[BATCH-UPDATE] Request body:', req.body);
-      
       const { changes } = req.body;
       
       if (!changes || !Array.isArray(changes)) {
@@ -180,14 +145,10 @@ module.exports = {
         });
       }
       
-      console.log(`[BATCH-UPDATE] Processing ${changes.length} changes...`);
-      
       // Group changes by customer to handle slot swaps properly
       const customerUpdates = new Map();
       
       for (const change of changes) {
-        console.log('[BATCH-UPDATE] Processing change:', change);
-        
         // Handle wash type changes directly
         if (change.type === 'washTypeChange') {
           await db.updateWashType({
@@ -196,7 +157,6 @@ module.exports = {
             userId: req.headers['x-user-id'] || 'SYSTEM',
             userName: req.headers['x-user-name'] || 'System User'
           });
-          console.log(`[BATCH-UPDATE] ✅ Wash type changed to ${change.newWashType}`);
           continue;
         }
         
@@ -219,8 +179,6 @@ module.exports = {
       
       // Process each customer's updates
       for (const [customerID, customerChanges] of customerUpdates) {
-        console.log(`[BATCH-UPDATE] Processing ${customerChanges.length} changes for customer ${customerID}`);
-        
         // Use the first change to update all cars for this customer
         const firstChange = customerChanges[0];
         const assignmentData = {
@@ -233,12 +191,8 @@ module.exports = {
           userName: req.headers['x-user-name'] || 'System User'
         };
         
-        console.log('[BATCH-UPDATE] Calling saveAssignment with:', assignmentData);
         await db.saveAssignment(assignmentData);
-        console.log(`[BATCH-UPDATE] ✅ Customer ${customerID} processed successfully`);
       }
-      
-      console.log('[BATCH-UPDATE] ✅ All changes processed successfully');
       
       res.json({
         success: true,
@@ -248,7 +202,6 @@ module.exports = {
       });
       
     } catch (error) {
-      console.error('[BATCH-UPDATE] ❌ Error:', error);
       res.status(500).json({
         success: false,
         error: 'Failed to process batch update',
@@ -260,24 +213,39 @@ module.exports = {
   getWashHistory: (req, res) => res.json({ success: true, history: [] }),
   clearAllScheduleData: async (req, res) => {
     try {
-      console.log('[CLEAR-ALL] حذف جميع المهام...');
-      
-      // حذف جميع المهام المجدولة فقط
-      await db.clearAndWriteSchedule([]);
-      console.log('[CLEAR-ALL] تم حذف جميع المهام');
-      
+      const supabase = require('../../services/supabaseService');
+      await supabase.request('DELETE', '/ScheduledTasks?CustomerID=neq.');
       res.json({
         success: true,
-        message: 'تم حذف جميع المهام بنجاح',
+        message: 'تم حذف جميع المهام بنجاح بما فيها المقفولة',
         tasksCleared: true,
         timestamp: new Date().toISOString()
       });
       
     } catch (error) {
-      console.error('[CLEAR-ALL] خطأ:', error);
       res.status(500).json({
         success: false,
         error: 'فشل في حذف المهام',
+        details: error.message
+      });
+    }
+  },
+  getSkippedCustomers: async (req, res) => {
+    try {
+      const { getSkippedCustomers } = require('../../services/logicService');
+      const skippedCustomers = getSkippedCustomers();
+      
+      res.json({
+        success: true,
+        skippedCustomers: skippedCustomers,
+        totalSkipped: skippedCustomers.length,
+        message: `Found ${skippedCustomers.length} skipped customers`
+      });
+      
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get skipped customers',
         details: error.message
       });
     }

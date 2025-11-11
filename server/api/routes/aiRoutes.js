@@ -19,7 +19,6 @@ router.post('/chat', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('AI Chat Error:', error);
     res.status(500).json({ 
       success: false, 
       error: 'Failed to get AI response' 

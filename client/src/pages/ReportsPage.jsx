@@ -5,7 +5,6 @@ import PerformanceMetrics from '../components/reports/PerformanceMetrics';
 import OperationsReport from '../components/reports/OperationsReport';
 import AIInsights from '../components/reports/AIInsights';
 import AuditReportPage from './AuditReportPage';
-
 const StatCard = ({ title, value, subtitle, color, icon }) => (
   <div className="stat-card">
     <div className="stat-icon" style={{ color }}>{icon}</div>
@@ -16,11 +15,9 @@ const StatCard = ({ title, value, subtitle, color, icon }) => (
     </div>
   </div>
 );
-
 const ReportsPage = () => {
   const [activeReport, setActiveReport] = useState('overview');
   const [loading, setLoading] = useState(false);
-
   const reportTypes = [
     {
       id: 'overview',
@@ -72,7 +69,6 @@ const ReportsPage = () => {
       color: '#e91e63'
     }
   ];
-
   const renderActiveReport = () => {
     switch (activeReport) {
       case 'financial':
@@ -91,7 +87,6 @@ const ReportsPage = () => {
         return renderOverview();
     }
   };
-
   const renderOverview = () => (
     <div className="home-page">
       <div className="page-header">
@@ -103,12 +98,10 @@ const ReportsPage = () => {
             ← Dashboard
           </button>
         </div>
-        
         <div className="header-center">
           <h1>📊 Reports & Analytics</h1>
           <p>Comprehensive business insights and performance metrics</p>
         </div>
-        
         <div className="header-actions">
           <button 
             className="btn btn-primary"
@@ -118,7 +111,6 @@ const ReportsPage = () => {
           </button>
         </div>
       </div>
-
       <div className="modules-grid">
         {reportTypes.filter(report => report.id !== 'overview').map(report => (
           <div
@@ -135,23 +127,18 @@ const ReportsPage = () => {
           </div>
         ))}
       </div>
-
       {/* Quick Stats Overview */}
       <QuickStatsOverview />
     </div>
   );
-
   return renderActiveReport();
 };
-
 const QuickStatsOverview = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     loadQuickStats();
   }, []);
-
   const loadQuickStats = async () => {
     try {
       // Load basic stats from existing APIs
@@ -159,13 +146,10 @@ const QuickStatsOverview = () => {
         fetch(`${import.meta.env.VITE_API_URL}/api/clients`),
         fetch(`${import.meta.env.VITE_API_URL}/api/workers`)
       ]);
-
       const clients = await clientsRes.json();
       const workers = await workersRes.json();
-
       const activeClients = clients.filter(c => c.Status === 'Active').length;
       const activeWorkers = workers.filter(w => w.Status === 'Active').length;
-      
       // Calculate estimated monthly revenue
       const monthlyRevenue = clients
         .filter(c => c.Status === 'Active')
@@ -173,7 +157,6 @@ const QuickStatsOverview = () => {
           const fee = parseFloat(client.Fee) || 0;
           return sum + fee;
         }, 0);
-
       setStats({
         activeClients,
         activeWorkers,
@@ -181,12 +164,10 @@ const QuickStatsOverview = () => {
         totalClients: clients.length
       });
     } catch (error) {
-      console.error('Error loading quick stats:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '2rem' }}>
@@ -195,15 +176,12 @@ const QuickStatsOverview = () => {
       </div>
     );
   }
-
   if (!stats) return null;
-
   return (
     <div style={{ marginTop: '3rem' }}>
       <h2 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
         📈 Quick Overview
       </h2>
-      
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#28a745' }}>👥</div>
@@ -213,7 +191,6 @@ const QuickStatsOverview = () => {
             <small>out of {stats.totalClients} total</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#17a2b8' }}>👷</div>
           <div className="stat-content">
@@ -222,7 +199,6 @@ const QuickStatsOverview = () => {
             <small>operational staff</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#fd7e14' }}>💰</div>
           <div className="stat-content">
@@ -231,7 +207,6 @@ const QuickStatsOverview = () => {
             <small>estimated from active clients</small>
           </div>
         </div>
-
         <div className="stat-card">
           <div className="stat-icon" style={{ color: '#6f42c1' }}>📊</div>
           <div className="stat-content">
@@ -244,5 +219,4 @@ const QuickStatsOverview = () => {
     </div>
   );
 };
-
 export default ReportsPage;

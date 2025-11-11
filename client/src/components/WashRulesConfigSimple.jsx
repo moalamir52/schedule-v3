@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-
 const WashRulesConfigSimple = () => {
   const [washRules, setWashRules] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [loading, setLoading] = useState(false);
-
   // Default package templates
   const packageTemplates = [
     {
@@ -25,7 +23,6 @@ const WashRulesConfigSimple = () => {
       }
     }
   ];
-
   const [newRule, setNewRule] = useState({
     name: '',
     singleCar: ['EXT'],
@@ -34,11 +31,9 @@ const WashRulesConfigSimple = () => {
     }
   });
   const [editingIndex, setEditingIndex] = useState(-1);
-
   useEffect(() => {
     loadWashRules();
   }, []);
-
   const loadWashRules = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/wash-rules`);
@@ -54,7 +49,6 @@ const WashRulesConfigSimple = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to load wash rules:', error);
       const savedRules = localStorage.getItem('washRules');
       if (savedRules) {
         setWashRules(JSON.parse(savedRules));
@@ -63,7 +57,6 @@ const WashRulesConfigSimple = () => {
       }
     }
   };
-
   const saveRulesToStorage = async (rules) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/wash-rules`, {
@@ -71,24 +64,17 @@ const WashRulesConfigSimple = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rules })
       });
-      
       if (response.ok) {
-
       } else {
-        console.error('Failed to save rules to server');
-      }
-      
+        }
       localStorage.setItem('washRules', JSON.stringify(rules));
     } catch (error) {
-      console.error('Failed to save rules:', error);
       localStorage.setItem('washRules', JSON.stringify(rules));
     }
   };
-
   const addVisitToRule = () => {
     const newVisitIndex = newRule.singleCar.length + 1;
     const visitKey = `visit${newVisitIndex}`;
-    
     setNewRule({
       ...newRule,
       singleCar: [...newRule.singleCar, 'EXT'],
@@ -98,19 +84,15 @@ const WashRulesConfigSimple = () => {
       }
     });
   };
-
   const removeVisitFromRule = (index) => {
     const updatedVisits = newRule.singleCar.filter((_, i) => i !== index);
     const updatedMultiCar = { ...newRule.multiCar };
-    
     // Remove the visit from multiCar and renumber remaining visits
     const newMultiCar = {};
     let newVisitIndex = 1;
-    
     for (let i = 0; i < updatedVisits.length; i++) {
       const oldVisitKey = `visit${i + 1}`;
       const newVisitKey = `visit${newVisitIndex}`;
-      
       if (i < index) {
         newMultiCar[newVisitKey] = updatedMultiCar[oldVisitKey];
       } else {
@@ -119,14 +101,12 @@ const WashRulesConfigSimple = () => {
       }
       newVisitIndex++;
     }
-    
     setNewRule({
       ...newRule,
       singleCar: updatedVisits,
       multiCar: newMultiCar
     });
   };
-
   const updateVisitType = (index, type) => {
     const updatedVisits = [...newRule.singleCar];
     updatedVisits[index] = type;
@@ -135,13 +115,11 @@ const WashRulesConfigSimple = () => {
       singleCar: updatedVisits
     });
   };
-
   const saveRule = async () => {
     if (!newRule.name.trim()) {
       alert('Please enter package name');
       return;
     }
-
     try {
       if (editingIndex >= 0) {
         const updatedRules = [...washRules];
@@ -155,7 +133,6 @@ const WashRulesConfigSimple = () => {
         saveRulesToStorage(updatedRules);
         alert('Rule saved successfully!');
       }
-      
       setNewRule({
         name: '',
         singleCar: ['EXT'],
@@ -166,32 +143,25 @@ const WashRulesConfigSimple = () => {
       setEditingIndex(-1);
       setShowAddForm(false);
     } catch (error) {
-      console.error('Failed to save rule:', error);
       alert('Failed to save rule');
     }
   };
-
   const [simulationResult, setSimulationResult] = useState(null);
   const [showSimulation, setShowSimulation] = useState(false);
-
   const testRule = (rule) => {
     const scenarios = [
       { name: 'عميل سيارة واحدة', cars: ['ABC123'] },
       { name: 'عميل سيارتين', cars: ['ABC123', 'XYZ789'] }
     ];
-
     const results = scenarios.map(scenario => {
       const schedule = simulateSchedule(rule, scenario);
       return { ...scenario, schedule };
     });
-
     setSimulationResult({ rule, results });
     setShowSimulation(true);
   };
-
   const simulateSchedule = (rule, scenario) => {
     const schedule = [];
-    
     for (let visit = 1; visit <= rule.singleCar.length; visit++) {
       if (scenario.cars.length === 1) {
         const washType = rule.singleCar[visit - 1] || 'EXT';
@@ -203,15 +173,12 @@ const WashRulesConfigSimple = () => {
       } else {
         const visitKey = `visit${visit}`;
         const visitConfig = rule.multiCar[visitKey];
-        
         scenario.cars.forEach((car, carIndex) => {
           let washType = 'EXT';
-          
           if (visitConfig) {
             const carKey = `car${carIndex + 1}`;
             washType = visitConfig[carKey] || 'EXT';
           }
-          
           schedule.push({ 
             visit, 
             car, 
@@ -220,10 +187,8 @@ const WashRulesConfigSimple = () => {
         });
       }
     }
-    
     return schedule;
   };
-
   const deleteRule = (index, ruleName) => {
     if (confirm(`Are you sure you want to delete the rule "${ruleName}"?`)) {
       const updatedRules = washRules.filter((_, i) => i !== index);
@@ -232,7 +197,6 @@ const WashRulesConfigSimple = () => {
       alert(`Rule "${ruleName}" deleted successfully!`);
     }
   };
-
   return (
     <div className="card" style={{ marginBottom: '2rem' }}>
       <div style={{
@@ -249,7 +213,6 @@ const WashRulesConfigSimple = () => {
         }}>
           🧼 Wash Rules Configuration
         </h2>
-        
         <button
           onClick={() => setShowAddForm(!showAddForm)}
           className="btn btn-primary"
@@ -257,7 +220,6 @@ const WashRulesConfigSimple = () => {
           ➕ Add Rule
         </button>
       </div>
-
       {/* Add Rule Form */}
       {showAddForm && (
         <div style={{
@@ -274,7 +236,6 @@ const WashRulesConfigSimple = () => {
           }}>
             {editingIndex >= 0 ? 'Edit Wash Rule' : 'Add New Wash Rule'}
           </h3>
-          
           {/* Package Name */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
@@ -294,7 +255,6 @@ const WashRulesConfigSimple = () => {
               }}
             />
           </div>
-
           {/* Single Car Pattern */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
@@ -350,22 +310,18 @@ const WashRulesConfigSimple = () => {
               </button>
             </div>
           </div>
-
           {/* Multi-Car Manual Configuration */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
               Multi-Car Configuration (2 cars):
             </label>
-            
             <div style={{ padding: '1rem', backgroundColor: '#e9ecef', borderRadius: '8px' }}>
               {newRule.singleCar.map((_, visitIndex) => {
                 const visitKey = `visit${visitIndex + 1}`;
                 const visitConfig = newRule.multiCar[visitKey] || { car1: 'EXT', car2: 'EXT' };
-                
                 return (
                   <div key={visitIndex} style={{ marginBottom: '1rem', padding: '0.5rem', backgroundColor: 'white', borderRadius: '4px' }}>
                     <div style={{ fontWeight: '600', marginBottom: '0.5rem' }}>زيارة {visitIndex + 1}:</div>
-                    
                     <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span>سيارة 1:</span>
@@ -384,7 +340,6 @@ const WashRulesConfigSimple = () => {
                           <option value="INT">INT</option>
                         </select>
                       </div>
-                      
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <span>سيارة 2:</span>
                         <select
@@ -408,7 +363,6 @@ const WashRulesConfigSimple = () => {
               })}
             </div>
           </div>
-
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
             <button
@@ -427,7 +381,6 @@ const WashRulesConfigSimple = () => {
             >
               Cancel
             </button>
-            
             <button
               onClick={saveRule}
               className="btn btn-primary"
@@ -437,7 +390,6 @@ const WashRulesConfigSimple = () => {
           </div>
         </div>
       )}
-
       {/* Simulation Results */}
       {showSimulation && simulationResult && (
         <div style={{
@@ -465,13 +417,11 @@ const WashRulesConfigSimple = () => {
               ✖ إغلاق
             </button>
           </div>
-          
           {simulationResult.results.map((scenario, index) => (
             <div key={index} style={{ marginBottom: '1.5rem' }}>
               <h4 style={{ color: '#495057', marginBottom: '0.5rem' }}>
                 {scenario.name} ({scenario.cars.length} سيارة)
               </h4>
-              
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',
@@ -518,7 +468,6 @@ const WashRulesConfigSimple = () => {
           ))}
         </div>
       )}
-
       {/* Existing Rules */}
       <div className="stats-grid">
         {washRules.map((rule, index) => (
@@ -532,12 +481,10 @@ const WashRulesConfigSimple = () => {
               }}>
                 🧼 {rule.name}
               </h4>
-              
               <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>
                 <strong>Single Car:</strong> {rule.singleCar.join(' → ')}
               </div>
             </div>
-            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
                 onClick={() => testRule(rule)}
@@ -554,7 +501,6 @@ const WashRulesConfigSimple = () => {
               >
                 🧪 Test
               </button>
-              
               <button
                 onClick={() => {
                   setNewRule(rule);
@@ -574,7 +520,6 @@ const WashRulesConfigSimple = () => {
               >
                 ✏️ Edit
               </button>
-              
               <button
                 onClick={() => deleteRule(index, rule.name)}
                 style={{
@@ -594,7 +539,6 @@ const WashRulesConfigSimple = () => {
           </div>
         ))}
       </div>
-
       {/* Rules Count */}
       <div style={{
         marginTop: '1.5rem',
@@ -615,5 +559,4 @@ const WashRulesConfigSimple = () => {
     </div>
   );
 };
-
 export default WashRulesConfigSimple;

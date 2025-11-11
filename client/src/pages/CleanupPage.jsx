@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const CleanupPage = () => {
   const [debugInfo, setDebugInfo] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -10,15 +9,12 @@ const CleanupPage = () => {
     return todayName === 'Sunday' ? 'Monday' : todayName;
   });
   const [weekOffset, setWeekOffset] = useState(0);
-
   const dayOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
   const getDebugInfo = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/debug-status?day=${selectedDay}&weekOffset=${weekOffset}`);
       const data = await response.json();
-      
       if (data.success) {
         setDebugInfo(data);
       } else {
@@ -30,7 +26,6 @@ const CleanupPage = () => {
       setLoading(false);
     }
   };
-
   const forceCleanup = async () => {
     const confirmed = window.confirm(
       `⚠️ FORCE CLEANUP for ${selectedDay}\n\n` +
@@ -41,9 +36,7 @@ const CleanupPage = () => {
       `Use this ONLY if tasks are stuck after completion.\n\n` +
       `Continue?`
     );
-    
     if (!confirmed) return;
-    
     try {
       setLoading(true);
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/force-cleanup`, {
@@ -51,15 +44,12 @@ const CleanupPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ day: selectedDay, weekOffset: weekOffset })
       });
-      
       const data = await response.json();
-      
       if (data.success) {
         alert(`✅ Force cleanup completed!\n\n` +
           `🧹 Cleaned up: ${data.cleanedCount} tasks\n` +
           `⏭️ Skipped: ${data.skippedCount} tasks\n\n` +
           `${data.message || ''}`);
-        
         // Refresh debug info
         getDebugInfo();
       } else {
@@ -71,11 +61,9 @@ const CleanupPage = () => {
       setLoading(false);
     }
   };
-
   useEffect(() => {
     getDebugInfo();
   }, [selectedDay, weekOffset]);
-
   return (
     <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
       {/* Header */}
@@ -103,7 +91,6 @@ const CleanupPage = () => {
         >
           ← Back
         </button>
-        
         <div style={{ textAlign: 'center', flex: 1 }}>
           <h1 style={{ color: '#dc3545', fontSize: '2rem', fontWeight: '700', margin: 0 }}>
             🧹 System Cleanup
@@ -112,10 +99,8 @@ const CleanupPage = () => {
             Debug and fix stuck bookings
           </p>
         </div>
-        
         <div style={{ width: '40px' }}></div>
       </div>
-
       {/* Controls */}
       <div style={{
         backgroundColor: 'white',
@@ -125,7 +110,6 @@ const CleanupPage = () => {
         boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
       }}>
         <h3 style={{ color: '#495057', marginBottom: '15px' }}>Select Day to Check</h3>
-        
         <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginBottom: '15px' }}>
           <select
             value={selectedDay}
@@ -142,7 +126,6 @@ const CleanupPage = () => {
               <option key={day} value={day}>{day}</option>
             ))}
           </select>
-          
           <select
             value={weekOffset}
             onChange={(e) => setWeekOffset(parseInt(e.target.value))}
@@ -158,7 +141,6 @@ const CleanupPage = () => {
             <option value={0}>This Week</option>
             <option value={1}>Next Week</option>
           </select>
-          
           <button
             onClick={getDebugInfo}
             disabled={loading}
@@ -176,7 +158,6 @@ const CleanupPage = () => {
           </button>
         </div>
       </div>
-
       {/* Debug Info */}
       {debugInfo && (
         <div style={{
@@ -189,7 +170,6 @@ const CleanupPage = () => {
           <h3 style={{ color: '#495057', marginBottom: '15px' }}>
             📊 Status for {debugInfo.day} ({debugInfo.targetDate})
           </h3>
-          
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
@@ -208,7 +188,6 @@ const CleanupPage = () => {
               </div>
               <div style={{ fontSize: '0.9rem', color: '#666' }}>Scheduled Tasks</div>
             </div>
-            
             <div style={{
               padding: '15px',
               backgroundColor: '#e8f5e9',
@@ -221,7 +200,6 @@ const CleanupPage = () => {
               </div>
               <div style={{ fontSize: '0.9rem', color: '#666' }}>Completed</div>
             </div>
-            
             <div style={{
               padding: '15px',
               backgroundColor: '#ffebee',
@@ -234,7 +212,6 @@ const CleanupPage = () => {
               </div>
               <div style={{ fontSize: '0.9rem', color: '#666' }}>Cancelled</div>
             </div>
-            
             <div style={{
               padding: '15px',
               backgroundColor: '#fff3e0',
@@ -247,7 +224,6 @@ const CleanupPage = () => {
               </div>
               <div style={{ fontSize: '0.9rem', color: '#666' }}>Stuck Tasks</div>
             </div>
-            
             <div style={{
               padding: '15px',
               backgroundColor: '#f3e5f5',
@@ -261,7 +237,6 @@ const CleanupPage = () => {
               <div style={{ fontSize: '0.9rem', color: '#666' }}>Not Completed</div>
             </div>
           </div>
-          
           {(debugInfo.stuckCount > 0 || debugInfo.remainingCount > 0) && (
             <div style={{
               backgroundColor: '#fff3cd',
@@ -285,7 +260,6 @@ const CleanupPage = () => {
                   </p>
                 )}
               </div>
-              
               <button
                 onClick={forceCleanup}
                 disabled={loading}
@@ -304,7 +278,6 @@ const CleanupPage = () => {
               </button>
             </div>
           )}
-          
           {debugInfo.stuckCount === 0 && debugInfo.remainingCount === 0 && (
             <div style={{
               backgroundColor: '#d4edda',
@@ -323,7 +296,6 @@ const CleanupPage = () => {
           )}
         </div>
       )}
-
       {/* Instructions */}
       <div style={{
         backgroundColor: '#f8f9fa',
@@ -342,5 +314,4 @@ const CleanupPage = () => {
     </div>
   );
 };
-
 export default CleanupPage;

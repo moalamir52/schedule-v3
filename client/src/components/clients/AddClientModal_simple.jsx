@@ -1,5 +1,4 @@
 import { useState } from 'react';
-
 function AddClientModal({ isOpen, onClose, onAdd }) {
   const [formData, setFormData] = useState({
     CustomerID: '',
@@ -18,18 +17,14 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     Status: 'Active',
     Serves: ''
   });
-  
   const [cars, setCars] = useState([{ 
     plate: '', 
     appointments: [{ day: 'Saturday', time: '9:00 AM' }] 
   }]);
-  
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    
     try {
       // Convert cars to format: CarA:Sat@9:00AM+Mon@2:00PM | CarB:Tue@10:00AM
       const timeData = cars.map(car => {
@@ -38,16 +33,13 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         ).join('+');
         return `${car.plate}:${appointments}`;
       }).join(' | ');
-      
       const processedData = {
         ...formData,
         'Number of car': cars.length,
         CarPlates: cars.map(car => car.plate).join(', '),
         Time: timeData
       };
-      
       await onAdd(processedData);
-      
       // Reset form
       setFormData({
         CustomerID: '',
@@ -70,25 +62,20 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         plate: '', 
         appointments: [{ day: 'Saturday', time: '9:00 AM' }] 
       }]);
-      
       onClose();
     } catch (error) {
-      console.error('Error adding client:', error);
       alert('Error adding client: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
-
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
   };
-
   if (!isOpen) return null;
-
   return (
     <div 
       style={{
@@ -118,7 +105,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 style={{ marginBottom: '20px', color: '#548235' }}>Add New Client</h2>
-        
         <form onSubmit={handleSubmit}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
             <div>
@@ -138,7 +124,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div>
               <label>Name:</label>
               <input
@@ -156,7 +141,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div>
               <label>Villa:</label>
               <input
@@ -173,7 +157,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div>
               <label>Phone:</label>
               <input
@@ -190,7 +173,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div style={{ gridColumn: '1 / -1' }}>
               <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🚗 Cars & Appointments:</label>
               {cars.map((car, carIndex) => (
@@ -222,7 +204,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                       </button>
                     )}
                   </div>
-                  
                   <div style={{ marginBottom: '15px' }}>
                     <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: '#666' }}>Car Plate Number:</label>
                     <input
@@ -244,7 +225,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                       }}
                     />
                   </div>
-                  
                   <div style={{
                     backgroundColor: '#e8f4fd',
                     padding: '15px',
@@ -273,7 +253,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                         ➕ Add Appointment
                       </button>
                     </div>
-                    
                     {car.appointments.map((appointment, aptIndex) => (
                       <div key={aptIndex} style={{
                         backgroundColor: 'rgba(255,255,255,0.7)',
@@ -385,7 +364,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 🚗➕ Add Another Car
               </button>
             </div>
-            
             <div>
               <label>Package:</label>
               <select
@@ -408,7 +386,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 <option value="3 Ext 1 INT bi week">3 Ext 1 INT bi week</option>
               </select>
             </div>
-            
             <div>
               <label>Fee:</label>
               <input
@@ -425,7 +402,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div>
               <label>Start Date:</label>
               <input
@@ -442,7 +418,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
                 }}
               />
             </div>
-            
             <div>
               <label>Status:</label>
               <select
@@ -462,7 +437,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
               </select>
             </div>
           </div>
-          
           <div style={{ gridColumn: '1 / -1', marginTop: '15px' }}>
             <label>Notes:</label>
             <textarea
@@ -480,7 +454,6 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
               }}
             />
           </div>
-          
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px', gridColumn: '1 / -1' }}>
             <button 
               type="submit" 
@@ -518,5 +491,4 @@ function AddClientModal({ isOpen, onClose, onAdd }) {
     </div>
   );
 }
-
 export default AddClientModal;

@@ -12,7 +12,6 @@ const rateLimitedApiCall = async (apiFunction) => {
   
   if (timeSinceLastCall < API_DELAY) {
     const waitTime = API_DELAY - timeSinceLastCall;
-    console.log(`[RATE-LIMIT] Waiting ${waitTime}ms before API call`);
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
   
@@ -59,7 +58,6 @@ const getWashRules = async () => {
     
     return rules;
   } catch (error) {
-    console.error('Error getting wash rules:', error);
     // Return default rules on error
     return [
       {
@@ -82,7 +80,6 @@ const autoAssignSchedule = async (req, res) => {
   
   try {
     // 1. Fetch All Data with rate limiting
-    console.log('[API-LIMIT] Fetching data with rate limiting...');
     const customers = await getCustomers();
     const workers = await getWorkers();
     const allHistory = await getAllHistory();

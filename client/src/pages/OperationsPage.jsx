@@ -4,7 +4,6 @@ import authService from '../services/authService';
 import { hasPermission, PERMISSIONS, getRoleInfo } from '../utils/rolePermissions';
 import Modal from '../components/Modal';
 import WashRulesConfigSimple from '../components/WashRulesConfigSimple';
-
 const OperationsPage = () => {
   const [workers, setWorkers] = useState([]);
   const [newWorkerName, setNewWorkerName] = useState('');
@@ -20,7 +19,6 @@ const OperationsPage = () => {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState(null);
   const [modal, setModal] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null, showInput: false, inputValue: '', inputPlaceholder: '' });
-
   useEffect(() => {
     const user = authService.getCurrentUser();
     setCurrentUser(user);
@@ -30,38 +28,28 @@ const OperationsPage = () => {
       loadUsers();
     }
   }, []);
-
   const loadWorkers = async () => {
     try {
-
       const workersData = await operationsService.getWorkers();
-
-      
       const workerNames = workersData.map(w => {
         if (typeof w === 'string') return w;
         return w.Name || w.WorkerName || 'Unknown';
       }).filter(name => name && name !== 'Unknown');
-      
-
       setWorkers(workerNames.length > 0 ? workerNames : ['Raqib', 'Rahman']);
     } catch (error) {
-      console.error('Failed to load workers:', error);
       setWorkers(['Raqib', 'Rahman']); // Default workers
     } finally {
       setLoading(false);
     }
   };
-
   const loadAdditionalServices = async () => {
     try {
       const services = await operationsService.getAdditionalServices();
       setAdditionalServices(services);
     } catch (error) {
-      console.error('Failed to load services:', error);
       setAdditionalServices(['garage bi-weekly', 'garage weekly']);
     }
   };
-
   const loadUsers = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
@@ -70,16 +58,13 @@ const OperationsPage = () => {
         setUsers(usersData.users || usersData);
       }
     } catch (error) {
-      console.error('Failed to load users:', error);
-    }
+      }
   };
-
   const handleAddUser = async () => {
     if (!newUser.username.trim() || !newUser.password.trim()) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Please fill all fields', onConfirm: null });
       return;
     }
-
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`, {
         method: 'POST',
@@ -90,9 +75,7 @@ const OperationsPage = () => {
           role: newUser.role
         })
       });
-
       const data = await response.json();
-      
       if (response.ok) {
         setNewUser({ username: '', password: '', role: 'user' });
         setShowAddUserForm(false);
@@ -105,7 +88,6 @@ const OperationsPage = () => {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add user: ' + error.message, onConfirm: null });
     }
   };
-
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${userId}`, {
@@ -113,7 +95,6 @@ const OperationsPage = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: newRole })
       });
-
       if (response.ok) {
         loadUsers();
         setEditingUser(null);
@@ -123,7 +104,6 @@ const OperationsPage = () => {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to update user', onConfirm: null });
     }
   };
-
   const handleDeleteUser = async (userId, username) => {
     setModal({
       isOpen: true,
@@ -135,9 +115,7 @@ const OperationsPage = () => {
           const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users/${username}`, {
             method: 'DELETE'
           });
-
           const data = await response.json();
-          
           if (response.ok) {
             loadUsers();
             setModal({ isOpen: true, type: 'success', title: 'Success', message: 'User deleted successfully!', onConfirm: null });
@@ -150,7 +128,6 @@ const OperationsPage = () => {
       }
     });
   };
-
   const handleViewPassword = async (userId, username) => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/users`);
@@ -159,7 +136,6 @@ const OperationsPage = () => {
         const user = users.find(u => u.UserID === userId);
         const plainPassword = user?.PlainPassword || 'Not available';
         const hashedPassword = user?.Password || 'Not available';
-        
         setModal({
           isOpen: true,
           type: 'info',
@@ -172,7 +148,6 @@ const OperationsPage = () => {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to view password', onConfirm: null });
     }
   };
-
   const handleChangePassword = (userId, username) => {
     setModal({
       isOpen: true,
@@ -202,7 +177,6 @@ const OperationsPage = () => {
       }
     });
   };
-
   const handleResetPassword = (userId, username) => {
     setModal({
       isOpen: true,
@@ -223,40 +197,31 @@ const OperationsPage = () => {
       }
     });
   };
-
   const handleAddWorker = async () => {
     if (!newWorkerName.trim()) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Please enter worker name', onConfirm: null });
       return;
     }
-
     if (workers.includes(newWorkerName.trim())) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Worker already exists', onConfirm: null });
       return;
     }
-
     try {
-
       await operationsService.addWorker(newWorkerName.trim(), 'Car Washer', 'Active');
-      
       // Reload workers to get updated list
       await loadWorkers();
-      
       setNewWorkerName('');
       setShowAddForm(false);
       setModal({ isOpen: true, type: 'success', title: 'Success', message: `Worker "${newWorkerName.trim()}" added successfully!`, onConfirm: null });
     } catch (error) {
-      console.error('Error adding worker:', error);
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add worker: ' + error.message, onConfirm: null });
     }
   };
-
   const handleDeleteWorker = async (workerName) => {
     if (workers.length <= 1) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Cannot delete the last worker', onConfirm: null });
       return;
     }
-
     setModal({
       isOpen: true,
       type: 'confirm',
@@ -274,18 +239,15 @@ const OperationsPage = () => {
       }
     });
   };
-
   const handleAddService = async () => {
     if (!newServiceName.trim()) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Please enter service name', onConfirm: null });
       return;
     }
-
     if (additionalServices.includes(newServiceName.trim())) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Service already exists', onConfirm: null });
       return;
     }
-
     try {
       await operationsService.addAdditionalService(newServiceName.trim());
       const updatedServices = [...additionalServices, newServiceName.trim()];
@@ -297,29 +259,24 @@ const OperationsPage = () => {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add service', onConfirm: null });
     }
   };
-
   const handleEditService = (oldName, newName) => {
     if (!newName.trim()) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Please enter service name', onConfirm: null });
       return;
     }
-
     if (newName.trim() === oldName) {
       setEditingService(null);
       return;
     }
-
     if (additionalServices.includes(newName.trim())) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Service already exists', onConfirm: null });
       return;
     }
-
     const updatedServices = additionalServices.map(s => s === oldName ? newName.trim() : s);
     setAdditionalServices(updatedServices);
     setEditingService(null);
     setModal({ isOpen: true, type: 'success', title: 'Success', message: 'Service updated successfully!', onConfirm: null });
   };
-
   const handleDeleteService = async (serviceName) => {
     setModal({
       isOpen: true,
@@ -338,7 +295,6 @@ const OperationsPage = () => {
       }
     });
   };
-
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -347,7 +303,6 @@ const OperationsPage = () => {
       </div>
     );
   }
-
   return (
     <div className="home-page">
       {/* Header */}
@@ -360,7 +315,6 @@ const OperationsPage = () => {
             ← Back
           </button>
         </div>
-        
         <div className="header-center">
           <h1>⚡ Operations Management</h1>
           {currentUser && (
@@ -376,10 +330,8 @@ const OperationsPage = () => {
             </div>
           )}
         </div>
-        
         <div style={{ width: '120px' }}></div>
       </div>
-
       {/* Workers Management Section */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{
@@ -396,7 +348,6 @@ const OperationsPage = () => {
           }}>
             👷 Workers Management
           </h2>
-          
           <button
             onClick={() => setShowAddForm(!showAddForm)}
             className="btn btn-primary"
@@ -404,7 +355,6 @@ const OperationsPage = () => {
             ➕ Add Worker
           </button>
         </div>
-
         {/* Add Worker Form */}
         {showAddForm && (
           <div style={{
@@ -421,7 +371,6 @@ const OperationsPage = () => {
             }}>
               Add New Worker
             </h3>
-            
             <div style={{
               display: 'flex',
               gap: '1rem',
@@ -442,14 +391,12 @@ const OperationsPage = () => {
                   outline: 'none'
                 }}
               />
-              
               <button
                 onClick={handleAddWorker}
                 className="btn btn-primary"
               >
                 Add
               </button>
-              
               <button
                 onClick={() => {
                   setShowAddForm(false);
@@ -462,7 +409,6 @@ const OperationsPage = () => {
             </div>
           </div>
         )}
-
         {/* Workers List */}
         <div className="stats-grid">
           {workers.map((worker, index) => (
@@ -487,7 +433,6 @@ const OperationsPage = () => {
                   Worker #{index + 1}
                 </p>
               </div>
-              
               <button
                 onClick={() => handleDeleteWorker(worker)}
                 disabled={workers.length <= 1}
@@ -507,7 +452,6 @@ const OperationsPage = () => {
             </div>
           ))}
         </div>
-
         {/* Workers Count */}
         <div style={{
           marginTop: '1.5rem',
@@ -526,7 +470,6 @@ const OperationsPage = () => {
           </p>
         </div>
       </div>
-
       {/* User Management Section - Admin Only */}
       {currentUser && hasPermission(currentUser.role, PERMISSIONS.VIEW_USERS) && (
       <div className="card" style={{ marginBottom: '2rem' }}>
@@ -544,7 +487,6 @@ const OperationsPage = () => {
           }}>
             👥 User Management
           </h2>
-          
           {hasPermission(currentUser?.role, PERMISSIONS.ADD_USERS) && (
             <button
               onClick={() => setShowAddUserForm(!showAddUserForm)}
@@ -554,7 +496,6 @@ const OperationsPage = () => {
             </button>
           )}
         </div>
-
         {/* Add User Form */}
         {showAddUserForm && (
           <div style={{
@@ -571,7 +512,6 @@ const OperationsPage = () => {
             }}>
               Add New User
             </h3>
-            
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto auto', gap: '1rem', alignItems: 'center' }}>
               <input
                 type="text"
@@ -585,7 +525,6 @@ const OperationsPage = () => {
                   fontSize: '1rem'
                 }}
               />
-              
               <input
                 type="password"
                 placeholder="Password"
@@ -598,7 +537,6 @@ const OperationsPage = () => {
                   fontSize: '1rem'
                 }}
               />
-              
               <select
                 value={newUser.role}
                 onChange={(e) => setNewUser({...newUser, role: e.target.value})}
@@ -613,9 +551,7 @@ const OperationsPage = () => {
                 <option value="admin">Admin</option>
                 <option value="manager">Manager</option>
               </select>
-              
               <button onClick={handleAddUser} className="btn btn-primary">Add</button>
-              
               <button
                 onClick={() => {
                   setShowAddUserForm(false);
@@ -628,7 +564,6 @@ const OperationsPage = () => {
             </div>
           </div>
         )}
-
         {/* Users List */}
         <div style={{ overflowX: 'auto' }}>
           <table style={{
@@ -780,7 +715,6 @@ const OperationsPage = () => {
             </tbody>
           </table>
         </div>
-
         {/* Users Count */}
         <div style={{
           marginTop: '1.5rem',
@@ -800,10 +734,8 @@ const OperationsPage = () => {
         </div>
       </div>
       )}
-
       {/* Wash Rules Configuration Section */}
       <WashRulesConfigSimple />
-
       {/* Actions Section */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{
@@ -821,7 +753,6 @@ const OperationsPage = () => {
             ⚡ Actions
           </h2>
         </div>
-
         <div className="stats-grid">
           <div className="stat-card" style={{ cursor: 'pointer' }}
             onClick={() => window.location.href = '/audit-report'}
@@ -843,7 +774,6 @@ const OperationsPage = () => {
                 View schedule changes and modifications
               </p>
             </div>
-            
             <div style={{
               backgroundColor: '#17a2b8',
               color: 'white',
@@ -855,7 +785,6 @@ const OperationsPage = () => {
               📈 View Report
             </div>
           </div>
-          
           <div className="stat-card" style={{ cursor: 'pointer' }}
             onClick={async () => {
               const confirmed = window.confirm(
@@ -864,41 +793,25 @@ const OperationsPage = () => {
                 'This action cannot be undone!\n\n' +
                 'Current schedule has tasks. Continue to delete ALL?'
               );
-              
               if (!confirmed) return;
-              
               try {
-                console.log('🗑️ [CLEAR] Starting clear operation...');
-                console.log('🗑️ [CLEAR] API URL:', import.meta.env.VITE_API_URL);
-                
                 const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule-reset/clear`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' }
                 });
-                
-                console.log('🗑️ [CLEAR] Response status:', response.status);
-                console.log('🗑️ [CLEAR] Response ok:', response.ok);
-                
                 if (!response.ok) {
                   const errorText = await response.text();
-                  console.log('🗑️ [CLEAR] Error response:', errorText);
                   throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
-                
                 const data = await response.json();
-                console.log('🗑️ [CLEAR] Response data:', data);
-                
                 if (data.success) {
-                  console.log('🗑️ [CLEAR] Success! Showing alert...');
                   alert('✅ All schedule data cleared successfully!\n\nThe page will refresh to show the empty schedule.');
                   // Refresh the page to show empty schedule
                   window.location.reload();
                 } else {
-                  console.log('🗑️ [CLEAR] Server returned error:', data.error);
                   alert('❌ Failed to clear schedule: ' + (data.error || 'Unknown error'));
                 }
               } catch (err) {
-                console.error('🗑️ [CLEAR] Exception:', err);
                 alert('❌ Error: ' + err.message + '\n\nCheck console for details.');
               }
             }}
@@ -920,7 +833,6 @@ const OperationsPage = () => {
                 Delete all scheduled tasks (DANGER!)
               </p>
             </div>
-            
             <div style={{
               backgroundColor: '#dc3545',
               color: 'white',
@@ -934,7 +846,6 @@ const OperationsPage = () => {
           </div>
         </div>
       </div>
-
       {/* Additional Services Management Section */}
       <div className="card" style={{ marginBottom: '2rem' }}>
         <div style={{
@@ -951,7 +862,6 @@ const OperationsPage = () => {
           }}>
             🛠️ Additional Services Management
           </h2>
-          
           <button
             onClick={() => setShowAddServiceForm(!showAddServiceForm)}
             className="btn btn-secondary"
@@ -959,7 +869,6 @@ const OperationsPage = () => {
             ➕ Add Service
           </button>
         </div>
-
         {/* Add Service Form */}
         {showAddServiceForm && (
           <div style={{
@@ -976,7 +885,6 @@ const OperationsPage = () => {
             }}>
               Add New Additional Service
             </h3>
-            
             <div style={{
               display: 'flex',
               gap: '1rem',
@@ -997,14 +905,12 @@ const OperationsPage = () => {
                   outline: 'none'
                 }}
               />
-              
               <button
                 onClick={handleAddService}
                 className="btn btn-primary"
               >
                 Add
               </button>
-              
               <button
                 onClick={() => {
                   setShowAddServiceForm(false);
@@ -1017,7 +923,6 @@ const OperationsPage = () => {
             </div>
           </div>
         )}
-
         {/* Services List */}
         <div className="stats-grid">
           {additionalServices.map((service, index) => {
@@ -1068,7 +973,6 @@ const OperationsPage = () => {
                   </>
                 )}
               </div>
-              
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button
                   onClick={() => setEditingService(editingService === serviceName ? null : serviceName)}
@@ -1085,7 +989,6 @@ const OperationsPage = () => {
                 >
                   ✏️ Edit
                 </button>
-                
                 <button
                   onClick={() => handleDeleteService(serviceName)}
                   style={{
@@ -1106,7 +1009,6 @@ const OperationsPage = () => {
           );
         })}
         </div>
-
         {/* Services Count */}
         <div style={{
           marginTop: '1.5rem',
@@ -1125,7 +1027,6 @@ const OperationsPage = () => {
           </p>
         </div>
       </div>
-      
       <Modal
         isOpen={modal.isOpen}
         onClose={() => setModal({ ...modal, isOpen: false })}
@@ -1148,5 +1049,4 @@ const OperationsPage = () => {
     </div>
   );
 };
-
 export default OperationsPage;

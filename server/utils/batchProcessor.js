@@ -24,7 +24,7 @@ class BatchProcessor {
           await new Promise(resolve => setTimeout(resolve, this.delay));
         }
       } catch (error) {
-        console.error(`Batch ${Math.floor(i/this.batchSize) + 1} failed:`, error.message);
+        + 1} failed:`, error.message);
         throw error;
       }
     }

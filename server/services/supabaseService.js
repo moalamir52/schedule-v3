@@ -5,9 +5,7 @@ const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5c
 
 class SupabaseService {
   constructor() {
-    console.log('✅ Supabase service initialized');
-    console.log('🔗 URL:', SUPABASE_URL);
-  }
+    }
 
   async request(method, path, data = null) {
     return new Promise((resolve, reject) => {
@@ -114,12 +112,9 @@ class SupabaseService {
   // Customers methods
   async getCustomers() {
     try {
-      console.log('[SUPABASE] Fetching customers...');
       const result = await this.request('GET', '/customers?Status=eq.Active&order=CustomerID');
-      console.log('[SUPABASE] Found', result.length, 'customers');
       return result;
     } catch (error) {
-      console.error('[SUPABASE] Error fetching customers:', error);
       return [];
     }
   }
@@ -127,12 +122,9 @@ class SupabaseService {
   // Workers methods
   async getWorkers() {
     try {
-      console.log('[SUPABASE] Fetching workers...');
       const result = await this.request('GET', '/Workers?Status=eq.Active&order=Name');
-      console.log('[SUPABASE] Found', result.length, 'workers');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching workers:', error);
       return [];
     }
   }
@@ -167,12 +159,9 @@ class SupabaseService {
   // Update customer
   async updateCustomer(customerID, updatedData) {
     try {
-      console.log(`[SUPABASE] Updating customer ${customerID} with data:`, updatedData);
       const result = await this.request('PATCH', `/customers?CustomerID=eq.${customerID}`, updatedData);
-      console.log(`[SUPABASE] Customer update result:`, result);
       return result;
     } catch (error) {
-      console.error(`[SUPABASE] Error updating customer ${customerID}:`, error);
       throw error;
     }
   }
@@ -180,12 +169,9 @@ class SupabaseService {
   // Delete customer
   async deleteCustomer(customerID) {
     try {
-      console.log(`[SUPABASE] Deleting customer ${customerID}`);
       const result = await this.request('DELETE', `/customers?CustomerID=eq.${customerID}`);
-      console.log(`[SUPABASE] Customer delete result:`, result);
       return result;
     } catch (error) {
-      console.error(`[SUPABASE] Error deleting customer ${customerID}:`, error);
       throw error;
     }
   }
@@ -207,14 +193,12 @@ class SupabaseService {
       const result = await this.request('GET', '/invoices?order=CreatedAt.desc');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching invoices:', error);
       return [];
     }
   }
 
   // Add invoice
   async addInvoice(invoiceData) {
-    console.log('[SUPABASE] Adding invoice with data:', invoiceData);
     const data = {
       InvoiceID: invoiceData.InvoiceID || `INV-${Date.now()}`,
       Ref: invoiceData.Ref,
@@ -234,9 +218,7 @@ class SupabaseService {
       CreatedAt: invoiceData.CreatedAt || new Date().toISOString(),
       Services: invoiceData.Services
     };
-    console.log('[SUPABASE] Prepared invoice data for database:', data);
     const result = await this.request('POST', '/invoices', data);
-    console.log('[SUPABASE] Invoice saved successfully:', result);
     return result;
   }
 
@@ -246,7 +228,6 @@ class SupabaseService {
       const result = await this.request('GET', '/wash_history?order=WashDate.desc');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching history:', error);
       return [];
     }
   }
@@ -275,7 +256,6 @@ class SupabaseService {
       const result = await this.request('GET', `/Users?Username=eq.${username}`);
       return result && result.length > 0 ? result[0] : null;
     } catch (error) {
-      console.error('[SUPABASE] Error finding user:', error);
       return null;
     }
   }
@@ -285,7 +265,6 @@ class SupabaseService {
       const result = await this.request('GET', '/Users?order=Username');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching users:', error);
       return [];
     }
   }
@@ -302,7 +281,6 @@ class SupabaseService {
       };
       return await this.request('POST', '/Users', data);
     } catch (error) {
-      console.error('[SUPABASE] Error adding user:', error);
       throw error;
     }
   }
@@ -311,7 +289,6 @@ class SupabaseService {
     try {
       return await this.request('DELETE', `/Users?UserID=eq.${userID}`);
     } catch (error) {
-      console.error('[SUPABASE] Error deleting user:', error);
       throw error;
     }
   }
@@ -322,7 +299,6 @@ class SupabaseService {
       const result = await this.request('GET', '/Services?Status=eq.Active&order=ServiceName');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.log('[SUPABASE] Services table not found, returning default services');
       return [
         { ServiceID: 'SERV-001', ServiceName: 'Car Wash - Exterior', Price: 25, Status: 'Active' },
         { ServiceID: 'SERV-002', ServiceName: 'Car Wash - Interior', Price: 35, Status: 'Active' },
@@ -343,7 +319,6 @@ class SupabaseService {
       };
       return await this.request('POST', '/Services', data);
     } catch (error) {
-      console.log('[SUPABASE] Services table not available for adding');
       throw new Error('Services functionality not available');
     }
   }
@@ -354,7 +329,6 @@ class SupabaseService {
       const result = await this.request('GET', `/customers?or=(Name.ilike.%${searchTerm}%,Villa.ilike.%${searchTerm}%,CarPlates.ilike.%${searchTerm}%,Phone.ilike.%${searchTerm}%)&Status=eq.Active&order=Name`);
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error searching customers:', error);
       return [];
     }
   }
@@ -365,7 +339,6 @@ class SupabaseService {
       const result = await this.request('GET', `/wash_history?CarPlate=eq.${carPlate}&order=WashDate.desc`);
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching car history:', error);
       return [];
     }
   }
@@ -378,31 +351,21 @@ class SupabaseService {
   // Clear and write schedule
   async clearAndWriteSchedule(tasks) {
     try {
-      console.log(`[SUPABASE] Updating schedule with ${tasks.length} tasks...`);
-      
       // Get existing locked tasks to preserve them
       let lockedTasks = [];
       try {
-        console.log('[SUPABASE] Getting locked tasks to preserve...');
         lockedTasks = await this.request('GET', '/ScheduledTasks?isLocked=eq.TRUE');
-        console.log(`[SUPABASE] Found ${lockedTasks.length} locked tasks to preserve`);
-      } catch (error) {
-        console.log('[SUPABASE] Failed to get locked tasks:', error.message);
-      }
+        } catch (error) {
+        }
       
       // Clear only unlocked tasks
       try {
-        console.log('[SUPABASE] Clearing unlocked tasks...');
         await this.request('DELETE', '/ScheduledTasks?isLocked=neq.TRUE');
-        console.log('[SUPABASE] Unlocked tasks cleared successfully');
-      } catch (deleteError) {
-        console.log('[SUPABASE] Failed to clear unlocked tasks:', deleteError.message);
+        } catch (deleteError) {
         throw deleteError;
       }
       
       if (tasks.length === 0) {
-        console.log('[SUPABASE] No new tasks to insert');
-        console.log(`[SUPABASE] Schedule update complete - ${lockedTasks.length} locked tasks preserved`);
         return;
       }
       
@@ -416,11 +379,9 @@ class SupabaseService {
         );
       });
       
-      console.log(`[SUPABASE] Filtered ${tasks.length} new tasks to ${newTasks.length} (avoiding ${tasks.length - newTasks.length} duplicates with locked tasks)`);
+      console.log(`Filtered ${newTasks.length} new tasks after removing duplicates`);
       
       if (newTasks.length === 0) {
-        console.log('[SUPABASE] No new tasks to insert after filtering');
-        console.log(`[SUPABASE] Schedule update complete - ${lockedTasks.length} locked tasks preserved`);
         return;
       }
       
@@ -442,12 +403,9 @@ class SupabaseService {
       }));
       
       // Insert all tasks in one batch
-      console.log('[SUPABASE] Inserting new tasks in batch...');
       await this.request('POST', '/ScheduledTasks', batchData);
       
-      console.log(`[SUPABASE] Successfully saved ${newTasks.length} new tasks + ${lockedTasks.length} preserved locked tasks = ${newTasks.length + lockedTasks.length} total tasks`);
-    } catch (error) {
-      console.error('[SUPABASE] Error saving schedule:', error);
+      } catch (error) {
       throw error;
     }
   }
@@ -455,7 +413,7 @@ class SupabaseService {
   // Add audit log
   async addAuditLog(auditData) {
     const data = {
-      LogID: `LOG-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      LogID: `LOG-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       Timestamp: new Date().toISOString(),
       UserID: auditData.userId || auditData.UserID,
       UserName: auditData.userName || auditData.UserName,
@@ -478,8 +436,6 @@ class SupabaseService {
   // Save assignment - Update ScheduledTasks table and lock all customer cars
   async saveAssignment(assignmentData) {
     try {
-      console.log('[DRAG-DROP] Saving assignment:', assignmentData);
-      
       // Parse taskId to get filter parameters
       const taskId = assignmentData.taskId;
       const dashes = [];
@@ -497,39 +453,45 @@ class SupabaseService {
         const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
         const carPlate = taskId.substring(carPlateStart) || '';
         
+        // Get correct WorkerID from workers database
+        let correctWorkerId = assignmentData.targetWorkerId;
+        if (!correctWorkerId) {
+          // Try to find worker by name
+          try {
+            const workers = await this.getWorkers();
+            const worker = workers.find(w => w.Name === (assignmentData.assignedWorker || assignmentData.targetWorkerName));
+            correctWorkerId = worker ? worker.WorkerID : 'WORK-001';
+          } catch (error) {
+            correctWorkerId = 'WORK-001';
+          }
+        }
+        
+        // Ensure WorkerID format is correct
+        if (correctWorkerId && correctWorkerId.startsWith('WORKER-')) {
+          correctWorkerId = correctWorkerId.replace('WORKER-', 'WORK-');
+        }
+        
         // Update data for worker assignment
         const updateData = {
           WorkerName: assignmentData.assignedWorker || assignmentData.targetWorkerName,
-          WorkerID: (assignmentData.targetWorkerId || 'WORKER-001').replace('WORKER-', 'WORK-'),
+          WorkerID: correctWorkerId,
           isLocked: 'TRUE'
         };
         
-        console.log(`[DRAG-DROP] Updating customer ${customerID} tasks:`);
-        console.log(`[DRAG-DROP] Old worker: ${assignmentData.sourceWorkerName || 'Unknown'}`);
-        console.log(`[DRAG-DROP] New worker: ${updateData.WorkerName}`);
-        
         // Update ALL tasks for this customer (all cars) with same worker and lock them
         const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}`;
-        console.log(`[DRAG-DROP] Updating all cars for customer: ${filter}`);
-        console.log(`[DRAG-DROP] Update data:`, updateData);
-        
         try {
           const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
-          console.log(`[DRAG-DROP] ✅ Database updated successfully:`, result);
-          
           // Auto-lock all customer cars
           await this.lockAllCustomerCars(customerID, day, time);
           
           // Verify the update worked
           const verification = await this.request('GET', `/ScheduledTasks?${filter}`);
-          console.log(`[DRAG-DROP] 🔍 Verification - Updated records:`, verification.length);
           if (verification.length > 0) {
-            console.log(`[DRAG-DROP] 🔍 Sample updated record:`, verification[0]);
-          }
+            }
           
           return result;
         } catch (updateError) {
-          console.error(`[DRAG-DROP] ❌ Database update failed:`, updateError);
           throw updateError;
         }
         
@@ -549,18 +511,14 @@ class SupabaseService {
             newWorker: updateData.WorkerName,
             changeReason: 'Drag and Drop Assignment - All Customer Cars'
           });
-          console.log('[DRAG-DROP] 📝 Audit log created for all cars');
-        } catch (auditError) {
-          console.warn('[DRAG-DROP] ⚠️ Failed to create audit log:', auditError.message);
-        }
+          } catch (auditError) {
+          }
         
-        console.log('[DRAG-DROP] ✅ All customer cars assigned and locked');
         return result;
       } else {
         throw new Error(`Invalid taskId format: ${taskId}`);
       }
     } catch (error) {
-      console.error('[DRAG-DROP] ❌ Error saving assignment:', error);
       throw error;
     }
   }
@@ -571,7 +529,6 @@ class SupabaseService {
       const result = await this.request('GET', '/ScheduledTasks?order=Day,Time');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      console.error('[SUPABASE] Error fetching assignments:', error);
       return [];
     }
   }
@@ -579,23 +536,17 @@ class SupabaseService {
   // Lock all customer cars
   async lockAllCustomerCars(customerID, day, time) {
     try {
-      console.log(`[AUTO-LOCK] Locking all cars for customer ${customerID} on ${day} at ${time}`);
-      
       const filter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}`;
       const updateData = { isLocked: 'TRUE' };
       
       await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
-      console.log(`[AUTO-LOCK] ✅ All customer cars locked`);
-    } catch (error) {
-      console.warn(`[AUTO-LOCK] ⚠️ Failed to lock customer cars:`, error.message);
-    }
+      } catch (error) {
+      }
   }
 
   // Update wash type
   async updateWashType(washTypeData) {
     try {
-      console.log('[WASH-TYPE] Updating wash type:', washTypeData);
-      
       // Parse taskId to get filter parameters
       const taskId = washTypeData.taskId;
       const dashes = [];
@@ -628,12 +579,7 @@ class SupabaseService {
           WorkerID: workerID,
           isLocked: 'TRUE'
         };
-        console.log(`[WASH-TYPE] Updating task: ${filter}`);
-        console.log(`[WASH-TYPE] Update data:`, updateData);
-        
         const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
-        console.log(`[WASH-TYPE] ✅ Wash type updated successfully`);
-        
         // Auto-lock all customer cars
         await this.lockAllCustomerCars(customerID, day, time);
         
@@ -651,17 +597,14 @@ class SupabaseService {
             newWashType: washTypeData.newWashType,
             changeReason: 'Manual Wash Type Change'
           });
-          console.log('[WASH-TYPE] 📝 Audit log created');
-        } catch (auditError) {
-          console.warn('[WASH-TYPE] ⚠️ Failed to create audit log:', auditError.message);
-        }
+          } catch (auditError) {
+          }
         
         return result;
       } else {
         throw new Error(`Invalid taskId format: ${taskId}`);
       }
     } catch (error) {
-      console.error('[WASH-TYPE] ❌ Error updating wash type:', error);
       throw error;
     }
   }
@@ -670,12 +613,9 @@ class SupabaseService {
   async updateScheduledTask(customerID, day, time, carPlate, updateData) {
     try {
       const filter = `CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${time}&CarPlate=eq.${carPlate || ''}`;
-      console.log(`[SUPABASE] Updating task: ${filter}`);
       const result = await this.request('PATCH', `/ScheduledTasks?${filter}`, updateData);
-      console.log(`[SUPABASE] Task updated successfully`);
       return result;
     } catch (error) {
-      console.error('[SUPABASE] Error updating task:', error);
       throw error;
     }
   }
@@ -684,12 +624,9 @@ class SupabaseService {
   async deleteScheduledTask(customerID, day, time, carPlate) {
     try {
       const encodedFilter = `CustomerID=eq.${encodeURIComponent(customerID)}&Day=eq.${encodeURIComponent(day)}&Time=eq.${encodeURIComponent(time)}&CarPlate=eq.${encodeURIComponent(carPlate || '')}`;
-      console.log(`[SUPABASE] Deleting task: ${customerID} - ${day} - ${time} - ${carPlate}`);
       const result = await this.request('DELETE', `/ScheduledTasks?${encodedFilter}`);
-      console.log(`[SUPABASE] Task deleted successfully`);
       return result;
     } catch (error) {
-      console.error('[SUPABASE] Error deleting task:', error);
       throw error;
     }
   }
@@ -697,8 +634,6 @@ class SupabaseService {
   // Delete multiple scheduled tasks by IDs
   async deleteScheduledTasks(taskIds) {
     try {
-      console.log(`[SUPABASE] Deleting ${taskIds.length} tasks...`);
-      
       for (const taskId of taskIds) {
         try {
           // Parse taskId format: CustomerID-Day-Time-CarPlate
@@ -721,13 +656,10 @@ class SupabaseService {
             await this.deleteScheduledTask(customerID, day, time, carPlate);
           }
         } catch (error) {
-          console.error(`[SUPABASE] Failed to delete task ${taskId}:`, error.message);
-        }
+          }
       }
       
-      console.log(`[SUPABASE] Successfully deleted ${taskIds.length} tasks`);
-    } catch (error) {
-      console.error('[SUPABASE] Error deleting tasks:', error);
+      } catch (error) {
       throw error;
     }
   }

@@ -2,25 +2,16 @@ const db = require('../../services/databaseService');
 
 const getAllWorkers = async (req, res) => {
   try {
-    console.log('[WORKERS] Fetching workers...');
-    
     let workers = await db.getWorkers();
-    console.log('[WORKERS] Raw workers data:', workers);
-    console.log('[WORKERS] Workers type:', typeof workers);
-    console.log('[WORKERS] Is array:', Array.isArray(workers));
+    console.log('Fetched workers from database');
     
     // Ensure workers is always an array
     if (!Array.isArray(workers)) {
-      console.log('[WORKERS] Converting to array...');
       workers = workers ? [workers] : [];
     }
     
-    console.log('[WORKERS] Found', workers.length, 'workers from database');
-    
     // If no workers in database, add default workers
     if (workers.length === 0) {
-      console.log('[WORKERS] No workers found, adding default workers...');
-      
       const defaultWorkers = [
         { WorkerID: 'WORKER-001', Name: 'Ahmed', Phone: '01234567890', Status: 'Active' },
         { WorkerID: 'WORKER-002', Name: 'Mohamed', Phone: '01234567891', Status: 'Active' },
@@ -33,23 +24,18 @@ const getAllWorkers = async (req, res) => {
       for (const worker of defaultWorkers) {
         try {
           await db.addWorker(worker);
-          console.log('[WORKERS] Added worker:', worker.Name);
-        } catch (error) {
-          console.log('[WORKERS] Worker might already exist:', worker.Name);
-        }
+          } catch (error) {
+          }
       }
       
       // Fetch again after adding
       workers = await db.getWorkers();
-      console.log('[WORKERS] After adding defaults:', workers.length, 'workers');
-    }
+      }
     
     // Return workers array directly for frontend compatibility
     res.json(workers);
     
   } catch (error) {
-    console.error('[WORKERS] Error:', error);
-    
     // Return default workers as fallback
     const fallbackWorkers = [
       { WorkerID: 'WORKER-001', Name: 'Ahmed', Phone: '01234567890', Status: 'Active' },
@@ -67,7 +53,6 @@ const addWorker = async (req, res) => {
     const result = await db.addWorker(req.body);
     res.json({ success: true, data: result });
   } catch (error) {
-    console.error('[ADD-WORKER] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

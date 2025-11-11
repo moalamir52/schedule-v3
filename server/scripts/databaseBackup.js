@@ -7,7 +7,6 @@ class DatabaseBackup {
     this.connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     
     if (!this.connectionString) {
-      console.error('❌ DATABASE_URL غير موجود في متغيرات البيئة');
       process.exit(1);
     }
   }
@@ -20,8 +19,6 @@ class DatabaseBackup {
 
     try {
       await client.connect();
-      console.log('✅ متصل بقاعدة البيانات');
-
       const backupData = {};
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       
@@ -35,9 +32,7 @@ class DatabaseBackup {
         try {
           const result = await client.query(`SELECT * FROM ${table}`);
           backupData[table] = result.rows;
-          console.log(`📊 ${table}: ${result.rows.length} سجل`);
-        } catch (error) {
-          console.log(`⚠️ تخطي جدول ${table}: ${error.message}`);
+          } catch (error) {
           backupData[table] = [];
         }
       }
@@ -50,14 +45,11 @@ class DatabaseBackup {
       const backupFile = path.join(backupDir, `backup-${timestamp}.json`);
       fs.writeFileSync(backupFile, JSON.stringify(backupData, null, 2));
 
-      console.log(`✅ تم إنشاء النسخة الاحتياطية: ${backupFile}`);
-      
       await this.createSQLBackup(client, timestamp);
       
       return backupFile;
 
     } catch (error) {
-      console.error('❌ خطأ في إنشاء النسخة الاحتياطية:', error);
       throw error;
     } finally {
       await client.end();
@@ -106,11 +98,8 @@ class DatabaseBackup {
       }
 
       fs.writeFileSync(sqlFile, sqlContent);
-      console.log(`✅ تم إنشاء ملف SQL: ${sqlFile}`);
-      
-    } catch (error) {
-      console.error('❌ خطأ في إنشاء ملف SQL:', error);
-    }
+      } catch (error) {
+      }
   }
 
   async getDatabaseInfo() {
@@ -131,16 +120,11 @@ class DatabaseBackup {
         ORDER BY table_name
       `);
 
-      console.log('\n📊 معلومات قاعدة البيانات:');
-      console.log('قاعدة البيانات:', dbInfo.rows[0].current_database);
-      console.log('المستخدم:', dbInfo.rows[0].current_user);
-      console.log('الإصدار:', dbInfo.rows[0].version.split(' ')[0]);
+      [0]);
       
-      console.log('\n📋 الجداول الموجودة:');
       for (const table of tableInfo.rows) {
         const countResult = await client.query(`SELECT COUNT(*) FROM ${table.table_name}`);
-        console.log(`- ${table.table_name}: ${countResult.rows[0].count} سجل`);
-      }
+        }
 
       return {
         database: dbInfo.rows[0].current_database,
@@ -150,7 +134,6 @@ class DatabaseBackup {
       };
 
     } catch (error) {
-      console.error('❌ خطأ في الحصول على معلومات قاعدة البيانات:', error);
       throw error;
     } finally {
       await client.end();
@@ -173,8 +156,5 @@ if (require.main === module) {
       backup.getDatabaseInfo().catch(console.error);
       break;
     default:
-      console.log('الاستخدام:');
-      console.log('node databaseBackup.js backup  - إنشاء نسخة احتياطية');
-      console.log('node databaseBackup.js info    - معلومات قاعدة البيانات');
-  }
+      }
 }

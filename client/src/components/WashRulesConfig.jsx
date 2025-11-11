@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-
 const WashRulesConfig = () => {
   const [washRules, setWashRules] = useState([]);
   const [selectedPackage, setSelectedPackage] = useState('');
@@ -8,7 +7,6 @@ const WashRulesConfig = () => {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState('');
   const [loading, setLoading] = useState(false);
-
   // Default package templates
   const packageTemplates = [
     {
@@ -59,7 +57,6 @@ const WashRulesConfig = () => {
       }
     }
   ];
-
   const [newRule, setNewRule] = useState({
     name: '',
     singleCar: ['EXT'],
@@ -77,11 +74,9 @@ const WashRulesConfig = () => {
     }
   });
   const [editingIndex, setEditingIndex] = useState(-1);
-
   useEffect(() => {
     loadWashRules();
   }, []);
-
   const loadWashRules = async () => {
     try {
       // Try to load from server first
@@ -99,7 +94,6 @@ const WashRulesConfig = () => {
         }
       }
     } catch (error) {
-      console.error('Failed to load wash rules:', error);
       // Fallback to localStorage
       const savedRules = localStorage.getItem('washRules');
       if (savedRules) {
@@ -109,7 +103,6 @@ const WashRulesConfig = () => {
       }
     }
   };
-
   const saveRulesToStorage = async (rules) => {
     try {
       // Save to server first
@@ -118,22 +111,16 @@ const WashRulesConfig = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rules })
       });
-      
       if (response.ok) {
-
       } else {
-        console.error('Failed to save rules to server');
-      }
-      
+        }
       // Also save to localStorage as backup
       localStorage.setItem('washRules', JSON.stringify(rules));
     } catch (error) {
-      console.error('Failed to save rules:', error);
       // Fallback to localStorage only
       localStorage.setItem('washRules', JSON.stringify(rules));
     }
   };
-
   const loadHistoryForCustomer = async (customerId) => {
     setLoading(true);
     try {
@@ -143,24 +130,20 @@ const WashRulesConfig = () => {
         const customerHistory = allHistory.filter(record => 
           record.CustomerID === customerId
         ).sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate));
-        
         setHistoryData(customerHistory);
         setShowHistory(true);
       }
     } catch (error) {
-      console.error('Failed to load history:', error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-
   const addVisitToRule = () => {
     setNewRule({
       ...newRule,
       singleCar: [...newRule.singleCar, 'EXT']
     });
   };
-
   const removeVisitFromRule = (index) => {
     const updatedVisits = newRule.singleCar.filter((_, i) => i !== index);
     setNewRule({
@@ -168,7 +151,6 @@ const WashRulesConfig = () => {
       singleCar: updatedVisits
     });
   };
-
   const updateVisitType = (index, type) => {
     const updatedVisits = [...newRule.singleCar];
     updatedVisits[index] = type;
@@ -177,13 +159,11 @@ const WashRulesConfig = () => {
       singleCar: updatedVisits
     });
   };
-
   const saveRule = async () => {
     if (!newRule.name.trim()) {
       alert('Please enter package name');
       return;
     }
-
     try {
       if (editingIndex >= 0) {
         // Update existing rule
@@ -199,7 +179,6 @@ const WashRulesConfig = () => {
         saveRulesToStorage(updatedRules);
         alert('Rule saved successfully!');
       }
-      
       // Reset form
       setNewRule({
         name: '',
@@ -220,40 +199,31 @@ const WashRulesConfig = () => {
       setEditingIndex(-1);
       setShowAddForm(false);
     } catch (error) {
-      console.error('Failed to save rule:', error);
       alert('Failed to save rule');
     }
   };
-
   const [simulationResult, setSimulationResult] = useState(null);
   const [showSimulation, setShowSimulation] = useState(false);
-
   const testRule = (rule) => {
     const scenarios = [
       { name: 'عميل سيارة واحدة', cars: ['ABC123'] },
       { name: 'عميل سيارتين', cars: ['ABC123', 'XYZ789'] }
     ];
-
     const results = scenarios.map(scenario => {
       const schedule = simulateSchedule(rule, scenario);
       return { ...scenario, schedule };
     });
-
     setSimulationResult({ rule, results });
     setShowSimulation(true);
   };
-
   const simulateSchedule = (rule, scenario) => {
     const schedule = [];
     const weeksToShow = rule.biWeekly?.enabled ? 2 : 1;
-    
     for (let week = 1; week <= weeksToShow; week++) {
       // Determine if this week should have INT
       const weekShouldHaveInt = week === 1 || (rule.biWeekly?.enabled && rule.biWeekly.week2 !== 'ext_only');
-      
       for (let visit = 1; visit <= rule.singleCar.length; visit++) {
         const baseWashType = rule.singleCar[visit - 1] || 'EXT';
-        
         if (scenario.cars.length === 1) {
           // Single car - simple
           let washType = weekShouldHaveInt ? baseWashType : 'EXT';
@@ -267,7 +237,6 @@ const WashRulesConfig = () => {
           // Multi-car logic based on selected distribution method
           scenario.cars.forEach((car, carIndex) => {
             let washType = 'EXT';
-            
             if (weekShouldHaveInt && rule.multiCar?.enabled && baseWashType === 'INT') {
               switch (rule.multiCar.intDistribution) {
                 case 'alternate_between_cars':
@@ -275,29 +244,24 @@ const WashRulesConfig = () => {
                   const intCarIndex = (visit - 1) % scenario.cars.length;
                   washType = carIndex === intCarIndex ? 'INT' : 'EXT';
                   break;
-                  
                 case 'rotate_based_on_history':
                   // Simulate rotation - different car each time
                   const rotateCarIndex = (visit - 1) % scenario.cars.length;
                   washType = carIndex === rotateCarIndex ? 'INT' : 'EXT';
                   break;
-                  
                 case 'fixed_car_per_visit':
                   // Always first car gets INT
                   washType = carIndex === 0 ? 'INT' : 'EXT';
                   break;
-                  
                 case 'all_cars_get_int':
                   // All cars get INT
                   washType = 'INT';
                   break;
-                  
                 default:
                   // Default: first car gets INT
                   washType = carIndex === 0 ? 'INT' : 'EXT';
               }
             }
-            
             schedule.push({ 
               week: weeksToShow > 1 ? `أسبوع ${week}` : undefined,
               visit, 
@@ -308,10 +272,8 @@ const WashRulesConfig = () => {
         }
       }
     }
-    
     return schedule;
   };
-
   const deleteRule = (index, ruleName) => {
     if (confirm(`Are you sure you want to delete the rule "${ruleName}"?`)) {
       const updatedRules = washRules.filter((_, i) => i !== index);
@@ -320,7 +282,6 @@ const WashRulesConfig = () => {
       alert(`Rule "${ruleName}" deleted successfully!`);
     }
   };
-
   return (
     <div className="card" style={{ marginBottom: '2rem' }}>
       <div style={{
@@ -337,7 +298,6 @@ const WashRulesConfig = () => {
         }}>
           🧼 Wash Rules Configuration
         </h2>
-        
         <div style={{ display: 'flex', gap: '1rem' }}>
           <button
             onClick={() => setShowAddForm(!showAddForm)}
@@ -345,7 +305,6 @@ const WashRulesConfig = () => {
           >
             ➕ Add Rule
           </button>
-          
           <button
             onClick={() => setShowHistory(!showHistory)}
             className="btn btn-secondary"
@@ -354,7 +313,6 @@ const WashRulesConfig = () => {
           </button>
         </div>
       </div>
-
       {/* History Viewer */}
       {showHistory && (
         <div style={{
@@ -371,7 +329,6 @@ const WashRulesConfig = () => {
           }}>
             📊 Customer History Viewer
           </h3>
-          
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginBottom: '1rem' }}>
             <input
               type="text"
@@ -386,7 +343,6 @@ const WashRulesConfig = () => {
                 fontSize: '1rem'
               }}
             />
-            
             <button
               onClick={() => loadHistoryForCustomer(selectedCustomer)}
               disabled={!selectedCustomer.trim() || loading}
@@ -395,7 +351,6 @@ const WashRulesConfig = () => {
               {loading ? '⏳ Loading...' : '🔍 Load History'}
             </button>
           </div>
-
           {historyData.length > 0 && (
             <div style={{ overflowX: 'auto', maxHeight: '300px', overflowY: 'auto' }}>
               <table style={{
@@ -450,7 +405,6 @@ const WashRulesConfig = () => {
           )}
         </div>
       )}
-
       {/* Add Rule Form */}
       {showAddForm && (
         <div style={{
@@ -467,7 +421,6 @@ const WashRulesConfig = () => {
           }}>
             {editingIndex >= 0 ? 'Edit Wash Rule' : 'Add New Wash Rule'}
           </h3>
-          
           {/* Package Name */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
@@ -487,7 +440,6 @@ const WashRulesConfig = () => {
               }}
             />
           </div>
-
           {/* Single Car Pattern */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
@@ -543,7 +495,6 @@ const WashRulesConfig = () => {
               </button>
             </div>
           </div>
-
           {/* Multi-Car Settings */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -557,7 +508,6 @@ const WashRulesConfig = () => {
               />
               <span style={{ fontWeight: '600' }}>Different rules for multi-car customers</span>
             </label>
-            
             {newRule.multiCar.enabled && (
               <div style={{ marginLeft: '1rem', padding: '1rem', backgroundColor: '#e9ecef', borderRadius: '8px' }}>
                 <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
@@ -581,7 +531,6 @@ const WashRulesConfig = () => {
                   <option value="fixed_car_per_visit">📌 سيارة ثابتة لكل زيارة</option>
                   <option value="all_cars_get_int">🚗🚗 كل السيارات تاخد INT</option>
                 </select>
-                
                 <div style={{
                   marginTop: '0.5rem',
                   padding: '0.5rem',
@@ -606,7 +555,6 @@ const WashRulesConfig = () => {
               </div>
             )}
           </div>
-
           {/* Bi-Weekly Settings */}
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -620,7 +568,6 @@ const WashRulesConfig = () => {
               />
               <span style={{ fontWeight: '600' }}>Enable bi-weekly cycle</span>
             </label>
-            
             {newRule.biWeekly.enabled && (
               <div style={{ marginLeft: '1rem', padding: '1rem', backgroundColor: '#e9ecef', borderRadius: '8px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -646,7 +593,6 @@ const WashRulesConfig = () => {
                       <option value="use_weekly_pattern">Same as Week 1</option>
                     </select>
                   </div>
-                  
                   <div>
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600' }}>
                       Cycle Detection:
@@ -673,7 +619,6 @@ const WashRulesConfig = () => {
               </div>
             )}
           </div>
-
           {/* Action Buttons */}
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'flex-end' }}>
             <button
@@ -701,7 +646,6 @@ const WashRulesConfig = () => {
             >
               Cancel
             </button>
-            
             <button
               onClick={saveRule}
               className="btn btn-primary"
@@ -711,7 +655,6 @@ const WashRulesConfig = () => {
           </div>
         </div>
       )}
-
       {/* Simulation Results */}
       {showSimulation && simulationResult && (
         <div style={{
@@ -739,13 +682,11 @@ const WashRulesConfig = () => {
               ✖ إغلاق
             </button>
           </div>
-          
           {simulationResult.results.map((scenario, index) => (
             <div key={index} style={{ marginBottom: '1.5rem' }}>
               <h4 style={{ color: '#495057', marginBottom: '0.5rem' }}>
                 {scenario.name} ({scenario.cars.length} سيارة)
               </h4>
-              
               <div style={{ overflowX: 'auto' }}>
                 <table style={{
                   width: '100%',
@@ -801,7 +742,6 @@ const WashRulesConfig = () => {
           ))}
         </div>
       )}
-
       {/* Existing Rules */}
       <div className="stats-grid">
         {washRules.map((rule, index) => (
@@ -815,20 +755,16 @@ const WashRulesConfig = () => {
               }}>
                 🧼 {rule.name}
               </h4>
-              
               <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>
                 <strong>Single Car:</strong> {rule.singleCar.join(' → ')}
               </div>
-              
               <div style={{ fontSize: '0.9rem', color: '#6c757d', marginBottom: '0.5rem' }}>
                 <strong>Multi-Car:</strong> {rule.multiCar.enabled ? '✅ Enabled' : '❌ Disabled'}
               </div>
-              
               <div style={{ fontSize: '0.9rem', color: '#6c757d' }}>
                 <strong>Bi-Weekly:</strong> {rule.biWeekly.enabled ? '✅ Enabled' : '❌ Disabled'}
               </div>
             </div>
-            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <button
                 onClick={() => testRule(rule)}
@@ -845,7 +781,6 @@ const WashRulesConfig = () => {
               >
                 🧪 Test
               </button>
-              
               <button
                 onClick={() => {
                   setNewRule(rule);
@@ -865,7 +800,6 @@ const WashRulesConfig = () => {
               >
                 ✏️ Edit
               </button>
-              
               <button
                 onClick={() => deleteRule(index, rule.name)}
                 style={{
@@ -885,7 +819,6 @@ const WashRulesConfig = () => {
           </div>
         ))}
       </div>
-
       {/* Rules Count */}
       <div style={{
         marginTop: '1.5rem',
@@ -906,5 +839,4 @@ const WashRulesConfig = () => {
     </div>
   );
 };
-
 export default WashRulesConfig;

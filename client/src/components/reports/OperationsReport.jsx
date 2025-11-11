@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import operationsService from '../../services/operationsService';
-
 const StatCard = ({ title, value, subtitle, color, icon }) => (
   <div className="stat-card">
     <div className="stat-icon" style={{ color }}>{icon}</div>
@@ -11,24 +10,19 @@ const StatCard = ({ title, value, subtitle, color, icon }) => (
     </div>
   </div>
 );
-
 const OperationsReport = ({ onBack }) => {
   const [activeTab, setActiveTab] = useState('daily');
   const [operationsData, setOperationsData] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
-  
   useEffect(() => {
     loadTabData(activeTab);
   }, [activeTab, selectedDate]);
-  
   const loadTabData = async (tab) => {
     if (operationsData[tab] && tab !== 'daily') return;
-    
     setLoading(true);
     try {
       let data;
-      
       switch (tab) {
         case 'daily':
           data = await operationsService.getDailyOperations(new Date(selectedDate));
@@ -54,18 +48,15 @@ const OperationsReport = ({ onBack }) => {
         default:
           return;
       }
-      
       setOperationsData(prev => ({
         ...prev,
         [tab]: data
       }));
     } catch (error) {
-      console.error(`Error loading ${tab} data:`, error);
-    } finally {
+      } finally {
       setLoading(false);
     }
   };
-  
   const TabButton = ({ id, label, icon, isActive, onClick }) => (
     <button
       onClick={() => onClick(id)}
@@ -81,7 +72,6 @@ const OperationsReport = ({ onBack }) => {
       {label}
     </button>
   );
-  
   if (loading) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
@@ -90,7 +80,6 @@ const OperationsReport = ({ onBack }) => {
       </div>
     );
   }
-  
   return (
     <div className="home-page">
       <div className="page-header">
@@ -99,11 +88,9 @@ const OperationsReport = ({ onBack }) => {
             ← Back to Reports
           </button>
         </div>
-        
         <div className="header-center">
           <h1>⚙️ Operations Reports</h1>
         </div>
-        
         <div className="header-actions">
           {activeTab === 'daily' && (
             <input
@@ -121,7 +108,6 @@ const OperationsReport = ({ onBack }) => {
           )}
         </div>
       </div>
-      
       {/* Tab Navigation */}
       <div style={{
         display: 'flex',
@@ -200,14 +186,12 @@ const OperationsReport = ({ onBack }) => {
           }} 
         />
       </div>
-      
       {/* Daily Operations */}
       {activeTab === 'daily' && operationsData.daily && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>
             📅 Daily Operations - {operationsData.daily.dayName}
           </h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Scheduled Today"
@@ -231,7 +215,6 @@ const OperationsReport = ({ onBack }) => {
               icon="📍"
             />
           </div>
-          
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
             {/* Time Slots */}
             <div className="card">
@@ -250,7 +233,6 @@ const OperationsReport = ({ onBack }) => {
                 </div>
               ))}
             </div>
-            
             {/* Areas */}
             <div className="card">
               <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>📍 Areas</h4>
@@ -271,19 +253,16 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Worker Performance */}
       {activeTab === 'workers' && operationsData.workers && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>👷 Worker Performance</h3>
-          
           <div className="stats-grid">
             {operationsData.workers.map(worker => (
               <div key={worker.id || worker.name} className="card">
                 <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>
                   👷 {worker.name || 'Unknown'} - {worker.area || 'Unassigned'}
                 </h4>
-                
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <span>Assigned Clients:</span>
@@ -309,12 +288,10 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Service Efficiency */}
       {activeTab === 'efficiency' && operationsData.efficiency && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>🚗 Service Efficiency</h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Completion Rate"
@@ -338,7 +315,6 @@ const OperationsReport = ({ onBack }) => {
               icon="📊"
             />
           </div>
-          
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
             {/* Car Types */}
             <div className="card">
@@ -355,7 +331,6 @@ const OperationsReport = ({ onBack }) => {
                 </div>
               ))}
             </div>
-            
             {/* Packages */}
             <div className="card">
               <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>📦 Packages</h4>
@@ -374,12 +349,10 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Routes */}
       {activeTab === 'routes' && operationsData.routes && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>📍 Route Optimization</h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Total Areas"
@@ -403,7 +376,6 @@ const OperationsReport = ({ onBack }) => {
               icon="🏘️"
             />
           </div>
-          
           <div className="stats-grid">
             {operationsData.routes.areas.map(area => (
               <div key={area.area} className="card">
@@ -427,12 +399,10 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Schedule */}
       {activeTab === 'schedule' && operationsData.schedule && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>⏰ Schedule Management</h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Weekly Services"
@@ -456,7 +426,6 @@ const OperationsReport = ({ onBack }) => {
               icon="🔥"
             />
           </div>
-          
           <div className="stats-grid">
             {operationsData.schedule.weeklySchedule.map(day => (
               <div key={day.day} className="card" style={{ textAlign: 'center' }}>
@@ -475,12 +444,10 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Equipment */}
       {activeTab === 'equipment' && operationsData.equipment && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>🔧 Equipment & Supplies</h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Monthly Cost"
@@ -497,7 +464,6 @@ const OperationsReport = ({ onBack }) => {
               icon="🔧"
             />
           </div>
-          
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
             {/* Supplies */}
             <div className="card">
@@ -514,7 +480,6 @@ const OperationsReport = ({ onBack }) => {
                 </div>
               ))}
             </div>
-            
             {/* Equipment */}
             <div className="card">
               <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>🔧 Equipment Status</h4>
@@ -541,12 +506,10 @@ const OperationsReport = ({ onBack }) => {
           </div>
         </div>
       )}
-      
       {/* Productivity */}
       {activeTab === 'productivity' && operationsData.productivity && (
         <div>
           <h3 style={{ color: 'var(--brand-primary)', marginBottom: '1.5rem' }}>📊 Productivity Reports</h3>
-          
           <div className="stats-grid" style={{ marginBottom: '2rem' }}>
             <StatCard
               title="Active Clients"
@@ -570,7 +533,6 @@ const OperationsReport = ({ onBack }) => {
               icon="📊"
             />
           </div>
-          
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
             {/* Monthly Trend */}
             <div className="card">
@@ -591,7 +553,6 @@ const OperationsReport = ({ onBack }) => {
                 </div>
               ))}
             </div>
-            
             {/* KPIs */}
             <div className="card">
               <h4 style={{ color: 'var(--brand-primary)', marginBottom: '1rem' }}>🎯 KPIs</h4>
@@ -620,5 +581,4 @@ const OperationsReport = ({ onBack }) => {
     </div>
   );
 };
-
 export default OperationsReport;

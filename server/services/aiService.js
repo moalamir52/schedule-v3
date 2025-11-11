@@ -3,9 +3,7 @@ class AIService {
     if (process.env.HF_TOKEN) {
       this.hfToken = process.env.HF_TOKEN;
       this.hasAPI = true;
-      console.log('Hugging Face Chat API initialized');
-    } else {
-      console.warn('HF_TOKEN not found, using fallback responses');
+      } else {
       this.hasAPI = false;
     }
   }
@@ -13,13 +11,10 @@ class AIService {
   async askQuestion(question, businessData) {
     // Try HF Chat API first, fallback if needed
     if (!this.hasAPI) {
-      console.log('Using Smart AI Responses based on your data');
       return this.getFallbackResponse(question, businessData);
     }
 
     try {
-      console.log('Using Hugging Face Chat API for question:', question);
-      
       const response = await fetch('https://router.huggingface.co/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -39,20 +34,13 @@ class AIService {
       
       if (!response.ok) {
         const errorText = await response.text();
-        console.log('HF Chat API Error:', response.status, response.statusText);
-        console.log('Error details:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
       const result = await response.json();
-      console.log('HF Chat API Result:', result);
-      
       const text = result.choices?.[0]?.message?.content || 'Sorry, could not generate response.';
-      console.log('Hugging Face Chat API response received');
       return text;
     } catch (error) {
-      console.error('AI Service Error:', error);
-      console.log('Falling back to hardcoded responses');
       return this.getFallbackResponse(question, businessData);
     }
   }

@@ -118,15 +118,11 @@ const completeTask = async (req, res) => {
     await addHistoryRecord(historyRecord);
     
     // Use optimized task completion - direct delete
-    console.log(`[COMPLETE] Using optimized deletion for task: ${taskId}`);
-    
     try {
       const success = await db.completeTaskOptimized(taskId);
       if (!success) {
-        console.log('[COMPLETE] Optimized completion failed, task may not exist');
-      }
+        }
     } catch (error) {
-      console.error('[COMPLETE] Error in optimized task completion:', error);
       // Continue anyway - the history record was saved
     }
     
@@ -151,8 +147,6 @@ const cancelTask = async (req, res) => {
         error: 'Missing required field: taskId' 
       });
     }
-    
-    console.log(`[CANCEL] Attempting to cancel task: ${taskId}`);
     
     // Get current scheduled tasks to find the task details
     const existingTasks = await getScheduledTasks();
@@ -194,22 +188,14 @@ const cancelTask = async (req, res) => {
     };
     
     await addHistoryRecord(cancellationRecord);
-    console.log(`[CANCEL] Added cancellation record to history: ${cancelledDate}`);
-    
     // Use optimized task deletion
-    console.log(`[CANCEL] Using optimized deletion for task: ${taskId}`);
-    
     try {
       const success = await db.completeTaskOptimized(taskId);
       if (!success) {
-        console.log('[CANCEL] Optimized deletion failed, task may not exist');
-      }
+        }
     } catch (error) {
-      console.error('[CANCEL] Error in optimized task deletion:', error);
       // Continue anyway - the cancellation record was saved
     }
-    
-    console.log(`[CANCEL] Task cancelled successfully: ${taskId}`);
     
     res.json({
       success: true,
@@ -225,7 +211,6 @@ const cancelTask = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[CANCEL] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -286,13 +271,9 @@ const completeAllTasks = async (req, res) => {
     
     // Use batch deletion for better performance
     const completedTaskIds = tasks.map(task => task.id);
-    console.log(`[COMPLETE-ALL] Using batch deletion for ${completedTaskIds.length} tasks`);
-    
     try {
       await db.batchDeleteTasks(completedTaskIds);
-      console.log(`[COMPLETE-ALL] Successfully batch deleted ${completedTaskIds.length} tasks`);
-    } catch (error) {
-      console.error('[COMPLETE-ALL] Batch deletion failed:', error);
+      } catch (error) {
       // Continue anyway - the history records were saved
     }
     
@@ -347,7 +328,7 @@ const forceCleanup = async (req, res) => {
       return isInHistory;
     });
     
-    console.log(`[FORCE-CLEANUP] Found ${stuckTasks.length} stuck tasks for ${day} (${targetDateFormatted})`);
+    console.log(`Found ${stuckTasks.length} stuck tasks for cleanup`);
     
     let cleanedCount = 0;
     
@@ -356,18 +337,12 @@ const forceCleanup = async (req, res) => {
       
       // Use batch deletion for stuck tasks
       const stuckTaskIds = stuckTasks.map(task => `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}`);
-      console.log(`[FORCE-CLEANUP] Using batch deletion for ${stuckTaskIds.length} stuck tasks`);
-      
       try {
         await db.batchDeleteTasks(stuckTaskIds);
-        console.log(`[FORCE-CLEANUP] Successfully batch deleted ${stuckTaskIds.length} stuck tasks`);
-      } catch (error) {
-        console.error('[FORCE-CLEANUP] Batch deletion failed:', error);
+        } catch (error) {
         cleanedCount = 0;
       }
     }
-    
-    console.log(`[FORCE-CLEANUP] Completed cleanup: ${cleanedCount} tasks cleaned`);
     
     res.json({
       success: true,
@@ -381,7 +356,6 @@ const forceCleanup = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[FORCE-CLEANUP] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

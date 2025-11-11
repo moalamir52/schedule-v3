@@ -152,7 +152,6 @@ const completeTask = async (req, res) => {
       if (task.AppointmentDate && task.CustomerID === customerID) {
         const appointmentDate = new Date(task.AppointmentDate);
         if (appointmentDate.toDateString() === taskDate.toDateString()) {
-          console.log(`[AUTO-CLEANUP] Removing related task: ${task.CustomerName} - ${task.CarPlate} on ${task.AppointmentDate}`);
           return false;
         }
       }
@@ -202,8 +201,6 @@ const cancelTask = async (req, res) => {
       });
     }
     
-    console.log(`[CANCEL] Attempting to cancel task: ${taskId}`);
-    
     // Get current scheduled tasks
     const existingTasks = await getScheduledTasks();
     
@@ -248,14 +245,10 @@ const cancelTask = async (req, res) => {
     
     // Save cancellation to wash_history sheet
     await addHistoryRecord(cancellationRecord);
-    console.log(`[CANCEL] Added cancellation record to history: ${cancelledDate}`);
-    
     // Remove the cancelled task from scheduled tasks
     const remainingTasks = existingTasks.filter(task => 
       `${task.CustomerID}-${task.Day}-${task.Time}-${task.CarPlate}` !== taskId
     );
-    
-    console.log(`[CANCEL] Removing task: ${taskToCancel.CustomerName} - Villa ${taskToCancel.Villa} - ${taskToCancel.CarPlate}`);
     
     // Update scheduled tasks sheet (remove the cancelled task)
     const updatedSchedule = remainingTasks.map(task => ({
@@ -276,8 +269,6 @@ const cancelTask = async (req, res) => {
     
     await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
     
-    console.log(`[CANCEL] Task cancelled successfully: ${taskId}`);
-    
     res.json({
       success: true,
       message: 'Task cancelled and recorded in history',
@@ -292,7 +283,6 @@ const cancelTask = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[CANCEL] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -549,13 +539,13 @@ const forceCleanup = async (req, res) => {
       return isInHistory; // These are completed but still in schedule = stuck
     });
     
-    console.log(`[FORCE-CLEANUP] Found ${stuckTasks.length} stuck tasks for ${day} (${targetDateFormatted})`);
+    `);
     
     let cleanedCount = 0;
     const now = new Date();
     
     // Remove stuck tasks from schedule (they're already in history)
-    console.log(`[FORCE-CLEANUP] Found ${stuckTasks.length} stuck tasks (completed but still in schedule)`);
+    `);
     
     if (stuckTasks.length > 0) {
       cleanedCount = stuckTasks.length;
@@ -585,13 +575,8 @@ const forceCleanup = async (req, res) => {
       
       await clearAndWriteSheet('ScheduledTasks', updatedSchedule);
       
-      console.log(`[FORCE-CLEANUP] Removed ${cleanedCount} stuck tasks from schedule`);
-    }
-    
+      }
 
-    
-    console.log(`[FORCE-CLEANUP] Completed cleanup: ${cleanedCount} tasks cleaned`);
-    
     res.json({
       success: true,
       message: `Force cleanup completed for ${day} (${targetDateFormatted})`,
@@ -604,7 +589,6 @@ const forceCleanup = async (req, res) => {
     });
     
   } catch (error) {
-    console.error('[FORCE-CLEANUP] Error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

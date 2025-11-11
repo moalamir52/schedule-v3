@@ -17,7 +17,6 @@ async function getWeeklySchedule(req, res) {
       lastSync: scheduleCache.lastSync
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 }
@@ -28,7 +27,6 @@ async function refreshSchedule(req, res) {
     const schedule = await scheduleCache.refresh();
     res.status(200).json({ schedule, message: 'Schedule refreshed' });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to refresh schedule' });
   }
 }
@@ -39,7 +37,6 @@ async function saveSchedule(req, res) {
     await scheduleCache.save();
     res.status(200).json({ message: 'Schedule saved successfully' });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to save schedule' });
   }
 }
@@ -57,7 +54,6 @@ async function updateTask(req, res) {
       hasPendingChanges: true
     });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ error: 'Failed to update task' });
   }
 }
@@ -68,17 +64,12 @@ async function batchUpdate(req, res) {
     const db = require('../../services/databaseService');
     const changes = req.body;
     
-    console.log('[BATCH-UPDATE] Received changes:', changes.length);
-    
     for (const change of changes) {
       await db.saveAssignment(change);
-      console.log('[BATCH-UPDATE] ✅ Updated:', change.customerName, change.carPlate, 'assigned to', change.assignedWorker || change.targetWorkerName);
-    }
+      }
     
-    console.log('[BATCH-UPDATE] ✅ All changes saved to database successfully');
     res.status(200).json({ message: 'Changes saved successfully' });
   } catch (error) {
-    console.error('[BATCH-UPDATE] ❌ Error:', error);
     res.status(500).json({ error: 'Failed to save changes' });
   }
 }

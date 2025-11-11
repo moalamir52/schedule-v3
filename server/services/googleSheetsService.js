@@ -11,10 +11,7 @@ async function getInvoices() {
 }
 
 async function addInvoiceRecord(invoiceData) {
-  console.log('[SHEETS] Adding invoice record:', invoiceData);
   const result = await db.addInvoice(invoiceData);
-  console.log('[SHEETS] Invoice added, result:', result);
-  
   // Return the Ref that was actually saved
   return invoiceData.Ref || invoiceData.InvoiceID || 'GLOGO-ERROR';
 }

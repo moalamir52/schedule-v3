@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
-
 const ServerVersionCheck = () => {
   const [version, setVersion] = useState(null);
   const [error, setError] = useState(null);
-
   useEffect(() => {
     const checkVersion = async () => {
       try {
@@ -14,10 +12,8 @@ const ServerVersionCheck = () => {
         setError(err.message);
       }
     };
-    
     checkVersion();
   }, []);
-
   if (error) {
     return (
       <div style={{ 
@@ -34,11 +30,8 @@ const ServerVersionCheck = () => {
       </div>
     );
   }
-
   if (!version) return null;
-
   const isLatest = version.version === '2.1.0';
-
   return (
     <div style={{ 
       position: 'fixed', 
@@ -54,5 +47,4 @@ const ServerVersionCheck = () => {
     </div>
   );
 };
-
 export default ServerVersionCheck;

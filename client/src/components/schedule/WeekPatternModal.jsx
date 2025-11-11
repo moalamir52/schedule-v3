@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import './WeekPatternModal.css';
 import { FiCalendar, FiCheck, FiX, FiArrowRight, FiInfo, FiClock, FiLoader, FiChevronDown } from 'react-icons/fi';
-
 const WeekPatternModal = ({
   isOpen,
   onClose,
@@ -15,20 +14,15 @@ const WeekPatternModal = ({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [errorHistory, setErrorHistory] = useState(null);
   const [isHistoryVisible, setIsHistoryVisible] = useState(false);
-
   const fetchWashHistory = useCallback(async () => {
     const customerId = customerInfo?.customerId;
     if (!customerId || washHistory.length > 0) return; // Don't refetch if already loaded
-
     const isBiWeekly = customerInfo?.packageType?.toLowerCase().includes('bi week');
     const limit = isBiWeekly ? 12 : 6;
-
     setIsLoadingHistory(true);
     setErrorHistory(null);
-    
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-    
     try {
       let response;
       try {
@@ -52,13 +46,10 @@ const WeekPatternModal = ({
           signal: controller.signal
         });
       }
-      
       clearTimeout(timeoutId);
-      
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
-      
       const data = await response.json();
       setWashHistory(data.history || []);
     } catch (error) {
@@ -70,12 +61,10 @@ const WeekPatternModal = ({
       } else {
         setErrorHistory(error.message || 'Network error');
       }
-      console.error('Wash history fetch error:', error);
-    } finally {
+      } finally {
       setIsLoadingHistory(false);
     }
   }, [customerInfo?.customerId, customerInfo?.packageType, washHistory.length]);
-
   useEffect(() => {
     if (isOpen) {
       const initialTypes = {};
@@ -90,7 +79,6 @@ const WeekPatternModal = ({
       setWashHistory([]); 
     }
   }, [isOpen, weekAppointments]);
-
   const handleToggleHistory = () => {
     const newVisibility = !isHistoryVisible;
     setIsHistoryVisible(newVisibility);
@@ -98,19 +86,16 @@ const WeekPatternModal = ({
       fetchWashHistory();
     }
   };
-
   const handleWashTypeChange = (day, carPlate, time, newWashType) => {
     const key = `${day}-${carPlate}-${time}`;
     setSelectedWashTypes(prev => ({ ...prev, [key]: newWashType }));
   };
-
   const handleApply = () => {
     const changes = [];
     remainingAppointments.forEach(apt => {
       const key = `${apt.day}-${apt.carPlate}-${apt.time}`;
       const newWashType = selectedWashTypes[key];
       const originalWashType = apt.washType;
-
       if (newWashType && newWashType !== originalWashType) {
         changes.push({
           taskId: `${apt.customerId}-${apt.day}-${apt.time}-${apt.carPlate}`,
@@ -124,26 +109,21 @@ const WeekPatternModal = ({
     onApplyChanges(changes);
     onClose();
   };
-
   const remainingAppointments = useMemo(() =>
     weekAppointments?.filter(apt =>
       !(apt.day === changedAppointment?.day && apt.carPlate === changedAppointment?.carPlate && apt.time === changedAppointment?.time)
     ) || [],
     [weekAppointments, changedAppointment]
   );
-
   if (!isOpen) return null;
-
   return (
     <div className="modal-overlay-v2" onClick={onClose}>
       <div className="modal-container-v2" onClick={e => e.stopPropagation()}>
-        
         <div className="modal-header-v2">
           <FiCalendar className="header-icon-v2" />
           <h3>Update Weekly Schedule?</h3>
           <button className="close-btn-v2" onClick={onClose}><FiX /></button>
         </div>
-
         <div className="modal-content-v2">
           <div className="change-summary-v2">
             <div className="car-info-v2">
@@ -156,7 +136,6 @@ const WeekPatternModal = ({
               <span className={`wash-badge-v2 ${changedAppointment.newWashType?.toLowerCase()}`}>{changedAppointment.newWashType}</span>
             </div>
           </div>
-
           {remainingAppointments.length > 0 ? (
             <>
               <p className="instruction-v2">Apply this change to other cars/days this week?</p>
@@ -192,7 +171,6 @@ const WeekPatternModal = ({
                 <span>No other appointments this week to update.</span>
             </div>
           )}
-
           {/* Collapsible Wash History */}
           <div className="history-section-v2">
             <button className="history-toggle-btn-v2" onClick={handleToggleHistory}>
@@ -223,7 +201,6 @@ const WeekPatternModal = ({
             )}
           </div>
         </div>
-
         <div className="modal-actions-v2">
           <button className="action-btn-v2 skip-btn-v2" onClick={onClose}>
             <FiX /> Just For Today
@@ -236,10 +213,8 @@ const WeekPatternModal = ({
             <FiCheck /> Apply to Week
           </button>
         </div>
-
       </div>
     </div>
   );
 };
-
 export default WeekPatternModal;

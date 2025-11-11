@@ -1,20 +1,16 @@
 import { useState, useEffect } from 'react';
 import { FiChevronLeft, FiChevronRight, FiSettings, FiEye, FiBarChart, FiZap, FiPlus, FiDownload, FiAlertTriangle } from 'react-icons/fi';
-
 function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onForceReset, onToggleShowAllSlots, showAllSlots, onClear, onViewChange, onAdd, onExport, onCronSettings, currentView, currentWeekOffset, onWeekChange, viewMode, onViewModeChange }) {
   const [showDropdown, setShowDropdown] = useState(false);
-
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (showDropdown && !event.target.closest('.actions-container')) {
         setShowDropdown(false);
       }
     };
-
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showDropdown]);
-
   const controlBarStyle = {
     display: 'flex',
     justifyContent: 'space-between',
@@ -25,13 +21,11 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
     boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
     marginBottom: '20px'
   };
-
   const controlGroupStyle = {
     display: 'flex',
     alignItems: 'center',
     gap: '10px'
   };
-
   const buttonStyle = {
     padding: '10px 16px',
     border: 'none',
@@ -47,37 +41,31 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
   };
-
   const navButtonStyle = {
     ...buttonStyle,
     backgroundColor: '#1e7e34',
     color: 'white',
     padding: '10px'
   };
-
   const weekButtonStyle = {
     ...buttonStyle,
     backgroundColor: '#28a745',
     color: 'white',
     fontWeight: '600'
   };
-
   const todayButtonStyle = {
     ...buttonStyle,
     backgroundColor: '#17a2b8',
     color: 'white'
   };
-
   const actionsButtonStyle = {
     ...buttonStyle,
     backgroundColor: '#6c757d',
     color: 'white'
   };
-
   const actionsContainerStyle = {
     position: 'relative'
   };
-
   const dropdownStyle = {
     position: 'absolute',
     top: '100%',
@@ -91,7 +79,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
     marginTop: '8px',
     overflow: 'hidden'
   };
-
   const dropdownItemStyle = {
     padding: '12px 16px',
     cursor: 'pointer',
@@ -104,7 +91,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
     gap: '10px',
     fontWeight: '500'
   };
-
   const getCurrentDateString = () => {
     const today = new Date();
     return today.toLocaleDateString('en-US', { 
@@ -114,13 +100,11 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
       day: 'numeric' 
     });
   };
-
   return (
     <div style={controlBarStyle}>
       <h2 style={{ color: '#1e7e34', margin: 0 }}>
         {viewMode === 'today' ? `Today - ${getCurrentDateString()}` : `Week ${currentWeekOffset === 0 ? '(Current)' : currentWeekOffset > 0 ? `+${currentWeekOffset}` : currentWeekOffset}`}
       </h2>
-      
       <div style={controlGroupStyle}>
         <button 
           style={{
@@ -190,7 +174,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
           📊 {showAllSlots ? 'Hide All Slots' : 'Show All Slots'}
         </button>
       </div>
-
       <div style={actionsContainerStyle} className="actions-container">
         <button 
           style={actionsButtonStyle}
@@ -201,7 +184,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
           <FiSettings />
           Actions
         </button>
-        
         {showDropdown && (
           <div style={dropdownStyle}>
             <div 
@@ -221,7 +203,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
             >
               🔄 Add New Customers
             </div>
-            
             <div 
               style={dropdownItemStyle}
               onClick={() => {
@@ -239,7 +220,38 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
             >
               🔄 Smart Auto-Schedule
             </div>
-            
+            <div 
+              style={dropdownItemStyle}
+              onClick={async () => {
+                try {
+                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/skipped-customers`);
+                  const data = await response.json();
+                  
+                  if (data.success && data.skippedCustomers.length > 0) {
+                    const skippedList = data.skippedCustomers.map(customer => 
+                      `• ${customer.customerName} - ${customer.day} ${customer.time} (${customer.carPlate})`
+                    ).join('\n');
+                    
+                    alert(`⚠️ Skipped Customers (${data.totalSkipped}):\n\n${skippedList}`);
+                  } else {
+                    alert('✅ No skipped customers');
+                  }
+                } catch (error) {
+                  alert('❌ Error fetching skipped customers: ' + error.message);
+                }
+                setShowDropdown(false);
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#fff3e0';
+                e.currentTarget.style.color = '#f57c00';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'white';
+                e.currentTarget.style.color = '#495057';
+              }}
+            >
+              ⚠️ View Skipped Customers
+            </div>
             <div 
               style={dropdownItemStyle}
               onClick={async () => {
@@ -249,45 +261,40 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
                   'Customers, Workers, and other data will NOT be affected.\n\n' +
                   'Continue?'
                 );
-                
                 if (!confirmed) {
                   setShowDropdown(false);
                   return;
                 }
-                
                 const doubleConfirm = window.confirm(
                   '⚠️ FINAL CONFIRMATION\n\n' +
                   'Delete all scheduled tasks?\n' +
                   '(Customers and Workers will remain safe)'
                 );
-                
                 if (!doubleConfirm) {
                   setShowDropdown(false);
                   return;
                 }
-                
                 try {
-                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/clear`, {
+                  const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/clear-all`, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json' }
                   });
-                  
                   if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                   }
-                  
                   const data = await response.json();
-                  
                   if (data.success) {
-                    alert('✅ SUCCESS!\n\nAll scheduled tasks have been cleared.\n\nCustomers and Workers are safe.\n\nPage will refresh.');
-                    window.location.reload();
+                    // تحديث البيانات بدلاً من إعادة تحميل الصفحة
+                    if (onAutoAssign) {
+                      onAutoAssign(); // إعادة تحميل البيانات فقط
+                    }
+                    alert('✅ تم حذف جميع المهام بنجاح');
                   } else {
                     alert('❌ Failed to clear schedule: ' + (data.error || 'Unknown error'));
                   }
                 } catch (err) {
                   alert('❌ Error clearing schedule: ' + err.message);
                 }
-                
                 setShowDropdown(false);
               }}
               onMouseEnter={(e) => {
@@ -301,7 +308,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
             >
               🗑️ Clear All Data
             </div>
-
             <div 
               style={dropdownItemStyle}
               onClick={onClear}
@@ -317,7 +323,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
               <FiAlertTriangle style={{ color: '#f44336' }} />
               Clear Schedule
             </div>
-            
             <div 
               style={dropdownItemStyle}
               onClick={() => {
@@ -336,7 +341,6 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
               <FiPlus style={{ color: '#4caf50' }} />
               Add Manual Appointment
             </div>
-            
             <div 
               style={dropdownItemStyle}
               onClick={() => {
@@ -372,12 +376,10 @@ function ScheduleControls({ onAutoAssign, onSyncNewCustomers, onGenerateNew, onF
             >
               ⏰ Schedule Settings
             </div>
-
           </div>
         )}
       </div>
     </div>
   );
 }
-
 export default ScheduleControls;

@@ -44,7 +44,6 @@ const addService = async (req, res) => {
     
     res.json({ success: true, service: newService, message: 'Service added successfully' });
   } catch (error) {
-    console.error('Error adding service:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
@@ -61,7 +60,6 @@ const deleteService = async (req, res) => {
     
     res.json({ success: true, message: 'Service deleted successfully' });
   } catch (error) {
-    console.error('Error deleting service:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };

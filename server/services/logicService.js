@@ -1,33 +1,51 @@
 // logicService.js
 // Use database service instead of Google Sheets
 
+// Global variable to store skipped customers
+let skippedCustomers = [];
+
 async function buildWeeklySchedule(weekOffset = 0) {
   try {
-    console.log('[BUILD-SCHEDULE] Starting weekly schedule generation...');
+    // Reset skipped customers for new schedule generation
+    skippedCustomers = [];
     
     // Get all data from database
     const db = require('./databaseService');
+    
+    // Clear old skipped customers from database to avoid duplicates
+    try {
+      // Get existing skipped customers and delete them one by one
+      const existingSkipped = await db.getSkippedCustomers();
+      const today = new Date().toISOString().split('T')[0];
+      
+      for (const skipped of existingSkipped) {
+        if (skipped.SkippedDate === today) {
+          try {
+            await db.deleteSkippedCustomer(skipped.SkippedID);
+          } catch (e) {
+            // Continue if delete fails
+          }
+        }
+      }
+      console.log('🗑️ Cleared old skipped customers from today');
+    } catch (clearError) {
+      console.log('⚠️ Could not clear old skipped customers:', clearError.message);
+    }
     const [allCustomers, allHistory, allWorkers] = await Promise.all([
       db.getCustomers(),
       db.getAllHistory(),
       db.getWorkers()
     ]);
     
-    console.log(`[BUILD-SCHEDULE] Retrieved ${allCustomers.length} customers, ${allHistory.length} history records, ${allWorkers.length} workers`);
-    
     const activeCustomers = allCustomers.filter(customer => customer.Status === 'Active');
     const activeWorkers = allWorkers.filter(worker => worker.Status === 'Active');
     const schedule = [];
     
-    console.log(`[BUILD-SCHEDULE] Active customers: ${activeCustomers.length}, Active workers: ${activeWorkers.length}`);
-    
     if (activeCustomers.length === 0) {
-      console.warn('[BUILD-SCHEDULE] No active customers found!');
       return [];
     }
     
     if (activeWorkers.length === 0) {
-      console.warn('[BUILD-SCHEDULE] No active workers found!');
       return [];
     }
     
@@ -40,17 +58,49 @@ async function buildWeeklySchedule(weekOffset = 0) {
       try {
         // Safety checks for required fields
         if (!customer.Washman_Package || customer.Washman_Package.trim() === '') {
-          console.warn(`[BUILD-SCHEDULE] Skipping customer '${customer.Name}' (${customer.CustomerID}) - no package`);
+          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No package`);
+          const skippedData = {
+            customerName: customer.CustomerName || customer.Name,
+            customerId: customer.CustomerID,
+            villa: customer.Villa,
+            reason: 'No package specified'
+          };
+          skippedCustomers.push(skippedData);
+          try {
+            await addSkippedCustomer(customer, 'No package specified');
+          } catch (e) {
+            console.log('Failed to save skipped customer to DB:', e.message);
+          }
           continue;
         }
         
         if (!customer.Days || (!customer.Time && !customer.Notes)) {
-          console.warn(`[BUILD-SCHEDULE] Skipping customer '${customer.Name}' (${customer.CustomerID}) - missing Days or Time/Notes`);
+          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No days or time`);
+          const skippedData = {
+            customerName: customer.CustomerName || customer.Name,
+            customerId: customer.CustomerID,
+            villa: customer.Villa,
+            reason: 'No days or time specified'
+          };
+          skippedCustomers.push(skippedData);
+          try {
+            await addSkippedCustomer(customer, 'No days or time specified');
+          } catch (e) {
+            console.log('Failed to save skipped customer to DB:', e.message);
+          }
           continue;
         }
         
         if (!customer.CarPlates) {
-          console.warn(`[BUILD-SCHEDULE] Skipping customer '${customer.Name}' (${customer.CustomerID}) - no car plates`);
+          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No car plates`);
+          const skippedData = {
+            customerName: customer.CustomerName || customer.Name,
+            customerId: customer.CustomerID,
+            villa: customer.Villa,
+            reason: 'No car plates specified'
+          };
+          skippedCustomers.push(skippedData);
+          await addSkippedCustomer(customer, 'No car plates specified');
           continue;
         }
         
@@ -58,7 +108,19 @@ async function buildWeeklySchedule(weekOffset = 0) {
         const carPlates = customer.CarPlates.split(',').map(plate => plate.trim()).filter(plate => plate);
         
         if (carPlates.length === 0) {
-          console.warn(`[BUILD-SCHEDULE] Skipping customer '${customer.Name}' - no valid car plates`);
+          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No valid car plates`);
+          const skippedData = {
+            customerName: customer.CustomerName || customer.Name,
+            customerId: customer.CustomerID,
+            villa: customer.Villa,
+            reason: 'No valid car plates'
+          };
+          skippedCustomers.push(skippedData);
+          try {
+            await addSkippedCustomer(customer, 'No valid car plates');
+          } catch (e) {
+            console.log('Failed to save skipped customer to DB:', e.message);
+          }
           continue;
         }
         
@@ -75,8 +137,6 @@ async function buildWeeklySchedule(weekOffset = 0) {
         }
         
         // Process each wash schedule individually to assign workers
-        console.log(`[WORKER-SEARCH] Customer ${customerIndex}: ${customer.Name} processing ${allWashSchedules.length} tasks`);
-        
         // Group tasks by day-time to assign same worker for same time slots
         const timeGroups = {};
         allWashSchedules.forEach(wash => {
@@ -108,7 +168,36 @@ async function buildWeeklySchedule(weekOffset = 0) {
             
             // Skip this time group if no worker is available
             if (!groupWorker) {
-                console.warn(`[NO-WORKER] Skipping customer ${customer.Name} at ${day} ${time} - no available workers`);
+                console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No worker available for ${day} at ${time}`);
+                // Track and save skipped customer
+                tasks.forEach(async (task) => {
+                    const skippedCustomer = {
+                        customerName: customer.CustomerName || customer.Name,
+                        customerId: customer.CustomerID,
+                        villa: customer.Villa,
+                        day: day,
+                        time: time,
+                        carPlate: task.carPlate,
+                        reason: 'No available workers'
+                    };
+                    skippedCustomers.push(skippedCustomer);
+                    
+                    // Save to database
+                    try {
+                        await addSkippedCustomer({
+                            CustomerID: customer.CustomerID,
+                            CustomerName: customer.CustomerName || customer.Name,
+                            Villa: customer.Villa,
+                            CarPlates: task.carPlate,
+                            Days: day,
+                            Time: time
+                        }, 'No available workers');
+                    } catch (e) {
+                        console.log('Failed to save skipped customer to DB:', e.message);
+                    }
+                    
+                    console.log('Added to skipped:', skippedCustomer);
+                });
                 return;
             }
             
@@ -157,16 +246,31 @@ async function buildWeeklySchedule(weekOffset = 0) {
         });
 
       } catch (customerError) {
-        console.error(`[BUILD-SCHEDULE] Error processing customer ${customer.Name}:`, customerError);
         continue;
       }
     }
     
-    console.log(`[BUILD-SCHEDULE] Generated ${schedule.length} schedule items`);
+    // Add skipped customers as a property to the schedule array
+    console.log(`📊 Total skipped customers: ${skippedCustomers.length}`);
+    if (skippedCustomers.length > 0) {
+      console.log('Skipped customers details:', skippedCustomers);
+    }
+    
+    // Create skipped customers message
+    let skippedMessage = '';
+    if (skippedCustomers.length > 0) {
+      skippedMessage = `⚠️ تم تخطي ${skippedCustomers.length} عملاء:\n\n`;
+      skippedCustomers.forEach((customer, index) => {
+        skippedMessage += `${index + 1}. ${customer.customerName} - ${customer.villa} - ${customer.carPlate}\n   اليوم: ${customer.day} - الوقت: ${customer.time}\n   السبب: ${customer.reason}\n\n`;
+      });
+      skippedMessage += 'برجاء مراجعة جدولة العمال أو إضافة عمال جدد.';
+    }
+    
+    schedule.skippedCustomers = skippedCustomers;
+    schedule.skippedMessage = skippedMessage;
     return schedule;
     
   } catch (error) {
-    console.error('[BUILD-SCHEDULE] Fatal error:', error);
     throw error;
   }
 }
@@ -181,8 +285,6 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
   
   // Generate wash days for the week based on frequency
   const washDays = generateWashDays(packageInfo.frequency, customer.Days);
-  
-  // console.log(`[CALC-SCHEDULE] Customer: ${customer.Name}, Package: ${package}, Frequency: ${packageInfo.frequency}, WashDays: ${washDays}`);
   
   washDays.forEach((day, index) => {
     // For multi-car customers, determine which car gets INT for this visit
@@ -213,7 +315,6 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
         const match = customer.Time.match(carTimePattern);
         if (match) {
              washTime = match[1] || match[2];
-             // console.log(`[CAR-TIME] ${customer.Name} - ${carPlate}: Using specific car time ${washTime}`);
         }
     }
 
@@ -234,7 +335,6 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
       const match = customer.Notes.match(dayPattern);
       if (match) {
         washTime = match[1];
-        // console.log(`[NOTES-TIME] ${customer.Name} - ${day}: Using Notes time ${washTime} (priority over general Time field)`);
       }
     }
 
@@ -245,7 +345,6 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
          // or try to find a "generic" time in it.
          // For now, let's just use the whole field if it's simple, or try to extract first time if complex.
          washTime = customer.Time;
-         // console.log(`[DEFAULT-TIME] ${customer.Name} - ${day}: Using default Time field ${washTime}`);
     }
     
     if (washTime) {
@@ -255,8 +354,6 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
           washTime: washTime,
           washType
         });
-    } else {
-        console.warn(`[NO-TIME] Could not determine wash time for customer ${customer.Name}, car ${carPlate} on ${day}`);
     }
   });
   
@@ -279,7 +376,6 @@ function parsePackage(packageStr) {
 
 function generateWashDays(frequency, daysString) {
   if (!daysString) {
-    console.warn(`[WASH-DAYS] No days string provided, defaulting to Monday`);
     return ['Monday'];
   }
   
@@ -317,22 +413,17 @@ function generateWashDays(frequency, daysString) {
   });
   
   if (washDays.length === 0) {
-    console.warn(`[WASH-DAYS] Could not parse days: "${daysString}", defaulting to Monday`);
     return ['Monday'];
   }
   
-  // console.log(`[WASH-DAYS] Parsed "${daysString}" to: ${washDays}`);
   return washDays;
 }
 
 function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlate, history, washDay, allHistory, intCarForThisCycle) {
   const packageName = packageInfo.packageStr || '';
   
-  // console.log(`[WASH-TYPE] ${currentCarPlate} - Package: ${packageName} - Visit: ${visitIndex + 1}`);
-  
   // Rule 1: 'Ext Only' packages are always EXT
   if (!packageInfo.hasInt) {
-    // console.log(`[EXT-ONLY] ${currentCarPlate}: EXT (Ext Only package)`);
     return 'EXT';
   }
   
@@ -345,18 +436,13 @@ function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlat
       // Assuming standard is: Visit 1=EXT, Visit 2=INT, Visit 3=EXT (if 3 visits)
       // If frequency is 2, it might be EXT, INT.
       washType = (visitIndex === 1) ? 'INT' : 'EXT';
-      // console.log(`[2EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
-    }
-    else if (packageName.toLowerCase().includes('3 ext 1 int')) {
+    } else if (packageName.toLowerCase().includes('3 ext 1 int')) {
       // 3 EXT 1 INT: EXT, INT, EXT, EXT
       washType = (visitIndex === 1) ? 'INT' : 'EXT';
-      // console.log(`[3EXT1INT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType}`);
-    }
-    else {
+    } else {
        // Default fallback if package name doesn't match known patterns but has INT
        // Give INT on second visit as a safe default for "X EXT 1 INT"
        washType = (visitIndex === 1) ? 'INT' : 'EXT';
-    //    console.log(`[DEFAULT] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType} (Generic INT package)`);
     }
   } else {
     // Rule 3: Multi-car customers - alternate INT between cars per visit
@@ -369,16 +455,12 @@ function determineWashType(packageInfo, visitIndex, allCarPlates, currentCarPlat
     if (packageName.toLowerCase().includes('2 ext 1 int') && visitIndex > 1) {
          washType = 'EXT'; // Only first 2 visits get to have an INT (one for each car potentially, or rotated)
     }
-    
-    // console.log(`[MULTI-CAR] ${currentCarPlate} - Visit ${visitIndex + 1}: ${washType} (INT car: ${intCarForThisCycle})`);
   }
   
   // Rule 4: For bi-week packages, INT only applies on first week of cycle
   if (packageInfo.isBiWeek && washType === 'INT') {
     const isFirstWeekOfCycle = checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, packageInfo.weekOffset || 0);
-    // console.log(`[BI-WEEK] ${currentCarPlate}: washType was ${washType}, isFirstWeek: ${isFirstWeekOfCycle}`);
     if (!isFirstWeekOfCycle) {
-    //   console.log(`[BI-WEEK] ${currentCarPlate}: Converting INT to EXT (second week)`);
       return 'EXT';
     }
   }
@@ -412,7 +494,6 @@ function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0)
   if (customerHistory.length === 0) {
     // No history: assume starting fresh, so even weeks (0, 2, 4...) are "First Week" (INT eligible)
     const isFirstWeek = (weekOffset % 2) === 0;
-    // console.log(`[BI-WEEK] No history - Week ${weekOffset}: ${isFirstWeek ? 'First week (INT)' : 'Second week (EXT)'}`);
     return isFirstWeek;
   }
 
@@ -430,8 +511,6 @@ function checkIfFirstWeekOfBiWeekCycle(allCarPlates, allHistory, weekOffset = 0)
   const targetNormalized = new Date(targetDate); targetNormalized.setHours(0,0,0,0);
   
   const weeksDiff = Math.floor((targetNormalized - lastWashNormalized) / msPerWeek);
-
-  // console.log(`[BI-WEEK] Last wash: ${lastWashDate.toDateString()}, Target: ${targetDate.toDateString()}, Weeks diff: ${weeksDiff}`);
 
   // If it's been an even number of weeks (0, 2, 4...), we are back to the "First Week" of the cycle.
   // If odd (1, 3, 5...), we are in the "Second Week" (EXT only).
@@ -454,8 +533,6 @@ function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex = 0, we
   // Base car changes every week to ensure fair rotation over time.
   const baseCarIndex = weekOffset % sortedPlates.length;
   const intCarIndex = (baseCarIndex + visitIndex) % sortedPlates.length;
-  
-  // console.log(`[MULTI-CAR] Week ${weekOffset}, Visit ${visitIndex + 1}: Base index ${baseCarIndex}, INT car: ${sortedPlates[intCarIndex]}`);
   
   return sortedPlates[intCarIndex];
 }
@@ -540,15 +617,12 @@ function getDateForDay(dayName, weekOffset = 0) {
 // Clear all schedule data
 async function clearSchedule() {
   try {
-    console.log('[CLEAR-SCHEDULE] Clearing all schedule data...');
     const db = require('./databaseService');
     
     const result = await db.clearAndWriteSchedule([]);
-    console.log('[CLEAR-SCHEDULE] Schedule cleared successfully');
     return result;
     
   } catch (error) {
-    console.error('[CLEAR-SCHEDULE] Error:', error);
     throw error;
   }
 }
@@ -563,8 +637,6 @@ async function getAvailableTimesForDay(day, weekOffset = 0) {
     ]);
     
     const activeWorkers = allWorkers.filter(worker => worker.Status === 'Active');
-    
-    console.log(`[AVAILABLE-TIMES] Day: ${day}, Total workers: ${allWorkers.length}, Active workers: ${activeWorkers.length}`);
     
     if (activeWorkers.length === 0) {
       return [];
@@ -596,13 +668,67 @@ async function getAvailableTimesForDay(day, weekOffset = 0) {
     
     // Return times where at least one worker is free
     const availableTimes = allTimes.filter(time => busyCount[time] < activeWorkers.length);
-    console.log(`[AVAILABLE-TIMES] Day: ${day}, Busy count:`, busyCount);
-    console.log(`[AVAILABLE-TIMES] Available times:`, availableTimes);
     return availableTimes;
     
   } catch (error) {
-    console.error('[GET-AVAILABLE-TIMES] Error:', error);
     return [];
+  }
+}
+
+// Function to get skipped customers - fallback to memory if DB fails
+async function getSkippedCustomers() {
+  console.log('🔍 getSkippedCustomers function called!');
+  try {
+    const db = require('./databaseService');
+    const dbResults = await db.getSkippedCustomers();
+    
+    console.log('📋 DB Results from getSkippedCustomers:', dbResults);
+    console.log('📋 Memory skippedCustomers:', skippedCustomers);
+    
+    // If database is empty but we have memory data, return memory data
+    if (dbResults.length === 0 && skippedCustomers && skippedCustomers.length > 0) {
+      console.log('📋 Returning memory data');
+      return skippedCustomers;
+    }
+    
+    console.log('📋 Returning DB data:', dbResults);
+    return dbResults;
+  } catch (error) {
+    console.log('📋 Error getting skipped customers, returning memory:', error.message);
+    // Fallback to memory if database fails
+    return skippedCustomers || [];
+  }
+}
+
+// Function to get current skipped customers from memory (during schedule building)
+function getCurrentSkippedCustomers() {
+  return skippedCustomers || [];
+}
+
+// Function to add skipped customer to database
+async function addSkippedCustomer(customerData, reason = 'No available time slots') {
+  try {
+    const db = require('./databaseService');
+    const skippedRecord = {
+      SkippedID: `SKIP-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      CustomerID: customerData.CustomerID || '',
+      CustomerName: customerData.CustomerName || customerData.Name || 'Unknown',
+      Villa: customerData.Villa || '',
+      CarPlate: customerData.CarPlates || customerData.CarPlate || '',
+      ScheduledDay: customerData.Days || customerData.ScheduledDay || '',
+      ScheduledTime: customerData.Time || customerData.ScheduledTime || '',
+      SkipReason: reason || 'Unknown reason',
+      WeekOffset: 0,
+      SkippedDate: new Date().toISOString().split('T')[0],
+      Status: 'Skipped'
+    };
+    
+    console.log('Saving skipped customer:', skippedRecord);
+    await db.addSkippedCustomer(skippedRecord);
+    return skippedRecord;
+  } catch (error) {
+    console.error('Failed to save skipped customer:', error);
+    return null;
   }
 }
 
@@ -611,5 +737,8 @@ module.exports = {
   determineIntCarForCustomer,
   checkIfFirstWeekOfBiWeekCycle,
   clearSchedule,
-  getAvailableTimesForDay
+  getAvailableTimesForDay,
+  getSkippedCustomers,
+  addSkippedCustomer,
+  getCurrentSkippedCustomers
 };

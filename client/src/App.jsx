@@ -13,19 +13,16 @@ import ReportsPage from './pages/ReportsPage.jsx';
 import CleanupPage from './pages/CleanupPage.jsx';
 import authService from './services/authService.js';
 import './App.css';
-
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
   useEffect(() => {
     const currentUser = authService.getCurrentUser();
     if (currentUser) {
       setUser(currentUser);
     }
   }, []);
-
   const handleLogin = async (username, password) => {
     try {
       setLoading(true);
@@ -38,12 +35,10 @@ function App() {
       setLoading(false);
     }
   };
-
   const handleLogout = () => {
     authService.logout();
     setUser(null);
   };
-
   if (!user) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#f8f9fa' }}>
@@ -85,18 +80,15 @@ function App() {
       </div>
     );
   }
-
   const layoutStyle = {
     minHeight: '100vh',
     backgroundColor: '#f8f9fa'
   };
-
   const mainContentStyle = {
     marginLeft: '0',
     padding: '80px 20px 20px 20px',
     minHeight: '100vh'
   };
-
   return (
     <BrowserRouter>
       <div style={layoutStyle}>
@@ -119,5 +111,4 @@ function App() {
     </BrowserRouter>
   );
 }
-
 export default App;
