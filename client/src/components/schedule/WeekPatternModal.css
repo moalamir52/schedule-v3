@@ -15,10 +15,10 @@
 
 .modal-container-v2 {
   background-color: #ffffff;
-  border-radius: 16px;
+  border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
   width: 90%;
-  max-width: 480px;
+  max-width: 420px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -66,8 +66,8 @@
 }
 
 .modal-content-v2 {
-  padding: 24px;
-  line-height: 1.6;
+  padding: 16px;
+  line-height: 1.4;
 }
 
 .change-summary-v2 {
@@ -115,8 +115,8 @@
 }
 
 .wash-badge-v2.small {
-  padding: 3px 8px;
-  font-size: 10px;
+  padding: 2px 6px;
+  font-size: 9px;
 }
 
 .arrow-icon-v2 {
@@ -134,8 +134,8 @@
 .appointments-list-v2 {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-bottom: 24px; /* Add space before history section */
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .appointment-row-v2 {
@@ -143,13 +143,14 @@
   justify-content: space-between;
   align-items: center;
   background-color: #f8f9fa;
-  padding: 12px 16px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
 }
 
 .appointment-day-v2 {
   font-weight: 500;
   color: #343a40;
+  font-size: 13px;
 }
 
 .wash-type-toggle-v2 {
@@ -162,9 +163,9 @@
 .toggle-btn-v2 {
   background-color: #fff;
   border: none;
-  padding: 8px 16px;
+  padding: 6px 12px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
   color: #495057;
   transition: background-color 0.2s, color 0.2s;
@@ -256,16 +257,17 @@
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 2px;
 }
 
 .history-item-v2 {
   display: grid;
   grid-template-columns: 1.2fr 1fr auto; /* Date | Car | Type */
   align-items: center;
-  padding: 12px;
-  border-radius: 8px;
-  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  gap: 6px;
+  line-height: 1.2;
 }
 
 /* Zebra Striping */
@@ -274,13 +276,13 @@
 }
 
 .history-date-v2 {
-  font-size: 14px;
+  font-size: 11px;
   color: #495057;
   font-weight: 500;
 }
 
 .history-car-v2 {
-  font-size: 14px;
+  font-size: 11px;
   color: #868e96;
   font-weight: 500;
 }

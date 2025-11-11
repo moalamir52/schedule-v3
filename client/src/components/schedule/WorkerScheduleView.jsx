@@ -284,6 +284,10 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
               return newSet;
             });
           }, 2000);
+          // Auto-refresh data after successful update
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
         } else {
           const data = await response.json();
           console.error('❌ Failed to save wash type:', data.error);
@@ -524,6 +528,9 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       appointment.time === sourceTime && 
       appointment.workerId === sourceWorkerId
     );
+    
+    console.log(`🔍 Found ${customerAppointments.length} appointments for customer ${customerId} at ${sourceDay} ${sourceTime}:`, 
+      customerAppointments.map(apt => apt.carPlate));
     if (customerAppointments.length === 0) {
       setDraggedItem(null);
       return;
@@ -534,6 +541,9 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       appointment.day === targetDay && 
       appointment.time === targetTime
     );
+    
+    console.log(`🎯 Found ${existingAppointments.length} existing appointments at target ${targetDay} ${targetTime}:`, 
+      existingAppointments.map(apt => `${apt.customerId}-${apt.carPlate}`));
     const targetWorkerName = sortedWorkers.find(w => (w.WorkerID || w.Name) === targetWorkerId)?.Name || targetWorkerId;
     // Update UI immediately for better UX
     let updatedSchedule;
@@ -615,8 +625,29 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
     };
     // Auto-save drag & drop change immediately
     setTimeout(async () => {
-      const changes = [changeData];
-      // If there are existing appointments at target (swap case), add swap changes
+      const changes = [];
+      
+      // Add changes for ALL customer appointments being moved
+      customerAppointments.forEach(apt => {
+        const moveTaskId = `${apt.customerId}-${sourceDay}-${sourceTime}-${apt.carPlate}`;
+        const moveChangeData = {
+          type: 'dragDrop',
+          taskId: moveTaskId,
+          newWorkerName: targetWorkerName,
+          newWorkerId: targetWorkerId,
+          sourceDay,
+          sourceTime,
+          targetDay,
+          targetTime,
+          isSlotSwap: existingAppointments.length > 0,
+          sourceWorkerName: sourceWorker?.Name || '',
+          sourceWorkerId: sourceWorker?.WorkerID || sourceWorker?.Name || '',
+          timestamp: Date.now()
+        };
+        changes.push(moveChangeData);
+      });
+      
+      // If there are existing appointments at target (swap case), add ALL swap changes
       if (existingAppointments.length > 0) {
         existingAppointments.forEach(existingApt => {
           const swapTaskId = `${existingApt.customerId}-${targetDay}-${targetTime}-${existingApt.carPlate}`;

@@ -450,19 +450,30 @@ const SchedulePage = () => {
       
       // Update UI immediately for smooth experience
       const originalSchedule = [...assignedSchedule];
+      console.log(`🔒 Locking all cars for customer: ${customerId}`);
+      
       setAssignedSchedule(prev => 
         prev.map(t => {
-          if (t.customerId === customerId && t.day === day) {
-            // Lock all cars of this customer on this day
+          if (t.customerId === customerId) {
+            // Lock ALL cars of this customer (not just same day)
+            console.log(`🔐 Locking task: ${t.customerId}-${t.day}-${t.time}-${t.carPlate} (${t.customerName})`);
             return { ...t, isLocked: 'TRUE' };
           }
           if (`${t.customerId}-${t.day}-${t.time}-${t.carPlate}` === taskId) {
             // Update the specific wash type
+            console.log(`🎯 Updating wash type for: ${taskId} to ${newWashType}`);
             return { ...t, washType: newWashType, isLocked: 'TRUE' };
           }
           return t;
         })
       );
+      
+      // Count locked tasks
+      const lockedTasks = assignedSchedule.filter(t => t.customerId === customerId);
+      console.log(`✅ Total tasks locked for customer ${customerId}: ${lockedTasks.length}`);
+      lockedTasks.forEach(task => {
+        console.log(`   - ${task.carPlate} on ${task.day} at ${task.time}`);
+      });
       
       // Save to server in background
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {

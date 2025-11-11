@@ -95,7 +95,61 @@ module.exports = {
     }
   },
   addManualAppointment: (req, res) => res.json({ success: true, message: 'Not implemented' }),
-  updateTaskAssignment: (req, res) => res.json({ success: true, message: 'Not implemented' }),
+  updateTaskAssignment: async (req, res) => {
+    try {
+      const { taskId, newWorkerName, newWashType, keepCustomerTogether } = req.body;
+      
+      if (!taskId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Task ID is required' 
+        });
+      }
+      
+      // Parse taskId to get customer ID
+      const dashes = [];
+      for (let i = 0; i < taskId.length; i++) {
+        if (taskId[i] === '-') dashes.push(i);
+      }
+      
+      if (dashes.length >= 3) {
+        const customerID = taskId.substring(0, dashes[dashes.length - 3]);
+        
+        // If keepCustomerTogether is true, lock all cars of this customer
+        if (keepCustomerTogether) {
+          await db.lockAllCustomerTasks(customerID);
+        }
+        
+        // Update the specific task
+        if (newWashType) {
+          await db.updateWashType({
+            taskId: taskId,
+            newWashType: newWashType,
+            userId: req.headers['x-user-id'] || 'SYSTEM',
+            userName: req.headers['x-user-name'] || 'System User'
+          });
+        }
+        
+        res.json({
+          success: true,
+          message: 'Task updated successfully',
+          customerLocked: keepCustomerTogether
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: 'Invalid task ID format'
+        });
+      }
+      
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update task',
+        details: error.message
+      });
+    }
+  },
   deleteTask: async (req, res) => {
     try {
       const { customerId } = req.params;
@@ -198,18 +252,35 @@ module.exports = {
               console.log(`   Target Day: ${change.targetDay}`);
               console.log(`   Target Time: ${change.targetTime}`);
               
+              // Map worker name to correct WorkerID
+              const workerMapping = {
+                'Rahman': 'WORK-001',
+                'Kingsley': 'WORK-004', 
+                'Raqib': 'WORK-002',
+                'Amnisty': 'WORK-003'
+              };
+              
+              const correctWorkerId = change.newWorkerId || workerMapping[change.newWorkerName] || 'WORK-001';
+              
               // Update the task with new day, time, and worker
               const updateData = {
                 Day: change.targetDay || oldDay,
                 Time: change.targetTime || oldTime,
                 WorkerName: change.newWorkerName,
-                WorkerID: change.newWorkerId || 'WORK-001',
+                WorkerID: correctWorkerId,
                 isLocked: 'TRUE'
               };
               
               console.log(`💾 Update data being sent:`, JSON.stringify(updateData, null, 2));
               
               await db.updateScheduledTask(customerID, oldDay, oldTime, carPlate, updateData);
+              
+              // Lock only tasks for this customer on the same day (for slot swaps)
+              if (change.isSlotSwap) {
+                console.log(`🔒 Slot swap detected - locking tasks for customer ${customerID} on ${change.targetDay}`);
+                await db.lockCustomerTasksForDay(customerID, change.targetDay, change.targetTime);
+              }
+              
               console.log(`✅ Updated task ${taskId}: ${oldDay} ${oldTime} -> ${change.targetDay} ${change.targetTime}`);
             } else {
               console.error(`❌ Invalid taskId format: ${taskId} (expected at least 3 dashes)`);
@@ -279,7 +350,74 @@ module.exports = {
     }
   },
   syncNewCustomers: (req, res) => res.json({ success: true, message: 'Not implemented' }),
-  getWashHistory: (req, res) => res.json({ success: true, history: [] }),
+  getWashHistory: async (req, res) => {
+    try {
+      const { customerId } = req.params;
+      const limit = parseInt(req.query.limit) || 6;
+      
+      if (!customerId) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Customer ID is required' 
+        });
+      }
+      
+      // Get all history from database
+      const allHistory = await db.getAllHistory();
+      
+      // Get customer info to find car plates
+      const customers = await db.getCustomers();
+      const customer = customers.find(c => c.CustomerID === customerId);
+      
+      if (!customer) {
+        return res.json({ 
+          success: true, 
+          history: [],
+          message: 'Customer not found'
+        });
+      }
+      
+      // Get customer's car plates
+      const customerCarPlates = customer.CarPlates ? 
+        customer.CarPlates.split(',').map(plate => plate.trim()) : [];
+      
+      // Filter history by customer's car plates and remove duplicates
+      const customerHistory = allHistory
+        .filter(record => customerCarPlates.includes(record.CarPlate))
+        .sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate))
+        .reduce((unique, record) => {
+          const key = `${record.WashDate}-${record.CarPlate}-${record.WashTypePerformed}`;
+          if (!unique.some(item => `${item.WashDate}-${item.CarPlate}-${item.WashTypePerformed}` === key)) {
+            unique.push(record);
+          }
+          return unique;
+        }, [])
+        .slice(0, limit)
+        .map(record => ({
+          washDate: record.WashDate,
+          carPlate: record.CarPlate,
+          washType: record.WashTypePerformed,
+          status: record.Status,
+          workerName: record.WorkerName,
+          villa: record.Villa
+        }));
+      
+      res.json({
+        success: true,
+        history: customerHistory,
+        totalRecords: customerHistory.length,
+        customerId: customerId
+      });
+      
+    } catch (error) {
+      console.error('Error fetching wash history:', error);
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to fetch wash history',
+        details: error.message
+      });
+    }
+  },
   clearAllScheduleData: async (req, res) => {
     try {
       const supabase = require('../../services/supabaseService');

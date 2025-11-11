@@ -250,6 +250,52 @@ class DatabaseService {
     return await this.supabase.request('DELETE', '/SkippedCustomers');
   }
 
+  // Lock all tasks for a specific customer
+  async lockAllCustomerTasks(customerID) {
+    try {
+      console.log(`🔒 [DB] Locking all tasks for customer: ${customerID}`);
+      
+      // First get all tasks for this customer to see what we're locking
+      const existingTasks = await this.supabase.request('GET', `/ScheduledTasks?CustomerID=eq.${customerID}`);
+      console.log(`📋 [DB] Found ${existingTasks.length} tasks to lock:`);
+      existingTasks.forEach(task => {
+        console.log(`   - ${task.CarPlate} on ${task.Day} at ${task.Time} (currently locked: ${task.isLocked})`);
+      });
+      
+      const updateData = { isLocked: 'TRUE' };
+      const result = await this.supabase.request('PATCH', `/ScheduledTasks?CustomerID=eq.${customerID}`, updateData);
+      
+      console.log(`✅ [DB] Successfully locked ${existingTasks.length} tasks for customer ${customerID}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ [DB] Failed to lock customer tasks for ${customerID}:`, error);
+      throw error;
+    }
+  }
+
+  // Lock tasks for a specific customer on a specific day and time only
+  async lockCustomerTasksForDay(customerID, day, time) {
+    try {
+      console.log(`🔒 [DB] Locking tasks for customer ${customerID} on ${day} at ${time}`);
+      
+      // First get tasks for this customer on this specific day and time
+      const existingTasks = await this.supabase.request('GET', `/ScheduledTasks?CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${encodeURIComponent(time)}`);
+      console.log(`📋 [DB] Found ${existingTasks.length} tasks to lock on ${day} ${time}:`);
+      existingTasks.forEach(task => {
+        console.log(`   - ${task.CarPlate} (currently locked: ${task.isLocked})`);
+      });
+      
+      const updateData = { isLocked: 'TRUE' };
+      const result = await this.supabase.request('PATCH', `/ScheduledTasks?CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${encodeURIComponent(time)}`, updateData);
+      
+      console.log(`✅ [DB] Successfully locked ${existingTasks.length} tasks for customer ${customerID} on ${day} ${time}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ [DB] Failed to lock customer tasks for ${customerID} on ${day} ${time}:`, error);
+      throw error;
+    }
+  }
+
   close() {
     // Supabase connections are handled automatically
   }
