@@ -166,8 +166,54 @@ const updateClient = async (req, res) => {
 const deleteClient = async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // First, delete customer's auto-generated appointments (preserve manual ones)
+    try {
+      const currentSchedule = await db.getScheduledTasks();
+      const customerAppointments = currentSchedule.filter(task => 
+        task.customerId === id || task.CustomerID === id
+      );
+      
+      // Only delete auto-generated appointments (those with isLocked = 'FALSE')
+      // Manual appointments have isLocked = 'TRUE' and should be preserved
+      const autoAppointments = customerAppointments.filter(task => 
+        task.isLocked === 'FALSE' || task.isLocked === false || !task.isLocked
+      );
+      
+      console.log(`🗑️ Deleting ${autoAppointments.length} auto-generated appointments for customer ${id}`);
+      
+      // Delete auto-generated appointments
+      for (const appointment of autoAppointments) {
+        try {
+          const customerID = appointment.customerId || appointment.CustomerID;
+          const day = appointment.day || appointment.Day;
+          const time = appointment.time || appointment.Time;
+          const carPlate = appointment.carPlate || appointment.CarPlate || '';
+          
+          await db.deleteScheduledTask(customerID, day, time, carPlate);
+        } catch (deleteError) {
+          console.log(`⚠️ Failed to delete appointment for ${appointment.customerName}: ${deleteError.message}`);
+        }
+      }
+      
+      const manualCount = customerAppointments.length - autoAppointments.length;
+      if (manualCount > 0) {
+        console.log(`ℹ️ Preserved ${manualCount} manual appointments for customer ${id}`);
+      }
+      
+    } catch (scheduleError) {
+      console.log(`⚠️ Error cleaning up appointments: ${scheduleError.message}`);
+      // Continue with customer deletion even if appointment cleanup fails
+    }
+    
+    // Then delete the customer
     const result = await db.deleteCustomer(id);
-    res.json({ success: true, data: result });
+    
+    res.json({ 
+      success: true, 
+      data: result,
+      message: 'Customer and auto-generated appointments deleted successfully. Manual appointments preserved.'
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

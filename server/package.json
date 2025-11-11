@@ -16,9 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
-    "google-auth-library": "^10.4.0",
-    "google-spreadsheet": "^5.0.2",
-    "googleapis": "^161.0.0",
+
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
     "openai": "^6.3.0",

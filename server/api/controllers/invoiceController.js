@@ -257,8 +257,33 @@ const printInvoice = async (req, res) => {
 
 const getInvoiceNumber = async (req, res) => {
   try {
-    const invoiceNumber = await db.getNextInvoiceRef();
-    res.json({ success: true, invoiceNumber });
+    const { bulkCount } = req.body;
+    
+    if (bulkCount && bulkCount > 1) {
+      // For bulk operations, reserve multiple numbers at once
+      const invoices = await db.getInvoices();
+      let maxGlogoNumber = 2510041;
+      
+      invoices.forEach(invoice => {
+        if (invoice.Ref && invoice.Ref.startsWith('GLOGO-')) {
+          const match = invoice.Ref.match(/GLOGO-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1]);
+            if (num > maxGlogoNumber) maxGlogoNumber = num;
+          }
+        }
+      });
+      
+      const reservedNumbers = [];
+      for (let i = 0; i < bulkCount; i++) {
+        reservedNumbers.push(`GLOGO-${maxGlogoNumber + 1 + i}`);
+      }
+      
+      res.json({ success: true, invoiceNumbers: reservedNumbers });
+    } else {
+      const invoiceNumber = await db.getNextInvoiceRef();
+      res.json({ success: true, invoiceNumber });
+    }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -299,11 +299,17 @@ class SupabaseService {
       const result = await this.request('GET', '/Services?Status=eq.Active&order=ServiceName');
       return Array.isArray(result) ? result : [];
     } catch (error) {
-      return [
-        { ServiceID: 'SERV-001', ServiceName: 'Car Wash - Exterior', Price: 25, Status: 'Active' },
-        { ServiceID: 'SERV-002', ServiceName: 'Car Wash - Interior', Price: 35, Status: 'Active' },
-        { ServiceID: 'SERV-003', ServiceName: 'Car Wash - Full Service', Price: 50, Status: 'Active' }
-      ];
+      // Try alternative table name
+      try {
+        const altResult = await this.request('GET', '/services?Status=eq.Active&order=ServiceName');
+        return Array.isArray(altResult) ? altResult : [];
+      } catch (altError) {
+        return [
+          { ServiceID: 'SERV-001', ServiceName: 'Car Wash - Exterior', Price: 25, Status: 'Active' },
+          { ServiceID: 'SERV-002', ServiceName: 'Car Wash - Interior', Price: 35, Status: 'Active' },
+          { ServiceID: 'SERV-003', ServiceName: 'Car Wash - Full Service', Price: 50, Status: 'Active' }
+        ];
+      }
     }
   }
 

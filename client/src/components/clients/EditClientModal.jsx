@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
+import ScheduleModal from './ScheduleModal';
 function EditClientModal({ isOpen, onClose, onUpdate, client }) {
   const [formData, setFormData] = useState({});
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [cars, setCars] = useState([{ plate: '', washType: 'EXT' }]);
   // Convert date from "02-Sep-2025" to "2025-09-02" format
   const convertDateToInput = (dateStr) => {
     if (!dateStr) return '';
@@ -21,12 +24,26 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
         ...client,
         'start date': convertDateToInput(client['start date'])
       });
+      
+      // Parse existing car plates
+      if (client.CarPlates) {
+        const carPlates = client.CarPlates.split(',').map(plate => plate.trim()).filter(plate => plate);
+        const parsedCars = carPlates.map(plate => ({ plate, washType: 'EXT' }));
+        setCars(parsedCars.length > 0 ? parsedCars : [{ plate: '', washType: 'EXT' }]);
+      } else {
+        setCars([{ plate: '', washType: 'EXT' }]);
+      }
     }
   }, [client]);
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await onUpdate(client.CustomerID, formData);
+      const updatedData = {
+        ...formData,
+        'Number of car': cars.length,
+        CarPlates: cars.map(car => car.plate).filter(plate => plate.trim()).join(', ')
+      };
+      await onUpdate(client.CustomerID, updatedData);
       onClose();
     } catch (error) {
       }
@@ -35,6 +52,22 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
+    });
+  };
+
+  const handleScheduleSave = (scheduleData) => {
+    setFormData({
+      ...formData,
+      ...scheduleData
+    });
+  };
+
+  const updateCarPlates = (newCars) => {
+    setCars(newCars);
+    setFormData({
+      ...formData,
+      'Number of car': newCars.length,
+      CarPlates: newCars.map(car => car.plate).filter(plate => plate.trim()).join(', ')
     });
   };
   if (!isOpen || !client) return null;
@@ -117,23 +150,105 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 onChange={handleChange}
               />
             </div>
-            <div>
-              <label>Car Plates:</label>
-              <input
-                type="text"
-                name="CarPlates"
-                value={formData.CarPlates || ''}
-                onChange={handleChange}
-              />
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>🚗 Cars:</label>
+              {cars.map((car, index) => (
+                <div key={index} style={{ 
+                  border: '1px solid #ddd', 
+                  borderRadius: '8px', 
+                  padding: '15px', 
+                  marginBottom: '10px',
+                  backgroundColor: '#f8f9fa'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+                    <span style={{ fontWeight: 'bold', minWidth: '60px' }}>Car {index + 1}:</span>
+                    {cars.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => updateCarPlates(cars.filter((_, i) => i !== index))}
+                        style={{
+                          background: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '4px',
+                          padding: '5px 10px',
+                          fontSize: '12px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                    <input
+                      type="text"
+                      placeholder="Car plate number"
+                      value={car.plate}
+                      onChange={(e) => {
+                        const newCars = [...cars];
+                        newCars[index].plate = e.target.value;
+                        updateCarPlates(newCars);
+                      }}
+                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    />
+                    <select
+                      value={car.washType}
+                      onChange={(e) => {
+                        const newCars = [...cars];
+                        newCars[index].washType = e.target.value;
+                        setCars(newCars);
+                      }}
+                      style={{ padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                    >
+                      <option value="EXT">EXT Only</option>
+                      <option value="INT">EXT + INT</option>
+                    </select>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => updateCarPlates([...cars, { plate: '', washType: 'EXT' }])}
+                style={{
+                  background: '#28a745',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '8px 15px',
+                  cursor: 'pointer'
+                }}
+              >
+                + Add Another Car
+              </button>
             </div>
             <div>
               <label>Days:</label>
-              <input
-                type="text"
-                name="Days"
-                value={formData.Days || ''}
-                onChange={handleChange}
-              />
+              <div style={{ display: 'flex', gap: '5px' }}>
+                <input
+                  type="text"
+                  name="Days"
+                  value={formData.Days || ''}
+                  onChange={handleChange}
+                  style={{ flex: 1 }}
+                  readOnly
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleModal(true)}
+                  style={{
+                    padding: '5px 10px',
+                    backgroundColor: '#007bff',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: 'pointer',
+                    fontSize: '12px'
+                  }}
+                >
+                  🚗 Schedule
+                </button>
+              </div>
             </div>
             <div>
               <label>Time:</label>
@@ -142,6 +257,7 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 name="Time"
                 value={formData.Time || ''}
                 onChange={handleChange}
+                readOnly
               />
             </div>
             <div>
@@ -208,6 +324,16 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
             </button>
           </div>
         </form>
+        
+        <ScheduleModal
+          isOpen={showScheduleModal}
+          onClose={() => setShowScheduleModal(false)}
+          client={{
+            ...formData,
+            CarPlates: cars.map(car => car.plate).filter(plate => plate.trim()).join(', ')
+          }}
+          onSave={handleScheduleSave}
+        />
       </div>
     </div>
   );

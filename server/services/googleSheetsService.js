@@ -11,9 +11,25 @@ async function getInvoices() {
 }
 
 async function addInvoiceRecord(invoiceData) {
+  if (!invoiceData.Ref || invoiceData.Ref.includes(Date.now())) {
+    const invoices = await getInvoices();
+    let maxGlogoNumber = 2510041;
+    
+    invoices.forEach(invoice => {
+      if (invoice.Ref && invoice.Ref.startsWith('GLOGO-')) {
+        const match = invoice.Ref.match(/GLOGO-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num > maxGlogoNumber) maxGlogoNumber = num;
+        }
+      }
+    });
+    
+    invoiceData.Ref = `GLOGO-${maxGlogoNumber + 1}`;
+  }
+  
   const result = await db.addInvoice(invoiceData);
-  // Return the Ref that was actually saved
-  return invoiceData.Ref || invoiceData.InvoiceID || 'GLOGO-ERROR';
+  return invoiceData.Ref;
 }
 
 async function updateInvoiceStatus(invoiceId, status, paymentMethod) {

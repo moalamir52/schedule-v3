@@ -324,7 +324,7 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
       }
     }
 
-    // 2. Check for day-specific time in Time field (e.g., "Tue@8:00 AM, Sat@4:00 PM")
+    // 2. Check for day-specific time in Time field (e.g., "Mon@1:00 PM test, Sat@2:00 PM car")
     if (!washTime && customer.Time) {
       const dayAbbrev = {
         'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed', 
@@ -332,22 +332,80 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
       };
       
       const dayShort = day === 'Thursday' ? 'Thurs' : dayAbbrev[day];
-      const dayPatternStr = `(?:${dayShort}|${dayAbbrev[day]})\\s*[@:]?\\s*(?:at\\s*)?(\\d{1,2}:\\d{2}\\s*[AP]M)`;
-      const dayPattern = new RegExp(dayPatternStr, 'i');
+      // Updated pattern to handle "Mon@1:00 PM CarName" format
+      const dayPatternStr = `(?:${dayShort}|${dayAbbrev[day]})\\s*[@:]?\\s*(\\d{1,2}:\\d{2}\\s*[AP]M)`;
+      const dayPattern = new RegExp(dayPatternStr, 'gi'); // Added 'g' flag for global search
 
-      const match = customer.Time.match(dayPattern);
-      if (match) {
-        washTime = match[1];
+      // Find ALL matches for this day
+      const matches = [...customer.Time.matchAll(dayPattern)];
+      if (matches.length > 0) {
+        // For each car, find its specific time or use the first available time for this day
+        const dayTimes = matches.map(match => match[1]);
+        
+        // Try to find car-specific time first
+        let carSpecificTime = null;
+        matches.forEach(match => {
+          const fullMatch = match[0];
+          const time = match[1];
+          // Check if this match contains the current car plate
+          const afterTime = customer.Time.substring(customer.Time.indexOf(fullMatch) + fullMatch.length);
+          const nextComma = afterTime.indexOf(',');
+          const carPart = nextComma > -1 ? afterTime.substring(0, nextComma) : afterTime;
+          
+          if (carPart.toLowerCase().includes(carPlate.toLowerCase()) || 
+              carPlate.toLowerCase().includes(carPart.trim().toLowerCase())) {
+            carSpecificTime = time;
+          }
+        });
+        
+        washTime = carSpecificTime || dayTimes[0]; // Use car-specific time or first time for this day
       }
     }
 
-    // 3. Check for specific car time in the 'Time' field (e.g., "9:00 AM Kia, 5:00 PM Jetour")
+    // 3. Check for specific car time in the 'Time' field (e.g., "6:00 AM Lincoln, 6:00 AM Cadillac, 11:00 AM Nissan")
     if (!washTime && customer.Time && allCarPlates.length > 1) {
-        const carTimePattern = new RegExp(`(\\d{1,2}:\\d{2}\\s*[AP]M)\\s*${escapeRegExp(carPlate)}|${escapeRegExp(carPlate)}\\s*(\\d{1,2}:\\d{2}\\s*[AP]M)`, 'i');
-        const match = customer.Time.match(carTimePattern);
-        if (match) {
-             washTime = match[1] || match[2];
+        console.log(`🔍 Parsing car-specific time for ${carPlate}`);
+        console.log(`📝 Time field: "${customer.Time}"`);
+        
+        // Split by comma and check each part for this car
+        const timeParts = customer.Time.split(',').map(part => part.trim());
+        console.log(`📋 Time parts:`, timeParts);
+        
+        for (const part of timeParts) {
+            console.log(`🔎 Checking part: "${part}" for car: "${carPlate}"`);
+            // Check if this part contains the current car plate (with fuzzy matching)
+            const carFound = part.toLowerCase().includes(carPlate.toLowerCase()) || 
+                           carPlate.toLowerCase().includes(part.toLowerCase().replace(/(\d{1,2}:\d{2}\s*[ap]m)/i, '').trim()) ||
+                           isCarNameMatch(carPlate, part);
+            
+            if (carFound) {
+                console.log(`✅ Found car ${carPlate} in part: "${part}"`);
+                // Extract time from this part
+                const timeMatch = part.match(/(\d{1,2}:\d{2}\s*[AP]M)/i);
+                console.log(`⏰ Time match:`, timeMatch);
+                if (timeMatch) {
+                    washTime = timeMatch[1];
+                    console.log(`🎯 Set washTime to: ${washTime}`);
+                    break;
+                }
+            } else {
+                console.log(`❌ Car ${carPlate} not found in part: "${part}"`);
+            }
         }
+        
+        // If no specific time found for this car, try to find any time that matches the car name pattern
+        if (!washTime) {
+            console.log(`🔄 Trying fallback pattern for ${carPlate}`);
+            const carTimePattern = new RegExp(`(\\d{1,2}:\\d{2}\\s*[AP]M)\\s+[^,]*${escapeRegExp(carPlate)}|${escapeRegExp(carPlate)}\\s+(\\d{1,2}:\\d{2}\\s*[AP]M)`, 'i');
+            const match = customer.Time.match(carTimePattern);
+            console.log(`🎯 Fallback match:`, match);
+            if (match) {
+                washTime = match[1] || match[2];
+                console.log(`🎯 Fallback washTime: ${washTime}`);
+            }
+        }
+        
+        console.log(`🏁 Final washTime for ${carPlate}: ${washTime}`);
     }
 
     // 4. Fallback to general Time field if no specific patterns matched
@@ -370,6 +428,33 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
   });
   
   return washSchedule;
+}
+
+// Helper to check if car names match (handles spelling variations)
+function isCarNameMatch(carPlate, timePart) {
+  const carLower = carPlate.toLowerCase();
+  const partLower = timePart.toLowerCase();
+  
+  // Common spelling variations
+  const variations = {
+    'caddilac': ['cadillac', 'caddilac'],
+    'cadillac': ['caddilac', 'cadillac'],
+    'lincoln': ['lincon', 'lincoln'],
+    'nissan': ['nisan', 'nissan']
+  };
+  
+  // Check if any variation matches
+  for (const [key, variants] of Object.entries(variations)) {
+    if (variants.includes(carLower)) {
+      for (const variant of variants) {
+        if (partLower.includes(variant)) {
+          return true;
+        }
+      }
+    }
+  }
+  
+  return false;
 }
 
 // Helper to escape special regex characters in car plate

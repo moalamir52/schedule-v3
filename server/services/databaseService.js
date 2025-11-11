@@ -107,20 +107,19 @@ class DatabaseService {
   async getNextInvoiceRef() {
     try {
       const invoices = await this.supabase.getInvoices();
-      const glogoInvoices = invoices.filter(inv => inv.Ref && inv.Ref.startsWith('GLOGO-'));
+      let maxGlogoNumber = 2510041;
       
-      if (glogoInvoices.length === 0) {
-        return 'GLOGO-2511055';
-      }
+      invoices.forEach(invoice => {
+        if (invoice.Ref && invoice.Ref.startsWith('GLOGO-')) {
+          const match = invoice.Ref.match(/GLOGO-(\d+)/);
+          if (match) {
+            const num = parseInt(match[1]);
+            if (num > maxGlogoNumber) maxGlogoNumber = num;
+          }
+        }
+      });
       
-      const lastRef = glogoInvoices.sort((a, b) => b.Ref.localeCompare(a.Ref))[0].Ref;
-      const match = lastRef.match(/GLOGO-(\d+)/);
-      if (match) {
-        const nextNum = parseInt(match[1]) + 1;
-        return `GLOGO-${nextNum}`;
-      }
-      
-      return 'GLOGO-2511055';
+      return `GLOGO-${maxGlogoNumber + 1}`;
     } catch (error) {
       return 'GLOGO-2511055';
     }

@@ -5,9 +5,18 @@ const getServices = async (req, res) => {
   process.stdout.write('[SERVICES] getServices called\n');
   try {
     process.stdout.write('[SERVICES] Calling db.getServices()...\n');
-    const services = await db.getServices();
+    let services = await db.getServices();
+    
+    // Normalize service data structure
+    services = services.map(service => ({
+      ServiceID: service.ServiceID || service.serviceId || service.id,
+      ServiceName: service.ServiceName || service.serviceName || service.name,
+      Price: service.Price || service.price || 0,
+      Status: service.Status || service.status || 'Active'
+    }));
+    
     process.stdout.write(`[SERVICES] Got services: ${services.length}\n`);
-    res.json({ success: true, services: services, message: `Found ${services.length} services` });
+    res.json(services); // Return services directly as array
   } catch (error) {
     process.stderr.write(`[SERVICES] Error getting services: ${error.message}\n`);
     // Return default services if table doesn't exist
@@ -17,7 +26,7 @@ const getServices = async (req, res) => {
       { ServiceID: 'SERV-003', ServiceName: 'Car Wash - Full Service', Price: 50, Status: 'Active' }
     ];
     process.stdout.write('[SERVICES] Returning default services\n');
-    res.json({ success: true, services: defaultServices, message: 'Using default services' });
+    res.json(defaultServices); // Return services directly as array
   }
 };
 
