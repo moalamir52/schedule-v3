@@ -304,31 +304,17 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
       intCarForThisVisit
     );
     
-    // Priority: 1. Specific Car Time -> 2. Notes Time -> 3. General Time
+    // Priority: 1. Notes Time -> 2. Day-specific Time -> 3. Specific Car Time -> 4. General Time
     let washTime = null;
 
-    // 1. Check for specific car time in the 'Time' field (e.g., "9:00 AM Kia, 5:00 PM Jetour")
-    if (customer.Time && allCarPlates.length > 1) {
-        // Matches time followed immediately by car name, or car name followed by time
-        // This regex is a bit simplified, might need adjustment based on exact data format
-        const carTimePattern = new RegExp(`(\\d{1,2}:\\d{2}\\s*[AP]M)\\s*${escapeRegExp(carPlate)}|${escapeRegExp(carPlate)}\\s*(\\d{1,2}:\\d{2}\\s*[AP]M)`, 'i');
-        const match = customer.Time.match(carTimePattern);
-        if (match) {
-             washTime = match[1] || match[2];
-        }
-    }
-
-    // 2. If no specific car time, check Notes for day-specific time
-    if (!washTime && customer.Notes) {
+    // 1. Check Notes for day-specific time FIRST (highest priority)
+    if (customer.Notes) {
       const dayAbbrev = {
         'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed', 
         'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
       };
       
-      // Support formats: "Mon@7:00 AM", "Mon at 7:00 AM", "Mon 7:00 AM"
-      // Using 'Thurs' for Thursday based on user preference, falling back to 'Thu' if standard.
       const dayShort = day === 'Thursday' ? 'Thurs' : dayAbbrev[day];
-       // Also try standard 3-letter abbr if custom one fails
       const dayPatternStr = `(?:${dayShort}|${dayAbbrev[day]})\\s*[@:]?\\s*(?:at\\s*)?(\\d{1,2}:\\d{2}\\s*[AP]M)`;
       const dayPattern = new RegExp(dayPatternStr, 'i');
 
@@ -338,13 +324,39 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
       }
     }
 
-    // 3. Fallback to general Time field if it doesn't have car-specific info that we missed
+    // 2. Check for day-specific time in Time field (e.g., "Tue@8:00 AM, Sat@4:00 PM")
     if (!washTime && customer.Time) {
-         // If the time field DOES contain other car names, we might be incorrectly using it here.
-         // But for simplicity, if we didn't match our car above, we take the whole string
-         // or try to find a "generic" time in it.
-         // For now, let's just use the whole field if it's simple, or try to extract first time if complex.
-         washTime = customer.Time;
+      const dayAbbrev = {
+        'Monday': 'Mon', 'Tuesday': 'Tue', 'Wednesday': 'Wed', 
+        'Thursday': 'Thu', 'Friday': 'Fri', 'Saturday': 'Sat', 'Sunday': 'Sun'
+      };
+      
+      const dayShort = day === 'Thursday' ? 'Thurs' : dayAbbrev[day];
+      const dayPatternStr = `(?:${dayShort}|${dayAbbrev[day]})\\s*[@:]?\\s*(?:at\\s*)?(\\d{1,2}:\\d{2}\\s*[AP]M)`;
+      const dayPattern = new RegExp(dayPatternStr, 'i');
+
+      const match = customer.Time.match(dayPattern);
+      if (match) {
+        washTime = match[1];
+      }
+    }
+
+    // 3. Check for specific car time in the 'Time' field (e.g., "9:00 AM Kia, 5:00 PM Jetour")
+    if (!washTime && customer.Time && allCarPlates.length > 1) {
+        const carTimePattern = new RegExp(`(\\d{1,2}:\\d{2}\\s*[AP]M)\\s*${escapeRegExp(carPlate)}|${escapeRegExp(carPlate)}\\s*(\\d{1,2}:\\d{2}\\s*[AP]M)`, 'i');
+        const match = customer.Time.match(carTimePattern);
+        if (match) {
+             washTime = match[1] || match[2];
+        }
+    }
+
+    // 4. Fallback to general Time field if no specific patterns matched
+    if (!washTime && customer.Time) {
+         // Only use as fallback if it's a simple time format
+         const simpleTimePattern = /^\d{1,2}:\d{2}\s*[AP]M$/i;
+         if (simpleTimePattern.test(customer.Time.trim())) {
+           washTime = customer.Time.trim();
+         }
     }
     
     if (washTime) {

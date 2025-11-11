@@ -20,7 +20,7 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
     switch (type) {
       case 'success': return '#28a745';
       case 'error': return '#dc3545';
-      case 'warning': return '#ffc107';
+      case 'warning': return '#28a745';
       case 'confirm': return '#007bff';
       default: return '#6c757d';
     }
@@ -43,7 +43,7 @@ const Modal = ({ isOpen, onClose, title, message, type = 'info', onConfirm, show
         borderRadius: '10px',
         padding: '2rem',
         minWidth: '300px',
-        maxWidth: '500px',
+        maxWidth: '600px',
         boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
         textAlign: 'center'
       }}>
