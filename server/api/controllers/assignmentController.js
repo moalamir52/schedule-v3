@@ -353,7 +353,7 @@ module.exports = {
   getWashHistory: async (req, res) => {
     try {
       const { customerId } = req.params;
-      const limit = parseInt(req.query.limit) || 6;
+      const limit = parseInt(req.query.limit) || 12;
       
       if (!customerId) {
         return res.status(400).json({ 
@@ -364,10 +364,13 @@ module.exports = {
       
       // Get all history from database
       const allHistory = await db.getAllHistory();
+      console.log(`🔍 Total history records: ${allHistory.length}`);
+      console.log(`🔍 Sample history record:`, allHistory[0]);
       
       // Get customer info to find car plates
       const customers = await db.getCustomers();
       const customer = customers.find(c => c.CustomerID === customerId);
+      console.log(`🔍 Customer found:`, customer);
       
       if (!customer) {
         return res.json({ 
@@ -380,13 +383,23 @@ module.exports = {
       // Get customer's car plates
       const customerCarPlates = customer.CarPlates ? 
         customer.CarPlates.split(',').map(plate => plate.trim()) : [];
+      console.log(`🔍 Customer car plates:`, customerCarPlates);
       
-      // Filter history by customer's car plates and remove duplicates
-      const customerHistory = allHistory
-        .filter(record => customerCarPlates.includes(record.CarPlate))
+      // Check what car plates exist in history
+      const uniqueCarPlates = [...new Set(allHistory.map(record => record.CarPlate))];
+      console.log(`🔍 All car plates in history:`, uniqueCarPlates.slice(0, 10));
+      
+      // Filter by both customer ID and car plates to ensure we get only this customer's records
+      const filteredHistory = allHistory.filter(record => 
+        record.CustomerID === customerId && customerCarPlates.includes(record.CarPlate)
+      );
+      console.log(`🔍 Filtered history for customer ${customerId}:`, filteredHistory.length, 'records');
+      console.log(`🔍 First 3 filtered records:`, filteredHistory.slice(0, 3));
+      
+      const customerHistory = filteredHistory
         .sort((a, b) => new Date(b.WashDate) - new Date(a.WashDate))
         .reduce((unique, record) => {
-          const key = `${record.WashDate}-${record.CarPlate}-${record.WashTypePerformed}`;
+          const key = `${record.WashDate}-${record.CarPlate}-${record.WashType || record.WashTypePerformed}`;
           if (!unique.some(item => `${item.WashDate}-${item.CarPlate}-${item.WashTypePerformed}` === key)) {
             unique.push(record);
           }
@@ -396,7 +409,7 @@ module.exports = {
         .map(record => ({
           washDate: record.WashDate,
           carPlate: record.CarPlate,
-          washType: record.WashTypePerformed,
+          washType: record.WashType || record.WashTypePerformed,
           status: record.Status,
           workerName: record.WorkerName,
           villa: record.Villa

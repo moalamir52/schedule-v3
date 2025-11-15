@@ -831,6 +831,7 @@ async function addSkippedCustomer(customerData, reason = 'No available time slot
 
 module.exports = {
   buildWeeklySchedule,
+  calculateWashSchedule,
   determineIntCarForCustomer,
   checkIfFirstWeekOfBiWeekCycle,
   clearSchedule,

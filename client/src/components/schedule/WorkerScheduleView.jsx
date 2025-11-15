@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../Modal';
 import WeekPatternModal from './WeekPatternModal';
+import CustomerViewSelector from '../clients/CustomerViewSelector';
 const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUpdate, onDeleteAppointment, onWashTypeUpdate, onCustomerFilter, customerFilter, currentWeekOffset = 0 }) => {
   const [draggedItem, setDraggedItem] = useState(null);
   const [showOverrideMenu, setShowOverrideMenu] = useState(null);
@@ -113,12 +114,20 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       setShowOverrideMenu(null);
     } else {
       const rect = e.target.getBoundingClientRect();
-      const menuWidth = 200; // تقريبي لعرض القائمة
-      // لو القائمة هتطلع برة الشاشة، حطها على الشمال
+      const menuWidth = 200;
+      const menuHeight = 250; // تقريبي لارتفاع القائمة
+      
+      // Check horizontal position
       const x = (rect.right + menuWidth > window.innerWidth) 
         ? rect.left - menuWidth - 10 
         : rect.right + 10;
-      setMenuPosition({ x, y: rect.top });
+      
+      // Check vertical position - if menu would go below screen, show it above
+      const y = (rect.bottom + menuHeight > window.innerHeight)
+        ? rect.top - menuHeight - 10
+        : rect.top;
+      
+      setMenuPosition({ x, y });
       setShowOverrideMenu(taskId);
     }
   };
@@ -421,26 +430,16 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       console.log('📝 No additional changes to save for week pattern');
     }
   };
-  const handleCustomerNameClick = async (customerId) => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clients/${customerId}`);
-      const data = await response.json();
-      if (response.ok) {
-        // Get all scheduled appointments for this customer
-        const customerAppointments = assignedSchedule.filter(appointment => 
-          appointment.customerId === customerId
-        );
-        setCustomerInfo({
-          isOpen: true, 
-          data: data,
-          appointments: customerAppointments
-        });
-      } else {
-        alert('Failed to fetch customer information');
-      }
-    } catch (error) {
-      alert('Error fetching customer information: ' + error.message);
-    }
+  const handleCustomerNameClick = (customerId) => {
+    // Get all scheduled appointments for this customer
+    const customerAppointments = assignedSchedule.filter(appointment => 
+      appointment.customerId === customerId
+    );
+    setCustomerInfo({
+      isOpen: true, 
+      data: { customerId },
+      appointments: customerAppointments
+    });
   };
   const handleDeleteTask = (appointment) => {
     setModal({
@@ -691,6 +690,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
   };
   return (
     <>
+    <div className="timetable-container">
     <table className="timetable" key={`week-${currentWeekOffset}-${weekStartDate.getTime()}`}>
       <thead>
         <tr>
@@ -867,6 +867,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
         ))}
       </tbody>
     </table>
+    </div>
     {/* Override Menu - Outside table */}
     {showOverrideMenu && (() => {
       const appointment = assignedSchedule.find(apt => 
@@ -973,85 +974,12 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
       message={modal.message}
       onConfirm={modal.onConfirm}
     />
-    {/* Customer Info Modal */}
+    {/* Customer View Selector */}
     {customerInfo.isOpen && (
-      <div className="customer-info-modal" onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] }) }>
-        <div className="customer-info-content" onClick={(e) => e.stopPropagation()}>
-          <div className="customer-info-header">
-            <h3>{customerInfo.data?.CustomerName || 'Customer Information'}</h3>
-            <button 
-              className="close-customer-info"
-              onClick={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] })}
-            >
-              ×
-            </button>
-          </div>
-          <div className="customer-info-body">
-            <div className="info-row">
-              <span className="info-label">Customer ID:</span>
-              <span className="info-value">{customerInfo.data?.CustomerID || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Name:</span>
-              <span className="info-value">{customerInfo.data?.Name || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Villa:</span>
-              <span className="info-value">{customerInfo.data?.Villa || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Phone:</span>
-              <span className="info-value">{customerInfo.data?.Phone || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Package:</span>
-              <span className="info-value">{customerInfo.data?.Washman_Package || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Serves:</span>
-              <span className="info-value">{customerInfo.data?.Serves || '-'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Car Plates:</span>
-              <span className="info-value">{customerInfo.data?.CarPlates || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Wash Days:</span>
-              <span className="info-value">{customerInfo.data?.Days || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Scheduled Appointments:</span>
-              <span className="info-value">
-                {customerInfo.appointments && customerInfo.appointments.length > 0 ? (
-                  <div style={{ textAlign: 'right' }}>
-                    {customerInfo.appointments.map((apt, index) => (
-                      <div key={index} style={{ marginBottom: '4px' }}>
-                        {apt.day} {apt.time} - {apt.carPlate} ({apt.washType})
-                      </div>
-                    ))}
-                  </div>
-                ) : 'No appointments scheduled'}
-              </span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Fee:</span>
-              <span className="info-value">{customerInfo.data?.Fee || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Start Date:</span>
-              <span className="info-value">{customerInfo.data?.['start date'] || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Payment:</span>
-              <span className="info-value">{customerInfo.data?.payment || 'N/A'}</span>
-            </div>
-            <div className="info-row">
-              <span className="info-label">Status:</span>
-              <span className="info-value">{customerInfo.data?.Status || 'N/A'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CustomerViewSelector
+        customerId={customerInfo.data?.customerId}
+        onClose={() => setCustomerInfo({ isOpen: false, data: null, appointments: [] })}
+      />
     )}
     <WeekPatternModal
       isOpen={weekPatternModal.isOpen}

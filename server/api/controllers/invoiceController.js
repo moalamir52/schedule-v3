@@ -194,7 +194,14 @@ const createInvoice = async (req, res) => {
 
 const getAllInvoices = async (req, res) => {
   try {
-    const invoices = await db.getInvoices();
+    const { customerId } = req.query;
+    const allInvoices = await db.getInvoices();
+    
+    let invoices = allInvoices;
+    if (customerId) {
+      invoices = allInvoices.filter(invoice => invoice.CustomerID === customerId);
+    }
+    
     res.json({
       success: true,
       invoices: invoices,

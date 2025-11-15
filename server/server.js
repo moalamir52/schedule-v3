@@ -39,6 +39,7 @@ const washRulesRoutes = require('./api/routes/washRulesRoutes');
 const completedTasksRoutes = require('./api/routes/completedTasksRoutes');
 const syncRoutes = require('./api/routes/syncRoutes');
 const skippedCustomersRoutes = require('./api/routes/skippedCustomersRoutes');
+const customerProfileRoutes = require('./api/routes/customerProfileRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -170,6 +171,7 @@ app.use('/api/workers', workersRoutes);
 app.use('/api/services', servicesRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/customers', clientRoutes);
+app.use('/api/clients', clientRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/debug', debugRoutes);
@@ -178,6 +180,7 @@ app.use('/api/wash-rules', washRulesRoutes);
 app.use('/api/completed-tasks', completedTasksRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/skipped-customers', skippedCustomersRoutes);
+app.use('/api/customer', customerProfileRoutes);
 app.use('/api/available', require('./api/routes/availableTimesRoutes'));
 
 // Migration endpoints

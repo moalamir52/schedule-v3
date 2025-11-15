@@ -18,6 +18,7 @@ router.post('/get-number', getInvoiceNumber);
 router.get('/stats', getInvoiceStats);
 router.get('/check-duplicates', checkDuplicateInvoices);
 router.get('/all', getAllInvoices);
+router.get('/', getAllInvoices);
 router.get('/export', exportInvoices);
 router.get('/print/:id', printInvoice);
 router.put('/update/:id', updateInvoice);
