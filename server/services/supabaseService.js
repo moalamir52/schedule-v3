@@ -122,7 +122,7 @@ class SupabaseService {
   // Workers methods
   async getWorkers() {
     try {
-      const result = await this.request('GET', '/Workers?Status=eq.Active&order=Name');
+      const result = await this.request('GET', '/Workers?Status=eq.Active&order=WorkerID');
       return Array.isArray(result) ? result : [];
     } catch (error) {
       return [];
@@ -178,13 +178,25 @@ class SupabaseService {
 
   // Add worker
   async addWorker(workerData) {
+    // Get next worker number
+    const workers = await this.getWorkers();
+    const maxNum = Math.max(...workers.map(w => {
+      const match = w.WorkerID?.match(/WORK-(\d+)/);
+      return match ? parseInt(match[1]) : 0;
+    }), 0);
+    
     const data = {
-      worker_id: workerData.WorkerID || `WORKER-${Date.now()}`,
-      name: workerData.Name,
-      job: workerData.Job,
-      status: workerData.Status || 'Active'
+      WorkerID: `WORK-${String(maxNum + 1).padStart(3, '0')}`,
+      Name: workerData.Name || workerData.name,
+      Job: workerData.Job || 'Cleaner',
+      Status: workerData.Status || 'Active'
     };
-    return await this.request('POST', '/workers', data);
+    return await this.request('POST', '/Workers', data);
+  }
+
+  // Update worker
+  async updateWorker(workerName, updateData) {
+    return await this.request('PATCH', `/Workers?Name=eq.${encodeURIComponent(workerName)}`, updateData);
   }
 
   // Invoices methods
@@ -351,7 +363,7 @@ class SupabaseService {
 
   // Delete worker
   async deleteWorker(workerName) {
-    return await this.request('PATCH', `/Workers?Name=eq.${workerName}`, { Status: 'Inactive' });
+    return await this.request('DELETE', `/Workers?Name=eq.${encodeURIComponent(workerName)}`);
   }
 
   // Clear and write schedule

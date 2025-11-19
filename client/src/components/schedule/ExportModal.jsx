@@ -19,6 +19,11 @@ const ExportModal = ({ isOpen, onClose, assignedSchedule, workers }) => {
       if (selectedWorker !== 'all') {
         filteredData = filteredData.filter(item => item.workerName === selectedWorker);
       }
+      // Sort data by time only (workers already in database order)
+      filteredData.sort((a, b) => {
+        const timeSlots = ['6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'];
+        return timeSlots.indexOf(a.time) - timeSlots.indexOf(b.time);
+      });
       filteredData.forEach(item => {
         csvData.push([
           item.day || '',
@@ -74,7 +79,7 @@ const ExportModal = ({ isOpen, onClose, assignedSchedule, workers }) => {
     title.style.marginBottom = '20px';
     tempDiv.appendChild(title);
     if (selectedWorker === 'all') {
-      // Show each worker separately
+      // Show each worker separately - use database order (WorkerID)
       workers.forEach(worker => {
         const workerData = filteredData.filter(item => item.workerName === worker.Name);
         if (workerData.length === 0) return;
@@ -258,6 +263,7 @@ const ExportModal = ({ isOpen, onClose, assignedSchedule, workers }) => {
   };
   const exportWorkersAsImages = async () => {
     const { default: html2canvas } = await import('html2canvas');
+    // Use database order (WorkerID)
     for (const worker of workers) {
       const workerAppointments = assignedSchedule.filter(appt => 
         appt.day === selectedDay && appt.workerName === worker.Name

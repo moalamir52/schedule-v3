@@ -57,6 +57,10 @@ class DatabaseService {
     return await this.supabase.addWorker(workerData);
   }
 
+  async updateWorker(workerName, updateData) {
+    return await this.supabase.updateWorker(workerName, updateData);
+  }
+
   async deleteWorker(workerName) {
     return await this.supabase.deleteWorker(workerName);
   }

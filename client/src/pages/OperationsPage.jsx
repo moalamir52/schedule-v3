@@ -8,6 +8,8 @@ const OperationsPage = () => {
   const [workers, setWorkers] = useState([]);
   const [newWorkerName, setNewWorkerName] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingWorker, setEditingWorker] = useState(null);
+  const [editWorkerData, setEditWorkerData] = useState({ name: '', job: '', status: '' });
   const [additionalServices, setAdditionalServices] = useState([]);
   const [newServiceName, setNewServiceName] = useState('');
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
@@ -31,13 +33,9 @@ const OperationsPage = () => {
   const loadWorkers = async () => {
     try {
       const workersData = await operationsService.getWorkers();
-      const workerNames = workersData.map(w => {
-        if (typeof w === 'string') return w;
-        return w.Name || w.WorkerName || 'Unknown';
-      }).filter(name => name && name !== 'Unknown');
-      setWorkers(workerNames.length > 0 ? workerNames : ['Raqib', 'Rahman']);
+      setWorkers(Array.isArray(workersData) ? workersData : []);
     } catch (error) {
-      setWorkers(['Raqib', 'Rahman']); // Default workers
+      setWorkers([]);
     } finally {
       setLoading(false);
     }
@@ -217,6 +215,33 @@ const OperationsPage = () => {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to add worker: ' + error.message, onConfirm: null });
     }
   };
+  const handleEditWorker = async (oldName) => {
+    if (!editWorkerData.name.trim()) {
+      setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Please enter worker name', onConfirm: null });
+      return;
+    }
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/workers/${encodeURIComponent(oldName)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          Name: editWorkerData.name,
+          Job: editWorkerData.job,
+          Status: editWorkerData.status
+        })
+      });
+      if (response.ok) {
+        await loadWorkers();
+        setEditingWorker(null);
+        setModal({ isOpen: true, type: 'success', title: 'Success', message: 'Worker updated successfully!', onConfirm: null });
+      } else {
+        throw new Error('Failed to update worker');
+      }
+    } catch (error) {
+      setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to update worker: ' + error.message, onConfirm: null });
+    }
+  };
+
   const handleDeleteWorker = async (workerName) => {
     if (workers.length <= 1) {
       setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Cannot delete the last worker', onConfirm: null });
@@ -230,8 +255,7 @@ const OperationsPage = () => {
       onConfirm: async () => {
         try {
           await operationsService.deleteWorker(workerName);
-          const updatedWorkers = workers.filter(w => w !== workerName);
-          setWorkers(updatedWorkers);
+          await loadWorkers();
           setModal({ isOpen: true, type: 'success', title: 'Success', message: `Worker "${workerName}" deleted successfully!`, onConfirm: null });
         } catch (error) {
           setModal({ isOpen: true, type: 'error', title: 'Error', message: 'Failed to delete worker', onConfirm: null });
@@ -411,46 +435,160 @@ const OperationsPage = () => {
         )}
         {/* Workers List */}
         <div className="stats-grid">
-          {workers.map((worker, index) => (
-            <div
-              key={worker}
-              className="stat-card"
-            >
-              <div>
-                <h4 style={{
-                  color: 'var(--brand-primary)',
-                  fontSize: '1.2rem',
-                  fontWeight: '600',
-                  margin: '0 0 0.5rem 0'
-                }}>
-                  👤 {worker}
-                </h4>
-                <p style={{
-                  color: '#6c757d',
-                  fontSize: '0.9rem',
-                  margin: '0'
-                }}>
-                  Worker #{index + 1}
-                </p>
+          {workers.map((worker, index) => {
+            const workerName = typeof worker === 'string' ? worker : worker.Name;
+            const workerJob = typeof worker === 'object' ? worker.Job : 'Cleaner';
+            const workerStatus = typeof worker === 'object' ? worker.Status : 'Active';
+            const isEditing = editingWorker === workerName;
+            
+            return (
+              <div key={workerName || index} className="stat-card">
+                <div style={{ flex: 1 }}>
+                  {isEditing ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <input
+                        type="text"
+                        value={editWorkerData.name}
+                        onChange={(e) => setEditWorkerData({...editWorkerData, name: e.target.value})}
+                        placeholder="Worker name"
+                        style={{
+                          padding: '8px',
+                          borderRadius: '4px',
+                          border: '2px solid var(--brand-primary)',
+                          fontSize: '1rem'
+                        }}
+                      />
+                      <input
+                        type="text"
+                        value={editWorkerData.job}
+                        onChange={(e) => setEditWorkerData({...editWorkerData, job: e.target.value})}
+                        placeholder="Job title"
+                        style={{
+                          padding: '8px',
+                          borderRadius: '4px',
+                          border: '2px solid var(--brand-primary)',
+                          fontSize: '0.9rem'
+                        }}
+                      />
+                      <select
+                        value={editWorkerData.status}
+                        onChange={(e) => setEditWorkerData({...editWorkerData, status: e.target.value})}
+                        style={{
+                          padding: '8px',
+                          borderRadius: '4px',
+                          border: '2px solid var(--brand-primary)',
+                          fontSize: '0.9rem'
+                        }}
+                      >
+                        <option value="Active">Active</option>
+                        <option value="Inactive">Inactive</option>
+                      </select>
+                    </div>
+                  ) : (
+                    <>
+                      <h4 style={{
+                        color: 'var(--brand-primary)',
+                        fontSize: '1.2rem',
+                        fontWeight: '600',
+                        margin: '0 0 0.5rem 0'
+                      }}>
+                        👤 {workerName}
+                      </h4>
+                      <p style={{
+                        color: '#6c757d',
+                        fontSize: '0.9rem',
+                        margin: '0 0 0.25rem 0'
+                      }}>
+                        {workerJob} - Worker #{index + 1}
+                      </p>
+                      <span style={{
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        backgroundColor: workerStatus === 'Active' ? '#28a745' : '#6c757d',
+                        color: 'white',
+                        fontSize: '0.8rem'
+                      }}>
+                        {workerStatus}
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: '4px', flexDirection: 'column' }}>
+                  {isEditing ? (
+                    <>
+                      <button
+                        onClick={() => handleEditWorker(workerName)}
+                        style={{
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✅ Save
+                      </button>
+                      <button
+                        onClick={() => setEditingWorker(null)}
+                        style={{
+                          backgroundColor: '#6c757d',
+                          color: 'white',
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ❌ Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingWorker(workerName);
+                          setEditWorkerData({
+                            name: workerName,
+                            job: workerJob,
+                            status: workerStatus
+                          });
+                        }}
+                        style={{
+                          backgroundColor: '#ffc107',
+                          color: '#212529',
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          fontSize: '0.8rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteWorker(workerName)}
+                        disabled={workers.length <= 1}
+                        style={{
+                          backgroundColor: workers.length <= 1 ? '#e9ecef' : '#dc3545',
+                          color: workers.length <= 1 ? '#6c757d' : 'white',
+                          padding: '6px 10px',
+                          borderRadius: '4px',
+                          border: 'none',
+                          fontSize: '0.8rem',
+                          cursor: workers.length <= 1 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        🗑️ Delete
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => handleDeleteWorker(worker)}
-                disabled={workers.length <= 1}
-                style={{
-                  backgroundColor: workers.length <= 1 ? '#e9ecef' : '#dc3545',
-                  color: workers.length <= 1 ? '#6c757d' : 'white',
-                  padding: '8px 12px',
-                  borderRadius: '6px',
-                  border: 'none',
-                  fontSize: '0.9rem',
-                  fontWeight: '600',
-                  cursor: workers.length <= 1 ? 'not-allowed' : 'pointer'
-                }}
-              >
-                🗑️ Delete
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
         {/* Workers Count */}
         <div style={{

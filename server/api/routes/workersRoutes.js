@@ -4,6 +4,7 @@ const { getAllWorkers, addWorker, updateWorker, deleteWorker } = require('../con
 
 router.get('/', getAllWorkers);
 router.post('/', addWorker);
+router.patch('/:name', updateWorker);
 router.put('/:id', updateWorker);
 router.delete('/:id', deleteWorker);
 

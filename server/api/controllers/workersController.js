@@ -59,10 +59,13 @@ const addWorker = async (req, res) => {
 
 const updateWorker = async (req, res) => {
   try {
-    const { id } = req.params;
-    // Update worker logic here
-    res.json({ success: true, message: 'Worker updated' });
+    const { name } = req.params;
+    console.log('Updating worker:', name, 'with data:', req.body);
+    const result = await db.updateWorker(name, req.body);
+    console.log('Update result:', result);
+    res.json({ success: true, data: result });
   } catch (error) {
+    console.error('Update worker error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 };
