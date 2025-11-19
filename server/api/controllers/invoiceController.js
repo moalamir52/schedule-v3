@@ -1,5 +1,5 @@
 const db = require('../../services/databaseService');
-const { getCustomers, getInvoices, addInvoiceRecord, updateInvoiceStatus, updateInvoiceRecord, deleteInvoiceRecord, getOrCreateInvoiceNumber, detectDuplicateInvoices } = require('../../services/googleSheetsService');
+const { getCustomers, getInvoices, addInvoiceRecord, updateInvoiceStatus, updateInvoiceRecord, deleteInvoiceRecord, getOrCreateInvoiceNumber } = require('../../services/googleSheetsService');
 
 const createInvoice = async (req, res) => {
   try {
@@ -329,13 +329,78 @@ const getInvoiceStats = async (req, res) => {
 
 const checkDuplicateInvoices = async (req, res) => {
   try {
-    const result = await detectDuplicateInvoices();
+    const invoices = await db.getInvoices();
+    const duplicates = [];
+    const refCounts = {};
+    const customerMonthCounts = {};
+    
+    // Check for duplicate REFs
+    invoices.forEach(invoice => {
+      if (invoice.Ref) {
+        refCounts[invoice.Ref] = (refCounts[invoice.Ref] || []);
+        refCounts[invoice.Ref].push(invoice);
+      }
+    });
+    
+    // Check for multiple invoices per customer per month
+    invoices.forEach(invoice => {
+      if (invoice.CreatedAt) {
+        const date = new Date(invoice.CreatedAt);
+        // Use CustomerName + Villa for ONE_TIME customers to distinguish different walk-ins
+        const customerKey = invoice.CustomerID === 'ONE_TIME' 
+          ? `${invoice.CustomerName} (${invoice.Villa})` 
+          : invoice.CustomerID;
+        const monthKey = `${customerKey}-${date.getFullYear()}-${date.getMonth() + 1}`;
+        customerMonthCounts[monthKey] = (customerMonthCounts[monthKey] || []);
+        customerMonthCounts[monthKey].push(invoice);
+      }
+    });
+    
+    // Add duplicate REFs to results
+    Object.entries(refCounts).forEach(([ref, invoiceList]) => {
+      if (invoiceList.length > 1) {
+        duplicates.push({
+          type: 'DUPLICATE_REF',
+          severity: 'HIGH',
+          ref: ref,
+          count: invoiceList.length,
+          invoices: invoiceList
+        });
+      }
+    });
+    
+    // Add multiple monthly invoices to results
+    Object.entries(customerMonthCounts).forEach(([key, invoiceList]) => {
+      if (invoiceList.length > 1) {
+        const keyParts = key.split('-');
+        const customerKey = keyParts.slice(0, -2).join('-'); // Handle customer names with dashes
+        const year = keyParts[keyParts.length - 2];
+        const month = keyParts[keyParts.length - 1];
+        
+        duplicates.push({
+          type: 'MULTIPLE_MONTHLY',
+          severity: 'MEDIUM',
+          customerID: customerKey,
+          month: `${year}-${month.padStart(2, '0')}`,
+          count: invoiceList.length,
+          invoices: invoiceList
+        });
+      }
+    });
+    
+    const totalDuplicateInvoices = duplicates.reduce((sum, dup) => sum + dup.count, 0);
+    const duplicateRefs = duplicates.filter(d => d.type === 'DUPLICATE_REF').length;
     
     res.json({
       success: true,
-      ...result,
-      message: result.duplicates.length > 0 
-        ? `Found ${result.duplicates.length} duplicate issues affecting ${result.summary.totalDuplicateInvoices} invoices`
+      duplicates: duplicates,
+      summary: {
+        total: invoices.length,
+        duplicateRefs: duplicateRefs,
+        totalDuplicateInvoices: totalDuplicateInvoices
+      },
+      message: duplicates.length > 0 
+        ? `Found ${duplicates.length} duplicate issues affecting ${totalDuplicateInvoices} invoices`
         : 'No duplicate invoices found'
     });
   } catch (error) {
