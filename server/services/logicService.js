@@ -27,9 +27,9 @@ async function buildWeeklySchedule(weekOffset = 0) {
           }
         }
       }
-      console.log('🗑️ Cleared old skipped customers from today');
+
     } catch (clearError) {
-      console.log('⚠️ Could not clear old skipped customers:', clearError.message);
+
     }
     const [allCustomers, allHistory, allWorkers] = await Promise.all([
       db.getCustomers(),
@@ -51,14 +51,25 @@ async function buildWeeklySchedule(weekOffset = 0) {
     
     // Track worker assignments to avoid conflicts
     const workerSchedule = {}; // {workerId: {day-time: {CustomerID, CustomerName}}}
+    const workerStats = {}; // Track how many tasks each worker gets
     let customerIndex = 0; // Track customer processing order
+    
+    // Initialize worker stats and reset rotation
+    workerRotationIndex = 0; // Reset for fair distribution
+    activeWorkers.forEach(worker => {
+      workerStats[worker.WorkerID] = {
+        name: worker.Name,
+        totalTasks: 0,
+        tasksByDay: {}
+      };
+    });
     
     for (const customer of activeCustomers) {
       customerIndex++;
       try {
         // Safety checks for required fields
         if (!customer.Washman_Package || customer.Washman_Package.trim() === '') {
-          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No package`);
+
           const skippedData = {
             customerName: customer.CustomerName || customer.Name,
             customerId: customer.CustomerID,
@@ -75,7 +86,7 @@ async function buildWeeklySchedule(weekOffset = 0) {
         }
         
         if (!customer.Days || (!customer.Time && !customer.Notes)) {
-          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No days or time`);
+
           const skippedData = {
             customerName: customer.CustomerName || customer.Name,
             customerId: customer.CustomerID,
@@ -92,7 +103,7 @@ async function buildWeeklySchedule(weekOffset = 0) {
         }
         
         if (!customer.CarPlates) {
-          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No car plates`);
+
           const skippedData = {
             customerName: customer.CustomerName || customer.Name,
             customerId: customer.CustomerID,
@@ -108,7 +119,7 @@ async function buildWeeklySchedule(weekOffset = 0) {
         const carPlates = customer.CarPlates.split(',').map(plate => plate.trim()).filter(plate => plate);
         
         if (carPlates.length === 0) {
-          console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No valid car plates`);
+
           const skippedData = {
             customerName: customer.CustomerName || customer.Name,
             customerId: customer.CustomerID,
@@ -168,7 +179,7 @@ async function buildWeeklySchedule(weekOffset = 0) {
             
             // Skip this time group if no worker is available
             if (!groupWorker) {
-                console.log(`⚠️ Skipping customer ${customer.CustomerName || customer.Name} - No worker available for ${day} at ${time}`);
+
                 // Track and save skipped customer
                 tasks.forEach(async (task) => {
                     const skippedCustomer = {
@@ -193,10 +204,10 @@ async function buildWeeklySchedule(weekOffset = 0) {
                             Time: time
                         }, 'No available workers');
                     } catch (e) {
-                        console.log('Failed to save skipped customer to DB:', e.message);
+
                     }
                     
-                    console.log('Added to skipped:', skippedCustomer);
+
                 });
                 return;
             }
@@ -226,6 +237,13 @@ async function buildWeeklySchedule(weekOffset = 0) {
             }
             
             tasks.forEach(wash => {
+                // Update worker stats
+                workerStats[groupWorker.WorkerID].totalTasks++;
+                if (!workerStats[groupWorker.WorkerID].tasksByDay[wash.washDay]) {
+                  workerStats[groupWorker.WorkerID].tasksByDay[wash.washDay] = 0;
+                }
+                workerStats[groupWorker.WorkerID].tasksByDay[wash.washDay]++;
+                
                 schedule.push({
                     day: wash.washDay,
                     appointmentDate: getDateForDay(wash.washDay, weekOffset),
@@ -251,9 +269,9 @@ async function buildWeeklySchedule(weekOffset = 0) {
     }
     
     // Add skipped customers as a property to the schedule array
-    console.log(`📊 Total skipped customers: ${skippedCustomers.length}`);
+
     if (skippedCustomers.length > 0) {
-      console.log('Skipped customers details:', skippedCustomers);
+
     }
     
     // Create skipped customers message
@@ -266,8 +284,32 @@ async function buildWeeklySchedule(weekOffset = 0) {
       skippedMessage += 'برجاء مراجعة جدولة العمال أو إضافة عمال جدد.';
     }
     
+    // Log worker distribution
+    console.log('\n📊 توزيع المهام على العمال:');
+    console.log('=' .repeat(50));
+    
+    let totalAssignedTasks = 0;
+    Object.values(workerStats).forEach(worker => {
+      totalAssignedTasks += worker.totalTasks;
+      console.log(`👷 ${worker.name}: ${worker.totalTasks} مهمة`);
+      
+      if (worker.totalTasks > 0) {
+        Object.entries(worker.tasksByDay).forEach(([day, count]) => {
+          console.log(`   - ${day}: ${count} مهمة`);
+        });
+      } else {
+        console.log('   ❌ لم يتم تعيين أي مهام');
+      }
+      console.log('');
+    });
+    
+    console.log(`📈 إجمالي المهام المعينة: ${totalAssignedTasks}`);
+    console.log(`📋 إجمالي المهام المجدولة: ${schedule.length}`);
+    console.log('=' .repeat(50));
+    
     schedule.skippedCustomers = skippedCustomers;
     schedule.skippedMessage = skippedMessage;
+    schedule.workerStats = workerStats;
     return schedule;
     
   } catch (error) {
@@ -364,48 +406,43 @@ function calculateWashSchedule(customer, carPlate, allCarPlates, history, allHis
 
     // 3. Check for specific car time in the 'Time' field (e.g., "6:00 AM Lincoln, 6:00 AM Cadillac, 11:00 AM Nissan")
     if (!washTime && customer.Time && allCarPlates.length > 1) {
-        console.log(`🔍 Parsing car-specific time for ${carPlate}`);
-        console.log(`📝 Time field: "${customer.Time}"`);
         
         // Split by comma and check each part for this car
         const timeParts = customer.Time.split(',').map(part => part.trim());
-        console.log(`📋 Time parts:`, timeParts);
         
         for (const part of timeParts) {
-            console.log(`🔎 Checking part: "${part}" for car: "${carPlate}"`);
+
             // Check if this part contains the current car plate (with fuzzy matching)
             const carFound = part.toLowerCase().includes(carPlate.toLowerCase()) || 
                            carPlate.toLowerCase().includes(part.toLowerCase().replace(/(\d{1,2}:\d{2}\s*[ap]m)/i, '').trim()) ||
                            isCarNameMatch(carPlate, part);
             
             if (carFound) {
-                console.log(`✅ Found car ${carPlate} in part: "${part}"`);
+
                 // Extract time from this part
                 const timeMatch = part.match(/(\d{1,2}:\d{2}\s*[AP]M)/i);
-                console.log(`⏰ Time match:`, timeMatch);
+
                 if (timeMatch) {
                     washTime = timeMatch[1];
-                    console.log(`🎯 Set washTime to: ${washTime}`);
+
                     break;
                 }
             } else {
-                console.log(`❌ Car ${carPlate} not found in part: "${part}"`);
+
             }
         }
         
         // If no specific time found for this car, try to find any time that matches the car name pattern
         if (!washTime) {
-            console.log(`🔄 Trying fallback pattern for ${carPlate}`);
             const carTimePattern = new RegExp(`(\\d{1,2}:\\d{2}\\s*[AP]M)\\s+[^,]*${escapeRegExp(carPlate)}|${escapeRegExp(carPlate)}\\s+(\\d{1,2}:\\d{2}\\s*[AP]M)`, 'i');
             const match = customer.Time.match(carTimePattern);
-            console.log(`🎯 Fallback match:`, match);
             if (match) {
                 washTime = match[1] || match[2];
-                console.log(`🎯 Fallback washTime: ${washTime}`);
+
             }
         }
         
-        console.log(`🏁 Final washTime for ${carPlate}: ${washTime}`);
+
     }
 
     // 4. Fallback to general Time field if no specific patterns matched
@@ -634,12 +671,18 @@ function determineIntCarForCustomer(allCarPlates, allHistory, visitIndex = 0, we
   return sortedPlates[intCarIndex];
 }
 
-// Simple function to find available worker for a specific time slot
+// Global counter for round-robin worker assignment
+let workerRotationIndex = 0;
+
+// Fair distribution function to find available worker using round-robin
 function findAvailableWorker(workers, workerSchedule, day, time, shouldReserve = true) {
   const timeSlots = parseTimeSlots(time);
   
-  // Try to find a worker who is not busy at ANY of these exact time slots
-  for (const worker of workers) {
+  // Try round-robin starting from current rotation index
+  for (let i = 0; i < workers.length; i++) {
+    const workerIndex = (workerRotationIndex + i) % workers.length;
+    const worker = workers[workerIndex];
+    
     let isAvailable = true;
     
     for (const timeSlot of timeSlots) {
@@ -651,6 +694,9 @@ function findAvailableWorker(workers, workerSchedule, day, time, shouldReserve =
     }
     
     if (isAvailable) {
+      // Update rotation index for next assignment
+      workerRotationIndex = (workerIndex + 1) % workers.length;
+      
       // Mark this worker as busy for these time slots only if shouldReserve is true
       if (shouldReserve) {
         if (!workerSchedule[worker.WorkerID]) {
@@ -774,24 +820,17 @@ async function getAvailableTimesForDay(day, weekOffset = 0) {
 
 // Function to get skipped customers - fallback to memory if DB fails
 async function getSkippedCustomers() {
-  console.log('🔍 getSkippedCustomers function called!');
   try {
     const db = require('./databaseService');
     const dbResults = await db.getSkippedCustomers();
     
-    console.log('📋 DB Results from getSkippedCustomers:', dbResults);
-    console.log('📋 Memory skippedCustomers:', skippedCustomers);
-    
     // If database is empty but we have memory data, return memory data
     if (dbResults.length === 0 && skippedCustomers && skippedCustomers.length > 0) {
-      console.log('📋 Returning memory data');
       return skippedCustomers;
     }
-    
-    console.log('📋 Returning DB data:', dbResults);
     return dbResults;
   } catch (error) {
-    console.log('📋 Error getting skipped customers, returning memory:', error.message);
+
     // Fallback to memory if database fails
     return skippedCustomers || [];
   }
@@ -820,11 +859,11 @@ async function addSkippedCustomer(customerData, reason = 'No available time slot
       Status: 'Skipped'
     };
     
-    console.log('Saving skipped customer:', skippedRecord);
+
     await db.addSkippedCustomer(skippedRecord);
     return skippedRecord;
   } catch (error) {
-    console.error('Failed to save skipped customer:', error);
+
     return null;
   }
 }

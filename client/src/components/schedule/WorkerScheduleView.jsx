@@ -735,7 +735,7 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                 <td 
                   key={`${day}-${worker.WorkerID || worker.Name}-${time}`}
                   className={`${workerIndex === sortedWorkers.length - 1 ? 'day-separator' : ''} drop-zone`}
-                  style={{ padding: '4px', width: '120px' }}
+                  style={{ padding: '4px', width: '150px' }}
                   onDragOver={(e) => handleDragOver(e)}
                   onDrop={(e) => {
                     e.stopPropagation();
@@ -794,6 +794,17 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                     e.stopPropagation();
                                     handleCustomerNameClick(appointment.customerId);
                                   }}
+                                  title={appointment.customerName}
+                                  style={{
+                                    fontSize: '11px',
+                                    lineHeight: '1.2',
+                                    wordWrap: 'break-word',
+                                    overflow: 'hidden',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    maxHeight: '26px'
+                                  }}
                                 >
                                   {appointment.customerName}
                                   {appointment.customerId && appointment.customerId.startsWith('MANUAL_') && (
@@ -811,8 +822,30 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                     </button>
                                   )}
                                 </div>
-                                <div className="villa">{appointment.villa}</div>
-                                <div className="car-plate">{appointment.carPlate}</div>
+                                <div 
+                                  className="villa"
+                                  title={`Villa: ${appointment.villa}`}
+                                  style={{
+                                    fontSize: '10px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  Villa {appointment.villa}
+                                </div>
+                                <div 
+                                  className="car-plate"
+                                  title={`Car Plate: ${appointment.carPlate}`}
+                                  style={{
+                                    fontSize: '10px',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  {appointment.carPlate}
+                                </div>
                                 <div 
                                   className="wash-type"
                                   onClick={(e) => {
@@ -826,11 +859,10 @@ const WorkerScheduleView = React.memo(({ workers, assignedSchedule, onScheduleUp
                                   style={{ 
                                     cursor: (appointment.washType === 'CANCELLED' || appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.status === 'Cancelled' || appointment.isCompleted) ? 'default' : 'pointer', 
                                     fontWeight: 'bold',
-                                    position: 'relative'
+                                    position: 'relative',
+                                    fontSize: '10px'
                                   }}
-                                  title={(appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled') ? 'Task was cancelled' : 
-                                         (appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted) ? 'Task completed' : 
-                                         'Click to change wash type'}
+                                  title={`${appointment.customerName} - Villa ${appointment.villa} - ${appointment.carPlate} - ${appointment.originalWashType || appointment.washType}${(appointment.washType === 'CANCELLED' || appointment.status === 'Cancelled') ? ' (Cancelled)' : (appointment.washType === 'COMPLETED' || appointment.status === 'Completed' || appointment.isCompleted) ? ' (Completed)' : ' - Click to change'}`}
                                 >
                                   {appointment.customerStatus === 'Booked' ? '📋 BOOKED' : 
                                    appointment.originalWashType || appointment.washType}
