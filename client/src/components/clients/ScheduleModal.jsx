@@ -6,7 +6,7 @@ const TIME_SLOTS = [
   '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
 ];
 
-function CarCard({ car, isDragging, onDragStart, onDragEnd }) {
+function CarCard({ car, isDragging, onDragStart, onDragEnd, isInSchedule = false }) {
   const handleDragStart = (e) => {
     console.log('🚗 CarCard DragStart:', car);
     console.log('📎 Setting drag data:', car);
@@ -34,13 +34,14 @@ function CarCard({ car, isDragging, onDragStart, onDragEnd }) {
         alignItems: 'center',
         padding: '8px',
         margin: '4px',
-        backgroundColor: isDragging ? '#e3f2fd' : '#f8f9fa',
-        border: '2px solid #ddd',
+        backgroundColor: isDragging ? '#e3f2fd' : isInSchedule ? '#fff3e0' : '#f8f9fa',
+        border: `2px solid ${isInSchedule ? '#ff9800' : '#ddd'}`,
         borderRadius: '8px',
         cursor: 'grab',
         minWidth: '80px',
         transition: 'all 0.2s',
-        opacity: isDragging ? 0.5 : 1
+        opacity: isDragging ? 0.5 : 1,
+        boxShadow: isInSchedule ? '0 2px 4px rgba(255,152,0,0.3)' : 'none'
       }}
     >
       <div style={{ fontSize: '20px', marginBottom: '2px' }}>🚗</div>
@@ -57,7 +58,7 @@ function CarCard({ car, isDragging, onDragStart, onDragEnd }) {
   );
 }
 
-function DropZone({ day, time, cars, onDrop, onRemoveCar }) {
+function DropZone({ day, time, cars, onDrop, onRemoveCar, draggedCar, handleDragStart, handleDragEnd }) {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e) => {
@@ -87,7 +88,7 @@ function DropZone({ day, time, cars, onDrop, onRemoveCar }) {
         border: '1px solid #ddd',
         borderRadius: '4px',
         padding: '4px',
-        backgroundColor: isDragOver ? '#e8f5e8' : cars.length > 0 ? '#fff3e0' : 'white',
+        backgroundColor: isDragOver ? '#e8f5e8' : cars.length > 0 ? '#e3f2fd' : 'white',
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
@@ -97,24 +98,31 @@ function DropZone({ day, time, cars, onDrop, onRemoveCar }) {
     >
       {cars.map((car, index) => (
         <div key={index} style={{ position: 'relative' }}>
-          <CarCard car={car} />
+          <CarCard 
+            car={car} 
+            isInSchedule={true}
+            isDragging={draggedCar === car}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          />
           <button
             onClick={() => onRemoveCar(day, time, car)}
             style={{
               position: 'absolute',
               top: '-5px',
               right: '-5px',
-              width: '16px',
-              height: '16px',
+              width: '18px',
+              height: '18px',
               borderRadius: '50%',
               border: 'none',
               backgroundColor: '#dc3545',
               color: 'white',
-              fontSize: '10px',
+              fontSize: '12px',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              fontWeight: 'bold'
             }}
           >
             ×
@@ -122,8 +130,16 @@ function DropZone({ day, time, cars, onDrop, onRemoveCar }) {
         </div>
       ))}
       {cars.length === 0 && (
-        <div style={{ color: '#999', fontSize: '10px', textAlign: 'center' }}>
-          Drop cars here
+        <div style={{ 
+          color: '#999', 
+          fontSize: '11px', 
+          textAlign: 'center',
+          padding: '15px 5px',
+          border: '2px dashed #ddd',
+          borderRadius: '4px',
+          backgroundColor: isDragOver ? '#e8f5e8' : '#fafafa'
+        }}>
+          🚗 Drop car here
         </div>
       )}
     </div>
@@ -137,16 +153,18 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
 
   useEffect(() => {
     if (client && isOpen) {
+      console.log('🔄 ScheduleModal: Loading client data:', client);
+      
       // Parse car plates
       const cars = client.CarPlates ? 
         client.CarPlates.split(',').map(car => car.trim()).filter(car => car) : 
         ['Car 1', 'Car 2']; // Default cars if no plates
       
+      console.log('🚗 Available cars:', cars);
       setAvailableCars(cars);
       
-      // Parse existing schedule from Notes field
-      const existingSchedule = {};
       // Initialize empty schedule
+      const existingSchedule = {};
       DAYS.forEach(day => {
         TIME_SLOTS.forEach(time => {
           existingSchedule[`${day}-${time}`] = [];
@@ -155,10 +173,15 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
       
       // Parse existing schedules from both Notes and Time fields
       const parseScheduleData = (scheduleText, source) => {
+        console.log(`📋 Parsing ${source}:`, scheduleText);
         if (!scheduleText) return;
         
         const scheduleEntries = scheduleText.split(',').map(entry => entry.trim());
+        console.log(`📝 Schedule entries from ${source}:`, scheduleEntries);
+        
         scheduleEntries.forEach(entry => {
+          console.log(`🔍 Processing entry: "${entry}"`);
+          
           // Parse format: "Mon@8:00 AM CarName" or "8:00 AM CarName"
           if (entry.includes('@')) {
             const parts = entry.split('@');
@@ -166,50 +189,81 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
               const dayAbbr = parts[0].trim();
               const timeAndCar = parts[1].trim();
               
-              // Split time and car name
-              const timeParts = timeAndCar.split(' ');
-              if (timeParts.length >= 2) {
-                const time = `${timeParts[0]} ${timeParts[1]}`; // "8:00 AM"
-                const carName = timeParts.length > 2 ? timeParts.slice(2).join(' ') : cars[0]; // Car name or first car
+              console.log(`📅 Day abbreviation: "${dayAbbr}", Time and car: "${timeAndCar}"`);
+              
+              // Split time and car name - improved parsing
+              const timeMatch = timeAndCar.match(/(\d{1,2}:\d{2}\s*[AP]M)\s*(.*)/);
+              if (timeMatch) {
+                const time = timeMatch[1].trim();
+                const carName = timeMatch[2].trim() || cars[0] || 'Unknown Car';
+                
+                console.log(`⏰ Parsed time: "${time}", car: "${carName}"`);
                 
                 const dayMap = {
                   'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
                   'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
                 };
                 const fullDay = dayMap[dayAbbr];
+                
                 if (fullDay && TIME_SLOTS.includes(time)) {
                   const key = `${fullDay}-${time}`;
+                  console.log(`✅ Adding to schedule: ${key} -> ${carName}`);
                   if (existingSchedule[key] && !existingSchedule[key].includes(carName)) {
                     existingSchedule[key].push(carName);
                   }
+                } else {
+                  console.log(`❌ Invalid day or time: ${fullDay}, ${time}`);
                 }
               }
             }
           } else {
-            // Handle car-specific format: "8:00 AM CarName"
-            const timeMatch = entry.match(/(\d{1,2}:\d{2}\s*[AP]M)\s+(.+)/i);
+            // Handle simple format: "7:00 AM Infiniti, 5:00 PM BMW"
+            const timeMatch = entry.match(/(\d{1,2}:\d{2}\s*[AP]M)\s*(.*)/);
             if (timeMatch) {
-              const time = timeMatch[1];
-              const carName = timeMatch[2].trim();
+              const time = timeMatch[1].trim();
+              const carName = timeMatch[2].trim() || cars[0] || 'Unknown Car';
               
-              // If no specific day, use Saturday as default
-              const defaultDay = 'Saturday';
-              if (TIME_SLOTS.includes(time)) {
-                const key = `${defaultDay}-${time}`;
-                if (existingSchedule[key] && !existingSchedule[key].includes(carName)) {
-                  existingSchedule[key].push(carName);
+              console.log(`⏰ Simple format - Time: "${time}", Car: "${carName}"`);
+              
+              // Parse days from client.Days field
+              const clientDays = client.Days || '';
+              const dayNames = clientDays.split('-').map(d => d.trim());
+              
+              console.log(`📅 Client days: "${clientDays}" -> `, dayNames);
+              
+              // Map day names to full names
+              const dayMap = {
+                'Monday': 'Monday', 'Tuesday': 'Tuesday', 'Wednesday': 'Wednesday',
+                'Thursday': 'Thursday', 'Friday': 'Friday', 'Saturday': 'Saturday',
+                'Mon': 'Monday', 'Tue': 'Tuesday', 'Wed': 'Wednesday',
+                'Thu': 'Thursday', 'Fri': 'Friday', 'Sat': 'Saturday'
+              };
+              
+              dayNames.forEach(dayName => {
+                const fullDay = dayMap[dayName];
+                if (fullDay && TIME_SLOTS.includes(time)) {
+                  const key = `${fullDay}-${time}`;
+                  console.log(`✅ Adding to schedule: ${key} -> ${carName}`);
+                  if (existingSchedule[key] && !existingSchedule[key].includes(carName)) {
+                    existingSchedule[key].push(carName);
+                  }
                 }
-              }
+              });
             }
           }
         });
       };
       
       // Parse Notes first (higher priority)
-      parseScheduleData(client.Notes, 'Notes');
+      if (client.Notes) {
+        parseScheduleData(client.Notes, 'Notes');
+      }
       // Parse Time field
-      parseScheduleData(client.Time, 'Time');
+      if (client.Time) {
+        parseScheduleData(client.Time, 'Time');
+      }
       
+      console.log('📋 Final schedule:', existingSchedule);
       setSchedule(existingSchedule);
     }
   }, [client, isOpen]);
@@ -268,14 +322,19 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
   };
 
   const handleSave = () => {
-    // Convert schedule to Day@Time format with car names
+    console.log('💾 Saving schedule:', schedule);
+    
+    // Convert schedule to formats
     const daySchedules = [];
     const dayTimeMap = {};
+    const scheduledDays = new Set();
     
     Object.entries(schedule).forEach(([key, cars]) => {
       if (cars.length > 0) {
         const [day, time] = key.split('-');
         const dayAbbr = day.substring(0, 3);
+        
+        scheduledDays.add(day);
         
         cars.forEach(car => {
           daySchedules.push(`${dayAbbr}@${time} ${car}`);
@@ -290,14 +349,22 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
       }
     });
 
-    const days = Object.keys(dayTimeMap).join(', ');
+    // Create days string from scheduled days
+    const daysArray = Array.from(scheduledDays);
+    const days = daysArray.join('-');
     const time = daySchedules.join(', ');
+    
+    console.log('📅 Generated Days:', days);
+    console.log('⏰ Generated Time:', time);
 
-    onSave({
+    const saveData = {
       Days: days,
       Time: time, // Visual Scheduler writes to Time field
       Notes: '' // Keep Notes empty for manual editing (has priority)
-    });
+    };
+    
+    console.log('💾 Save data:', saveData);
+    onSave(saveData);
     
     onClose();
   };
@@ -347,15 +414,65 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
             <div style={{ 
               fontSize: '12px', 
               color: '#666',
-              backgroundColor: '#f8f9fa',
-              padding: '5px 10px',
-              borderRadius: '4px',
-              border: '1px solid #ddd'
+              backgroundColor: '#e8f5e8',
+              padding: '8px 12px',
+              borderRadius: '6px',
+              border: '1px solid #28a745'
             }}>
-              💡 Example: Car1 at 1PM Sat, Car2 at 2PM Sat, Both at 1PM Wed
+              💡 Drag cars to schedule
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          
+          {/* Current Schedule Summary */}
+          {Object.values(schedule).some(cars => cars.length > 0) && (
+            <div style={{
+              backgroundColor: '#fff3cd',
+              border: '1px solid #ffeaa7',
+              borderRadius: '6px',
+              padding: '10px',
+              marginBottom: '10px',
+              fontSize: '12px'
+            }}>
+              <strong>Current Schedule:</strong>
+              <div style={{ marginTop: '5px' }}>
+                {Object.entries(schedule)
+                  .filter(([key, cars]) => cars.length > 0)
+                  .map(([key, cars]) => {
+                    const [day, time] = key.split('-');
+                    return `${day.substring(0, 3)} ${time}: ${cars.join(', ')}`;
+                  })
+                  .join(' | ')}
+              </div>
+            </div>
+          )}
+          
+          <div 
+            style={{ 
+              display: 'flex', 
+              gap: '10px', 
+              flexWrap: 'wrap',
+              minHeight: '80px',
+              padding: '10px',
+              border: '2px dashed #28a745',
+              borderRadius: '8px',
+              backgroundColor: '#f8fff8'
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const carData = e.dataTransfer.getData('text/plain');
+              console.log('🔄 Removing car from schedule:', carData);
+              
+              // Remove car from all schedule slots
+              setSchedule(prev => {
+                const newSchedule = { ...prev };
+                Object.keys(newSchedule).forEach(key => {
+                  newSchedule[key] = newSchedule[key].filter(car => car !== carData);
+                });
+                return newSchedule;
+              });
+            }}
+          >
             {availableCars.filter(car => {
               // Only show cars that are not scheduled anywhere
               return !Object.values(schedule).some(cars => cars.includes(car));
@@ -368,6 +485,23 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
                 onDragEnd={handleDragEnd}
               />
             ))}
+            {availableCars.filter(car => {
+              return !Object.values(schedule).some(cars => cars.includes(car));
+            }).length === 0 && (
+              <div style={{ 
+                color: '#28a745', 
+                fontStyle: 'italic',
+                padding: '20px',
+                backgroundColor: '#f0f8f0',
+                borderRadius: '4px',
+                border: '1px dashed #28a745',
+                textAlign: 'center',
+                width: '100%'
+              }}>
+                ✅ All cars are scheduled<br/>
+                <small style={{ color: '#666' }}>Drag car from schedule here to unschedule</small>
+              </div>
+            )}
           </div>
         </div>
 
@@ -414,6 +548,9 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
                         cars={schedule[`${day}-${time}`] || []}
                         onDrop={handleDrop}
                         onRemoveCar={handleRemoveCar}
+                        draggedCar={draggedCar}
+                        handleDragStart={handleDragStart}
+                        handleDragEnd={handleDragEnd}
                       />
                     </td>
                   ))}
@@ -424,32 +561,38 @@ function ScheduleModal({ isOpen, onClose, client, onSave }) {
         </div>
 
         {/* Actions */}
-        <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'flex-end' }}>
-          <button 
-            onClick={onClose}
-            style={{
-              padding: '10px 20px',
-              border: '1px solid #ddd',
-              borderRadius: '6px',
-              backgroundColor: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Cancel
-          </button>
-          <button 
-            onClick={handleSave}
-            style={{
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '6px',
-              backgroundColor: '#28a745',
-              color: 'white',
-              cursor: 'pointer'
-            }}
-          >
-            Save Schedule
-          </button>
+        <div style={{ display: 'flex', gap: '10px', marginTop: '20px', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: '12px', color: '#666' }}>
+            💡 Tip: Drag cars from schedule to "Available Cars" to unschedule them
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              onClick={onClose}
+              style={{
+                padding: '10px 20px',
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={handleSave}
+              style={{
+                padding: '10px 20px',
+                border: 'none',
+                borderRadius: '6px',
+                backgroundColor: '#28a745',
+                color: 'white',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              Save Schedule
+            </button>
+          </div>
         </div>
       </div>
     </div>

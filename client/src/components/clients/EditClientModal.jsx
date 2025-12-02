@@ -56,6 +56,7 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
   };
 
   const handleScheduleSave = (scheduleData) => {
+    console.log('💾 EditClientModal: Received schedule data:', scheduleData);
     setFormData({
       ...formData,
       ...scheduleData
@@ -222,43 +223,75 @@ function EditClientModal({ isOpen, onClose, onUpdate, client }) {
                 + Add Another Car
               </button>
             </div>
-            <div>
-              <label>Days:</label>
-              <div style={{ display: 'flex', gap: '5px' }}>
-                <input
-                  type="text"
-                  name="Days"
-                  value={formData.Days || ''}
-                  onChange={handleChange}
-                  style={{ flex: 1 }}
-                  readOnly
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowScheduleModal(true)}
-                  style={{
-                    padding: '5px 10px',
-                    backgroundColor: '#007bff',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: 'pointer',
-                    fontSize: '12px'
-                  }}
-                >
-                  🚗 Schedule
-                </button>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block' }}>📅 Schedule:</label>
+              <div style={{ 
+                border: '1px solid #ddd', 
+                borderRadius: '8px', 
+                padding: '15px', 
+                backgroundColor: '#f8f9fa'
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px', marginBottom: '10px' }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: '#666' }}>Days:</label>
+                    <input
+                      type="text"
+                      name="Days"
+                      value={formData.Days || ''}
+                      onChange={handleChange}
+                      style={{ width: '100%', padding: '8px', border: '1px solid #ddd', borderRadius: '4px' }}
+                      placeholder="Example: Monday-Wednesday-Friday"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowScheduleModal(true)}
+                    style={{
+                      padding: '10px 15px',
+                      backgroundColor: '#28a745',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: 'bold',
+                      height: 'fit-content',
+                      alignSelf: 'end'
+                    }}
+                  >
+                    🚗 Edit Schedule
+                  </button>
+                </div>
+                <div>
+                  <label style={{ fontSize: '12px', color: '#666' }}>Time Details:</label>
+                  <textarea
+                    name="Time"
+                    value={formData.Time || ''}
+                    onChange={handleChange}
+                    rows="2"
+                    style={{ 
+                      width: '100%', 
+                      padding: '8px', 
+                      border: '1px solid #ddd', 
+                      borderRadius: '4px',
+                      resize: 'vertical',
+                      fontSize: '12px'
+                    }}
+                    placeholder="Example: 7:00 AM Infiniti, 5:00 PM BMW"
+                  />
+                </div>
+                <div style={{
+                  marginTop: '10px',
+                  padding: '8px',
+                  backgroundColor: '#e8f5e8',
+                  border: '1px solid #28a745',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  color: '#155724'
+                }}>
+                  💡 You can edit directly here or use "Edit Schedule" for interactive calendar
+                </div>
               </div>
-            </div>
-            <div>
-              <label>Time:</label>
-              <input
-                type="text"
-                name="Time"
-                value={formData.Time || ''}
-                onChange={handleChange}
-                readOnly
-              />
             </div>
             <div>
               <label>Package:</label>
