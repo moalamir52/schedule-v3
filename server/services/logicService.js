@@ -781,15 +781,16 @@ async function getAvailableTimesForDay(day, weekOffset = 0) {
     
     const activeWorkers = allWorkers.filter(worker => worker.Status === 'Active');
     
-    if (activeWorkers.length === 0) {
-      return [];
-    }
-    
-    // All possible time slots
+    // All possible time slots - always return all times
     const allTimes = [
       '6:00 AM', '7:00 AM', '8:00 AM', '9:00 AM', '10:00 AM', '11:00 AM',
       '12:00 PM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM', '6:00 PM'
     ];
+    
+    // If no active workers, still return all times (user can add workers later)
+    if (activeWorkers.length === 0) {
+      return allTimes;
+    }
     
     // Count busy workers for each time slot from current schedule
     const busyCount = {};
@@ -809,12 +810,12 @@ async function getAvailableTimesForDay(day, weekOffset = 0) {
       }
     });
     
-    // Return times where at least one worker is free
-    const availableTimes = allTimes.filter(time => busyCount[time] < activeWorkers.length);
-    return availableTimes;
+    // Return all times (including busy ones) - let the frontend handle the display
+    // The system will handle worker conflicts during schedule generation
+    return allTimes;
     
   } catch (error) {
-    return [];
+    return allTimes || [];
   }
 }
 
