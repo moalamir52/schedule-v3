@@ -94,7 +94,7 @@ const ClientAnalytics = ({ onBack }) => {
       setLoading(false);
     }
   };
-  if (loading) {
+  if (loading || !analyticsData) {
     return (
       <div style={{ textAlign: 'center', padding: '3rem' }}>
         <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>👥</div>

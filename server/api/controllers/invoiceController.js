@@ -408,6 +408,24 @@ const checkDuplicateInvoices = async (req, res) => {
   }
 };
 
+const getClientsSummary = async (req, res) => {
+  try {
+    const invoices = await getInvoices();
+    
+    const subscriptionInvoices = invoices.filter(inv => inv.CustomerID && inv.CustomerID !== 'ONE_TIME');
+    const oneTimeInvoices = invoices.filter(inv => inv.CustomerID === 'ONE_TIME');
+    
+    res.json({
+      success: true,
+      subscriptionClients: subscriptionInvoices.length,
+      oneTimeClients: oneTimeInvoices.length,
+      totalClients: invoices.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 module.exports = {
   createInvoice,
   getAllInvoices,
@@ -417,5 +435,6 @@ module.exports = {
   printInvoice,
   getInvoiceNumber,
   getInvoiceStats,
-  checkDuplicateInvoices
+  checkDuplicateInvoices,
+  getClientsSummary
 };

@@ -59,7 +59,7 @@ const getCustomerById = async (req, res) => {
 const getAllClients = async (req, res) => {
   try {
     const customers = await db.getCustomers();
-    res.json({ success: true, data: customers });
+    res.json(customers);
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
