@@ -40,11 +40,24 @@ const createInvoice = async (req, res) => {
             return false;
         }
         
+        // Check both creation date and service start date for duplicates
         const invoiceDate = new Date(invoice.CreatedAt || invoice.InvoiceDate);
         const invoiceMonth = invoiceDate.getMonth() + 1;
         const invoiceYear = invoiceDate.getFullYear();
         
-        return invoiceMonth === currentMonth && invoiceYear === currentYear;
+        // Also check service start date if available
+        let serviceMatch = false;
+        if (invoice.Start) {
+          // Parse service start date (format: DD/MM/YYYY)
+          const startParts = invoice.Start.split('/');
+          if (startParts.length >= 2) {
+            const serviceMonth = parseInt(startParts[1]);
+            const serviceYear = parseInt(startParts[2]) || currentYear;
+            serviceMatch = serviceMonth === currentMonth && serviceYear === currentYear;
+          }
+        }
+        
+        return (invoiceMonth === currentMonth && invoiceYear === currentYear) || serviceMatch;
       });
       
       if (existingInvoice) {
@@ -342,7 +355,7 @@ const checkDuplicateInvoices = async (req, res) => {
       }
     });
     
-    // Check for multiple invoices per customer per month
+    // Check for multiple invoices per customer per month (by creation date)
     invoices.forEach(invoice => {
       if (invoice.CreatedAt) {
         const date = new Date(invoice.CreatedAt);
@@ -353,6 +366,16 @@ const checkDuplicateInvoices = async (req, res) => {
         const monthKey = `${customerKey}-${date.getFullYear()}-${date.getMonth() + 1}`;
         customerMonthCounts[monthKey] = (customerMonthCounts[monthKey] || []);
         customerMonthCounts[monthKey].push(invoice);
+      }
+    });
+    
+    // Check for duplicate service dates (same customer, same service start date)
+    const serviceDateCounts = {};
+    invoices.forEach(invoice => {
+      if (invoice.Start && invoice.CustomerID && invoice.CustomerID !== 'ONE_TIME') {
+        const serviceKey = `${invoice.CustomerID}-${invoice.Start}`;
+        serviceDateCounts[serviceKey] = (serviceDateCounts[serviceKey] || []);
+        serviceDateCounts[serviceKey].push(invoice);
       }
     });
     
@@ -372,16 +395,46 @@ const checkDuplicateInvoices = async (req, res) => {
     // Add multiple monthly invoices to results
     Object.entries(customerMonthCounts).forEach(([key, invoiceList]) => {
       if (invoiceList.length > 1) {
-        const keyParts = key.split('-');
-        const customerKey = keyParts.slice(0, -2).join('-'); // Handle customer names with dashes
-        const year = keyParts[keyParts.length - 2];
-        const month = keyParts[keyParts.length - 1];
+        // Parse key properly: CUST-038-2025-11
+        const parts = key.split('-');
+        let customerKey, year, month;
+        
+        if (parts.length >= 4 && parts[0] === 'CUST') {
+          // Format: CUST-038-2025-11
+          customerKey = `${parts[0]}-${parts[1]}`;
+          year = parts[2];
+          month = parts[3];
+        } else {
+          // Fallback for other formats
+          customerKey = parts.slice(0, -2).join('-');
+          year = parts[parts.length - 2];
+          month = parts[parts.length - 1];
+        }
         
         duplicates.push({
           type: 'MULTIPLE_MONTHLY',
           severity: 'MEDIUM',
           customerID: customerKey,
           month: `${year}-${month.padStart(2, '0')}`,
+          count: invoiceList.length,
+          invoices: invoiceList
+        });
+      }
+    });
+    
+    // Add duplicate service dates to results
+    Object.entries(serviceDateCounts).forEach(([key, invoiceList]) => {
+      if (invoiceList.length > 1) {
+        // Split key properly: CUST-038-11/11/2025
+        const firstDashIndex = key.indexOf('-');
+        const customerID = firstDashIndex > 0 ? key.substring(0, firstDashIndex + 4) : key.split('-')[0]; // Get CUST-XXX
+        const serviceDate = key.substring(customerID.length + 1);
+        
+        duplicates.push({
+          type: 'DUPLICATE_SERVICE_DATE',
+          severity: 'HIGH',
+          customerID: customerID,
+          serviceDate: serviceDate,
           count: invoiceList.length,
           invoices: invoiceList
         });
