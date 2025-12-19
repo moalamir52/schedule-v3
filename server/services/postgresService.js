@@ -225,22 +225,41 @@ class PostgresService {
   async getNextInvoiceRef() {
     try {
       await this.connect();
-      const result = await this.client.query('SELECT "Ref" FROM invoices WHERE "Ref" LIKE $1 ORDER BY "Ref" DESC LIMIT 1', ['GLOGO-%']);
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2); // YY
+      const month = (now.getMonth() + 1).toString().padStart(2, '0'); // MM
+      const prefix = `${year}${month}`; // YYMM
+
+      // نبحث فقط عن أرقام هذا الشهر (GLOGO-YYMM%)
+      const result = await this.client.query(
+        'SELECT "Ref" FROM invoices WHERE "Ref" LIKE $1 ORDER BY "Ref" DESC LIMIT 1',
+        [`GLOGO-${prefix}%`]
+      );
       
-      if (result.rows.length === 0) {
-        return 'GLOGO-2511055';
+      let maxSeq = 0;
+      if (result.rows.length > 0) {
+        const lastRef = result.rows[0].Ref;
+        const match = lastRef.match(/GLOGO-(\d+)/);
+        if (match) {
+          const numStr = match[1];
+          if (numStr.startsWith(prefix) && numStr.length >= 5) {
+            const seqStr = numStr.slice(4);
+            const seqNum = parseInt(seqStr);
+            if (!isNaN(seqNum)) {
+              maxSeq = seqNum;
+            }
+          }
+        }
       }
-      
-      const lastRef = result.rows[0].Ref;
-      const match = lastRef.match(/GLOGO-(\d+)/);
-      if (match) {
-        const nextNum = parseInt(match[1]) + 1;
-        return `GLOGO-${nextNum}`;
-      }
-      
-      return 'GLOGO-2511055';
+
+      const nextSeq = (maxSeq || 0) + 1;
+      const seqPart = nextSeq.toString().padStart(3, '0'); // 001, 002, ...
+      return `GLOGO-${prefix}${seqPart}`; // مثال: GLOGO-2511026
     } catch (error) {
-      return 'GLOGO-2511055';
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2);
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+      return `GLOGO-${year}${month}001`;
     }
   }
 

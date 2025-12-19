@@ -111,21 +111,40 @@ class DatabaseService {
   async getNextInvoiceRef() {
     try {
       const invoices = await this.supabase.getInvoices();
-      let maxGlogoNumber = 2510041;
-      
+
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2); // YY
+      const month = (now.getMonth() + 1).toString().padStart(2, '0'); // MM
+      const prefix = `${year}${month}`; // YYMM
+
+      let maxSeq = 0;
+
       invoices.forEach(invoice => {
         if (invoice.Ref && invoice.Ref.startsWith('GLOGO-')) {
           const match = invoice.Ref.match(/GLOGO-(\d+)/);
           if (match) {
-            const num = parseInt(match[1]);
-            if (num > maxGlogoNumber) maxGlogoNumber = num;
+            const numStr = match[1];
+            // نتأكد أن الرقم يبدأ بنفس البادئة YYMM
+            if (numStr.startsWith(prefix) && numStr.length >= 5) {
+              const seqStr = numStr.slice(4); // الجزء بعد YYMM
+              const seqNum = parseInt(seqStr);
+              if (!isNaN(seqNum) && seqNum > maxSeq) {
+                maxSeq = seqNum;
+              }
+            }
           }
         }
       });
-      
-      return `GLOGO-${maxGlogoNumber + 1}`;
+
+      const nextSeq = (maxSeq || 0) + 1;
+      const seqPart = nextSeq.toString().padStart(3, '0'); // 001, 002, ...
+      return `GLOGO-${prefix}${seqPart}`; // مثال: GLOGO-2511026
     } catch (error) {
-      return 'GLOGO-2511055';
+      // في حالة الخطأ، نستخدم بادئة الشهر الحالي مع رقم ثابت آمن
+      const now = new Date();
+      const year = now.getFullYear().toString().slice(-2);
+      const month = (now.getMonth() + 1).toString().padStart(2, '0');
+      return `GLOGO-${year}${month}001`;
     }
   }
 

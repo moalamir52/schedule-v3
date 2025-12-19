@@ -1,5 +1,4 @@
 const db = require('../../services/databaseService');
-const { getCustomers, getInvoices, addInvoiceRecord, updateInvoiceStatus, updateInvoiceRecord, deleteInvoiceRecord, getOrCreateInvoiceNumber } = require('../../services/googleSheetsService');
 
 const createInvoice = async (req, res) => {
   try {
@@ -27,41 +26,48 @@ const createInvoice = async (req, res) => {
     let billingCycle = null;
     
     if (isRegularInvoice) {
-      // Check if customer already has invoice this month
-      const existingInvoices = await getInvoices();
-      const currentMonth = new Date().getMonth() + 1;
-      const currentYear = new Date().getFullYear();
+      // Check if customer has active service period
+      const existingInvoices = await db.getInvoices();
+      console.log(`🔍 Checking invoices for customer ${customerID}`);
+      console.log(`   Total invoices in DB: ${existingInvoices.length}`);
       
-      const existingInvoice = existingInvoices.find(invoice => {
-        if (invoice.CustomerID !== customerID) return false;
+      const customerInvoices = existingInvoices.filter(invoice => 
+        invoice.CustomerID === customerID && 
+        invoice.Status && invoice.Status.toUpperCase() !== 'RESERVED'
+      );
+      
+      console.log(`   Customer invoices found: ${customerInvoices.length}`);
+      
+      if (customerInvoices.length > 0) {
+        // Find latest invoice
+        const latestInvoice = customerInvoices.reduce((latest, current) => {
+          const latestDate = new Date(latest.CreatedAt || latest.InvoiceDate || 0);
+          const currentDate = new Date(current.CreatedAt || current.InvoiceDate || 0);
+          return currentDate > latestDate ? current : latest;
+        });
         
-        // Ignore reserved entries, which are not actual invoices
-        if (invoice.Status && invoice.Status.toUpperCase() === 'RESERVED') {
-            return false;
-        }
+        console.log(`   Latest invoice: ${latestInvoice.Ref}`);
+        console.log(`   Service period: ${latestInvoice.Start} to ${latestInvoice.End}`);
         
-        // Check both creation date and service start date for duplicates
-        const invoiceDate = new Date(invoice.CreatedAt || invoice.InvoiceDate);
-        const invoiceMonth = invoiceDate.getMonth() + 1;
-        const invoiceYear = invoiceDate.getFullYear();
-        
-        // Also check service start date if available
-        let serviceMatch = false;
-        if (invoice.Start) {
-          // Parse service start date (format: DD/MM/YYYY)
-          const startParts = invoice.Start.split('/');
-          if (startParts.length >= 2) {
-            const serviceMonth = parseInt(startParts[1]);
-            const serviceYear = parseInt(startParts[2]) || currentYear;
-            serviceMatch = serviceMonth === currentMonth && serviceYear === currentYear;
+        // Check if service period is still active
+        if (latestInvoice.End) {
+          const serviceEndDate = new Date(latestInvoice.End.split('/').reverse().join('-'));
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          console.log(`   Service end date: ${serviceEndDate.toISOString().split('T')[0]}`);
+          console.log(`   Today: ${today.toISOString().split('T')[0]}`);
+          console.log(`   Is service active? ${serviceEndDate >= today}`);
+          
+          if (serviceEndDate >= today) {
+            console.log(`❌ REJECTED: Service period still active`);
+            throw new Error(`Customer already has an active service period until ${latestInvoice.End} (${latestInvoice.Ref || latestInvoice.InvoiceID})`);
           }
         }
         
-        return (invoiceMonth === currentMonth && invoiceYear === currentYear) || serviceMatch;
-      });
-      
-      if (existingInvoice) {
-        throw new Error(`Customer already has an invoice for this month: ${existingInvoice.Ref || existingInvoice.InvoiceID}`);
+        console.log(`✅ APPROVED: Service period ended, can create new invoice`);
+      } else {
+        console.log(`✅ APPROVED: No previous invoices, can create first invoice`);
       }
       
       const customers = await db.getCustomers();
@@ -117,15 +123,31 @@ const createInvoice = async (req, res) => {
       console.log(`Contract start date parsed: ${contractStartDate}`);
       
       const today = new Date();
-      // Calculate current billing cycle based on contract start day
-      const contractDay = contractStartDate.getDate();
+      let billingStartDate;
       
-      // Find the current billing period
-      let billingStartDate = new Date(today.getFullYear(), today.getMonth(), contractDay);
-      
-      // If contract day hasn't come this month, use last month
-      if (billingStartDate > today) {
-        billingStartDate = new Date(today.getFullYear(), today.getMonth() - 1, contractDay);
+      // If customer has previous invoices, start from the day after last service ended
+      if (customerInvoices.length > 0) {
+        const latestInvoice = customerInvoices.reduce((latest, current) => {
+          const latestDate = new Date(latest.CreatedAt || latest.InvoiceDate || 0);
+          const currentDate = new Date(current.CreatedAt || current.InvoiceDate || 0);
+          return currentDate > latestDate ? current : latest;
+        });
+        
+        if (latestInvoice.End) {
+          const lastServiceEnd = new Date(latestInvoice.End.split('/').reverse().join('-'));
+          billingStartDate = new Date(lastServiceEnd);
+          billingStartDate.setDate(billingStartDate.getDate() + 1); // Start next day
+        } else {
+          // Fallback to contract-based calculation
+          const contractDay = contractStartDate.getDate();
+          billingStartDate = new Date(today.getFullYear(), today.getMonth(), contractDay);
+          if (billingStartDate > today) {
+            billingStartDate = new Date(today.getFullYear(), today.getMonth() - 1, contractDay);
+          }
+        }
+      } else {
+        // First invoice - use contract start date
+        billingStartDate = new Date(contractStartDate);
       }
       
       const billingEndDate = new Date(billingStartDate);
@@ -167,9 +189,12 @@ const createInvoice = async (req, res) => {
       displayEnd = '';
     }
 
-    const glogoRef = await addInvoiceRecord({
+    // لو الـ ref ما جاش من الفرونت، استخدم النمط القياسي GLOGO-YYMMNNN
+    const finalRef = ref || await db.getNextInvoiceRef();
+
+    const result = await db.addInvoice({
       InvoiceID: null, // سيتم إنشاؤه تلقائياً
-      Ref: ref || 'GLOGO-' + Date.now(),
+      Ref: finalRef,
       CustomerID: isRegularInvoice ? customerID : 'ONE_TIME',
       CustomerName: invoiceData.customerName,
       Villa: invoiceData.villa,
@@ -189,7 +214,9 @@ const createInvoice = async (req, res) => {
       CreatedAt: invoiceData.createdAt
     });
     
-    invoiceData.invoiceId = glogoRef;
+    console.log(`✅ Invoice created successfully: ${finalRef}`);
+    
+    invoiceData.invoiceId = finalRef;
     
     // Add display dates to response
     invoiceData.displayStart = displayStart;
@@ -311,7 +338,7 @@ const getInvoiceNumber = async (req, res) => {
 
 const getInvoiceStats = async (req, res) => {
   try {
-    const invoices = await getInvoices();
+    const invoices = await db.getInvoices();
     const now = new Date();
     const currentMonth = now.getMonth();
     const currentYear = now.getFullYear();
@@ -345,27 +372,12 @@ const checkDuplicateInvoices = async (req, res) => {
     const invoices = await db.getInvoices();
     const duplicates = [];
     const refCounts = {};
-    const customerMonthCounts = {};
     
     // Check for duplicate REFs
     invoices.forEach(invoice => {
       if (invoice.Ref) {
         refCounts[invoice.Ref] = (refCounts[invoice.Ref] || []);
         refCounts[invoice.Ref].push(invoice);
-      }
-    });
-    
-    // Check for multiple invoices per customer per month (by creation date)
-    invoices.forEach(invoice => {
-      if (invoice.CreatedAt) {
-        const date = new Date(invoice.CreatedAt);
-        // Use CustomerName + Villa for ONE_TIME customers to distinguish different walk-ins
-        const customerKey = invoice.CustomerID === 'ONE_TIME' 
-          ? `${invoice.CustomerName} (${invoice.Villa})` 
-          : invoice.CustomerID;
-        const monthKey = `${customerKey}-${date.getFullYear()}-${date.getMonth() + 1}`;
-        customerMonthCounts[monthKey] = (customerMonthCounts[monthKey] || []);
-        customerMonthCounts[monthKey].push(invoice);
       }
     });
     
@@ -392,46 +404,15 @@ const checkDuplicateInvoices = async (req, res) => {
       }
     });
     
-    // Add multiple monthly invoices to results
-    Object.entries(customerMonthCounts).forEach(([key, invoiceList]) => {
-      if (invoiceList.length > 1) {
-        // Parse key properly: CUST-038-2025-11
-        const parts = key.split('-');
-        let customerKey, year, month;
-        
-        if (parts.length >= 4 && parts[0] === 'CUST') {
-          // Format: CUST-038-2025-11
-          customerKey = `${parts[0]}-${parts[1]}`;
-          year = parts[2];
-          month = parts[3];
-        } else {
-          // Fallback for other formats
-          customerKey = parts.slice(0, -2).join('-');
-          year = parts[parts.length - 2];
-          month = parts[parts.length - 1];
-        }
-        
-        duplicates.push({
-          type: 'MULTIPLE_MONTHLY',
-          severity: 'MEDIUM',
-          customerID: customerKey,
-          month: `${year}-${month.padStart(2, '0')}`,
-          count: invoiceList.length,
-          invoices: invoiceList
-        });
-      }
-    });
-    
     // Add duplicate service dates to results
     Object.entries(serviceDateCounts).forEach(([key, invoiceList]) => {
       if (invoiceList.length > 1) {
-        // Split key properly: CUST-038-11/11/2025
-        const firstDashIndex = key.indexOf('-');
-        const customerID = firstDashIndex > 0 ? key.substring(0, firstDashIndex + 4) : key.split('-')[0]; // Get CUST-XXX
-        const serviceDate = key.substring(customerID.length + 1);
+        const lastDashIndex = key.lastIndexOf('-');
+        const customerID = key.substring(0, lastDashIndex);
+        const serviceDate = key.substring(lastDashIndex + 1);
         
         duplicates.push({
-          type: 'DUPLICATE_SERVICE_DATE',
+          type: 'DUPLICATE_SERVICE_PERIOD',
           severity: 'HIGH',
           customerID: customerID,
           serviceDate: serviceDate,
@@ -463,7 +444,7 @@ const checkDuplicateInvoices = async (req, res) => {
 
 const getClientsSummary = async (req, res) => {
   try {
-    const invoices = await getInvoices();
+    const invoices = await db.getInvoices();
     
     const subscriptionInvoices = invoices.filter(inv => inv.CustomerID && inv.CustomerID !== 'ONE_TIME');
     const oneTimeInvoices = invoices.filter(inv => inv.CustomerID === 'ONE_TIME');
@@ -473,6 +454,48 @@ const getClientsSummary = async (req, res) => {
       subscriptionClients: subscriptionInvoices.length,
       oneTimeClients: oneTimeInvoices.length,
       totalClients: invoices.length
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const fixOldInvoiceNumbers = async (req, res) => {
+  try {
+    const invoices = await db.getInvoices();
+    const oldFormatInvoices = invoices.filter(inv => 
+      inv.Ref && inv.Ref.startsWith('GLOGO-') && inv.Ref.length > 12
+    );
+    
+    if (oldFormatInvoices.length === 0) {
+      return res.json({ success: true, message: 'No old format invoices found', updated: 0 });
+    }
+    
+    let maxGlogoNumber = 2510041;
+    invoices.forEach(invoice => {
+      if (invoice.Ref && invoice.Ref.startsWith('GLOGO-') && invoice.Ref.length <= 12) {
+        const match = invoice.Ref.match(/GLOGO-(\d+)/);
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num > maxGlogoNumber) maxGlogoNumber = num;
+        }
+      }
+    });
+    
+    const updates = [];
+    for (let i = 0; i < oldFormatInvoices.length; i++) {
+      const invoice = oldFormatInvoices[i];
+      const newRef = `GLOGO-${maxGlogoNumber + 1 + i}`;
+      
+      await db.updateInvoice(invoice.InvoiceID, { Ref: newRef });
+      updates.push({ old: invoice.Ref, new: newRef, customer: invoice.CustomerName });
+    }
+    
+    res.json({
+      success: true,
+      message: `Updated ${updates.length} invoice numbers`,
+      updated: updates.length,
+      changes: updates
     });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -489,5 +512,6 @@ module.exports = {
   getInvoiceNumber,
   getInvoiceStats,
   checkDuplicateInvoices,
-  getClientsSummary
+  getClientsSummary,
+  fixOldInvoiceNumbers
 };

@@ -10,7 +10,8 @@ const {
   getInvoiceNumber,
   getInvoiceStats,
   checkDuplicateInvoices,
-  getClientsSummary
+  getClientsSummary,
+  fixOldInvoiceNumbers
 } = require('../controllers/invoiceController');
 
 router.post('/', createInvoice);
@@ -19,6 +20,7 @@ router.post('/get-number', getInvoiceNumber);
 router.get('/stats', getInvoiceStats);
 router.get('/check-duplicates', checkDuplicateInvoices);
 router.get('/clients-summary', getClientsSummary);
+router.post('/fix-old-numbers', fixOldInvoiceNumbers);
 router.get('/all', getAllInvoices);
 router.get('/', getAllInvoices);
 router.get('/export', exportInvoices);

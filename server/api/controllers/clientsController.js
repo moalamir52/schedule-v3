@@ -6,25 +6,145 @@ const getAvailableClients = async (req, res) => {
     const customers = await db.getCustomers();
     const invoices = await db.getInvoices();
     const activeCustomers = customers.filter(customer => customer.Status === 'Active');
+    
+    // Debug: Check if CUST-025 is in active customers
+    const cust025 = activeCustomers.find(c => c.CustomerID === 'CUST-025');
+    if (cust025) {
+      console.log(`DEBUG: CUST-025 found in active customers`);
+    } else {
+      console.log(`DEBUG: CUST-025 NOT found in active customers`);
+    }
+    
     // Get current month invoices
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
+
+    // Helper to safely parse dates in formats like "2025-12-19" أو "19/12/2025"
+    const parseInvoiceDate = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string' && value.includes('/')) {
+        const parts = value.split(/[\/\-]/);
+        if (parts.length >= 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10);
+          let year = parseInt(parts[2], 10);
+          if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
+          if (year < 100) year += 2000;
+          return new Date(year, month - 1, day);
+        }
+      }
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d;
+    };
     
-    const currentMonthInvoices = invoices.filter(invoice => {
-      const dateField = invoice.InvoiceDate || invoice.CreatedAt;
-      if (!dateField) return false;
-      
-      const invoiceDate = new Date(dateField);
-      const invoiceMonth = invoiceDate.getMonth() + 1;
-      const invoiceYear = invoiceDate.getFullYear();
-      
-      return invoiceMonth === currentMonth && invoiceYear === currentYear;
-    });
+    // Helper to parse service end date in format "19/12/2025"
+    const parseServiceDate = (dateStr) => {
+      if (!dateStr) return null;
+      if (typeof dateStr === 'string' && dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length >= 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10);
+          const year = parseInt(parts[2], 10);
+          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+            return new Date(year, month - 1, day);
+          }
+        }
+      }
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? null : d;
+    };
     
+    // Helper to normalize strings (trim + lowercase)
+    const normalize = (value) => (value || '').toString().trim().toLowerCase();
+
+    // Helper to parse start date in formats like "19-Jan-25" or "19/01/2025"
+    const parseStartDate = (startDateStr) => {
+      if (!startDateStr) return null;
+      
+      // Handle format like "19-Jan-25"
+      if (typeof startDateStr === 'string' && startDateStr.includes('-')) {
+        const parts = startDateStr.split('-');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const monthStr = parts[1];
+          let year = parseInt(parts[2], 10);
+          
+          // Convert month name to number
+          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          const monthIndex = months.indexOf(monthStr);
+          
+          if (monthIndex !== -1 && !isNaN(day) && !isNaN(year)) {
+            if (year < 100) year += 2000; // Convert 25 to 2025
+            return new Date(year, monthIndex, day);
+          }
+        }
+      }
+      
+      // Fallback to standard date parsing
+      const d = new Date(startDateStr);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
     // Separate available and invoiced clients
-    const invoicedCustomerIDs = currentMonthInvoices.map(inv => inv.CustomerID);
-    const availableClients = activeCustomers.filter(customer => !invoicedCustomerIDs.includes(customer.CustomerID));
-    const invoicedClients = activeCustomers.filter(customer => invoicedCustomerIDs.includes(customer.CustomerID));
+    const availableClients = activeCustomers.filter(customer => {
+      if (customer.CustomerID === 'CUST-025') {
+        console.log(`DEBUG CUST-025: Starting filter check`);
+      }
+      // أولاً: تحقق من أن تاريخ بداية الخدمة جه أو فات
+      const startDate = parseStartDate(customer['start date']);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to start of day
+      
+      if (startDate && startDate > today) {
+        return false;
+      }
+      
+      // ثانياً: ابحث عن آخر فاتورة للعميل
+      const customerInvoices = invoices.filter(inv => {
+        // Match by CustomerID first
+        if (inv.CustomerID === customer.CustomerID) return true;
+        
+        // Fallback: match by Name + Villa
+        const customerName = normalize(customer.Name || customer.CustomerName);
+        const customerVilla = normalize(customer.Villa);
+        const invoiceName = normalize(inv.CustomerName || inv.Name);
+        const invoiceVilla = normalize(inv.Villa);
+        return invoiceName === customerName && invoiceVilla === customerVilla;
+      });
+      
+      if (customer.CustomerID === 'CUST-025') {
+        console.log(`DEBUG CUST-025: Found ${customerInvoices.length} invoices`);
+      }
+      
+      if (customerInvoices.length === 0) {
+        return true;
+      }
+      
+      // ابحث عن آخر فاتورة (بناءً على تاريخ الإنشاء)
+      const latestInvoice = customerInvoices.reduce((latest, current) => {
+        const latestDate = parseInvoiceDate(latest.CreatedAt || latest.InvoiceDate) || new Date(0);
+        const currentDate = parseInvoiceDate(current.CreatedAt || current.InvoiceDate) || new Date(0);
+        return currentDate > latestDate ? current : latest;
+      });
+      
+      // تحقق من تاريخ انتهاء الخدمة في آخر فاتورة
+      if (latestInvoice.End) {
+        const serviceEndDate = parseServiceDate(latestInvoice.End);
+        if (customer.CustomerID === 'CUST-025') {
+          console.log(`DEBUG CUST-025: End=${latestInvoice.End}, Parsed=${serviceEndDate}, Today=${today}, Active=${serviceEndDate && serviceEndDate >= today}`);
+        }
+        if (serviceEndDate && serviceEndDate >= today) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+
+    const invoicedClients = activeCustomers.filter(customer => !availableClients.includes(customer));
+    
+
     
     res.json({
       success: true,
@@ -180,8 +300,6 @@ const deleteClient = async (req, res) => {
         task.isLocked === 'FALSE' || task.isLocked === false || !task.isLocked
       );
       
-      console.log(`🗑️ Deleting ${autoAppointments.length} auto-generated appointments for customer ${id}`);
-      
       // Delete auto-generated appointments
       for (const appointment of autoAppointments) {
         try {
@@ -192,17 +310,11 @@ const deleteClient = async (req, res) => {
           
           await db.deleteScheduledTask(customerID, day, time, carPlate);
         } catch (deleteError) {
-          console.log(`⚠️ Failed to delete appointment for ${appointment.customerName}: ${deleteError.message}`);
+          // Silent error handling
         }
       }
       
-      const manualCount = customerAppointments.length - autoAppointments.length;
-      if (manualCount > 0) {
-        console.log(`ℹ️ Preserved ${manualCount} manual appointments for customer ${id}`);
-      }
-      
     } catch (scheduleError) {
-      console.log(`⚠️ Error cleaning up appointments: ${scheduleError.message}`);
       // Continue with customer deletion even if appointment cleanup fails
     }
     
