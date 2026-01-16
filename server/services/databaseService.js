@@ -7,7 +7,7 @@ class DatabaseService {
 
   init() {
     this.supabase = require('./supabaseService');
-    }
+  }
 
   // Customers methods
   async getCustomers() {
@@ -70,7 +70,7 @@ class DatabaseService {
     try {
       const tasks = await this.supabase.request('GET', '/ScheduledTasks?order=AppointmentDate.asc,Time.asc');
       if (tasks.length > 0) {
-        }
+      }
       return tasks;
     } catch (error) {
       // Try without ordering
@@ -149,7 +149,14 @@ class DatabaseService {
   }
 
   async updateInvoice(invoiceId, updateData) {
-    return await this.supabase.request('PATCH', `/invoices?InvoiceID=eq.${invoiceId}`, updateData);
+    // If it looks like a Ref (starting with GLOGO- or a year like 25), try Ref first
+    const isRef = invoiceId && (invoiceId.startsWith('GLOGO-') || /^\d{4,}/.test(invoiceId));
+    const filter = isRef ? `Ref=eq.${invoiceId}` : `InvoiceID=eq.${invoiceId}`;
+    console.log(`[DB] updateInvoice - ID: ${invoiceId}, isRef: ${isRef}, filter: ${filter}`);
+    console.log(`[DB] updateInvoice - updateData:`, updateData);
+    const result = await this.supabase.request('PATCH', `/invoices?${filter}`, updateData);
+    console.log(`[DB] updateInvoice - result:`, result);
+    return result;
   }
 
   async deleteInvoice(invoiceId) {
@@ -231,17 +238,17 @@ class DatabaseService {
       for (let i = 0; i < taskId.length; i++) {
         if (taskId[i] === '-') dashes.push(i);
       }
-      
+
       if (dashes.length >= 3) {
         const dayStart = dashes[dashes.length - 3] + 1;
         const timeStart = dashes[dashes.length - 2] + 1;
         const carPlateStart = dashes[dashes.length - 1] + 1;
-        
+
         const customerID = taskId.substring(0, dashes[dashes.length - 3]);
         const day = taskId.substring(dayStart, dashes[dashes.length - 2]);
         const time = taskId.substring(timeStart, dashes[dashes.length - 1]);
         const carPlate = taskId.substring(carPlateStart) || '';
-        
+
         await this.deleteScheduledTask(customerID, day, time, carPlate);
         return true;
       }
@@ -277,17 +284,17 @@ class DatabaseService {
   async lockAllCustomerTasks(customerID) {
     try {
       console.log(`🔒 [DB] Locking all tasks for customer: ${customerID}`);
-      
+
       // First get all tasks for this customer to see what we're locking
       const existingTasks = await this.supabase.request('GET', `/ScheduledTasks?CustomerID=eq.${customerID}`);
       console.log(`📋 [DB] Found ${existingTasks.length} tasks to lock:`);
       existingTasks.forEach(task => {
         console.log(`   - ${task.CarPlate} on ${task.Day} at ${task.Time} (currently locked: ${task.isLocked})`);
       });
-      
+
       const updateData = { isLocked: 'TRUE' };
       const result = await this.supabase.request('PATCH', `/ScheduledTasks?CustomerID=eq.${customerID}`, updateData);
-      
+
       console.log(`✅ [DB] Successfully locked ${existingTasks.length} tasks for customer ${customerID}`);
       return result;
     } catch (error) {
@@ -300,17 +307,17 @@ class DatabaseService {
   async lockCustomerTasksForDay(customerID, day, time) {
     try {
       console.log(`🔒 [DB] Locking tasks for customer ${customerID} on ${day} at ${time}`);
-      
+
       // First get tasks for this customer on this specific day and time
       const existingTasks = await this.supabase.request('GET', `/ScheduledTasks?CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${encodeURIComponent(time)}`);
       console.log(`📋 [DB] Found ${existingTasks.length} tasks to lock on ${day} ${time}:`);
       existingTasks.forEach(task => {
         console.log(`   - ${task.CarPlate} (currently locked: ${task.isLocked})`);
       });
-      
+
       const updateData = { isLocked: 'TRUE' };
       const result = await this.supabase.request('PATCH', `/ScheduledTasks?CustomerID=eq.${customerID}&Day=eq.${day}&Time=eq.${encodeURIComponent(time)}`, updateData);
-      
+
       console.log(`✅ [DB] Successfully locked ${existingTasks.length} tasks for customer ${customerID} on ${day} ${time}`);
       return result;
     } catch (error) {

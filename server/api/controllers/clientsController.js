@@ -1,157 +1,102 @@
 const db = require('../../services/databaseService');
 const { getCustomers, getInvoices } = require('../../services/googleSheetsService');
+const { parseDate, parseServicePeriod } = require('../../utils/dateUtils');
 
 const getAvailableClients = async (req, res) => {
   try {
     const customers = await db.getCustomers();
     const invoices = await db.getInvoices();
     const activeCustomers = customers.filter(customer => customer.Status === 'Active');
-    
-    // Debug: Check if CUST-025 is in active customers
-    const cust025 = activeCustomers.find(c => c.CustomerID === 'CUST-025');
-    if (cust025) {
-      console.log(`DEBUG: CUST-025 found in active customers`);
-    } else {
-      console.log(`DEBUG: CUST-025 NOT found in active customers`);
-    }
-    
-    // Get current month invoices
-    const currentMonth = new Date().getMonth() + 1;
-    const currentYear = new Date().getFullYear();
 
-    // Helper to safely parse dates in formats like "2025-12-19" أو "19/12/2025"
-    const parseInvoiceDate = (value) => {
-      if (!value) return null;
-      if (typeof value === 'string' && value.includes('/')) {
-        const parts = value.split(/[\/\-]/);
-        if (parts.length >= 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10);
-          let year = parseInt(parts[2], 10);
-          if (isNaN(day) || isNaN(month) || isNaN(year)) return null;
-          if (year < 100) year += 2000;
-          return new Date(year, month - 1, day);
-        }
-      }
-      const d = new Date(value);
-      return isNaN(d.getTime()) ? null : d;
-    };
-    
-    // Helper to parse service end date in format "19/12/2025"
-    const parseServiceDate = (dateStr) => {
-      if (!dateStr) return null;
-      if (typeof dateStr === 'string' && dateStr.includes('/')) {
-        const parts = dateStr.split('/');
-        if (parts.length >= 3) {
-          const day = parseInt(parts[0], 10);
-          const month = parseInt(parts[1], 10);
-          const year = parseInt(parts[2], 10);
-          if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
-            return new Date(year, month - 1, day);
-          }
-        }
-      }
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? null : d;
-    };
-    
+    // Get current month invoices
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+
     // Helper to normalize strings (trim + lowercase)
     const normalize = (value) => (value || '').toString().trim().toLowerCase();
-
-    // Helper to parse start date in formats like "19-Jan-25" or "19/01/2025"
-    const parseStartDate = (startDateStr) => {
-      if (!startDateStr) return null;
-      
-      // Handle format like "19-Jan-25"
-      if (typeof startDateStr === 'string' && startDateStr.includes('-')) {
-        const parts = startDateStr.split('-');
-        if (parts.length === 3) {
-          const day = parseInt(parts[0], 10);
-          const monthStr = parts[1];
-          let year = parseInt(parts[2], 10);
-          
-          // Convert month name to number
-          const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          const monthIndex = months.indexOf(monthStr);
-          
-          if (monthIndex !== -1 && !isNaN(day) && !isNaN(year)) {
-            if (year < 100) year += 2000; // Convert 25 to 2025
-            return new Date(year, monthIndex, day);
-          }
-        }
-      }
-      
-      // Fallback to standard date parsing
-      const d = new Date(startDateStr);
-      return isNaN(d.getTime()) ? null : d;
-    };
+    const normalizeID = (value) => (value || '').toString().trim();
 
     // Separate available and invoiced clients
     const availableClients = activeCustomers.filter(customer => {
-      if (customer.CustomerID === 'CUST-025') {
-        console.log(`DEBUG CUST-025: Starting filter check`);
-      }
       // أولاً: تحقق من أن تاريخ بداية الخدمة جه أو فات
-      const startDate = parseStartDate(customer['start date']);
+      const startDateStr = customer['start date'] || customer.Start_Date || customer['Start Date'] || customer.StartDate;
+      const startDate = parseDate(startDateStr);
       const today = new Date();
-      today.setHours(0, 0, 0, 0); // Reset time to start of day
-      
+      today.setHours(0, 0, 0, 0);
+
       if (startDate && startDate > today) {
         return false;
       }
-      
+
       // ثانياً: ابحث عن آخر فاتورة للعميل
       const customerInvoices = invoices.filter(inv => {
-        // Match by CustomerID first
-        if (inv.CustomerID === customer.CustomerID) return true;
-        
+        // Match by CustomerID (case-insensitive and trimmed)
+        const invCID = normalizeID(inv.CustomerID || inv.customerid);
+        const custCID = normalizeID(customer.CustomerID);
+
+        if (invCID && custCID && invCID === custCID) return true;
+
         // Fallback: match by Name + Villa
         const customerName = normalize(customer.Name || customer.CustomerName);
         const customerVilla = normalize(customer.Villa);
         const invoiceName = normalize(inv.CustomerName || inv.Name);
         const invoiceVilla = normalize(inv.Villa);
-        return invoiceName === customerName && invoiceVilla === customerVilla;
+
+        // Use loose name matching for safety
+        const nameMatch = invoiceName === customerName || (invoiceName && customerName && invoiceName.includes(customerName));
+        const villaMatch = invoiceVilla === customerVilla;
+
+        return nameMatch && villaMatch;
       });
-      
-      if (customer.CustomerID === 'CUST-025') {
-        console.log(`DEBUG CUST-025: Found ${customerInvoices.length} invoices`);
-      }
-      
+
       if (customerInvoices.length === 0) {
         return true;
       }
-      
-      // ابحث عن آخر فاتورة (بناءً على تاريخ الإنشاء)
+
+      // ابحث عن الفاتورة التي تنتهي في أبعد تاريخ (الأكثر حداثة خدمياً)
       const latestInvoice = customerInvoices.reduce((latest, current) => {
-        const latestDate = parseInvoiceDate(latest.CreatedAt || latest.InvoiceDate) || new Date(0);
-        const currentDate = parseInvoiceDate(current.CreatedAt || current.InvoiceDate) || new Date(0);
+        const { end: latestEnd } = parseServicePeriod(latest.End);
+        const { end: currentEnd } = parseServicePeriod(current.End);
+
+        // إذا كان أحدهما له تاريخ انتهاء والآخر لا، نفضل الذي له تاريخ انتهاء (فاتورة اشتراك)
+        if (currentEnd && !latestEnd) return current;
+        if (!currentEnd && latestEnd) return latest;
+
+        // إذا كان كلاهما له تاريخ انتهاء، نأخذ الأبعد
+        if (currentEnd && latestEnd) {
+          return currentEnd > latestEnd ? current : latest;
+        }
+
+        // إذا لم يكن لأي منهما تاريخ انتهاء، نرجع للأحدث بناءً على تاريخ الإنشاء
+        const dateFieldL = latest.CreatedAt || latest.InvoiceDate;
+        const dateFieldC = current.CreatedAt || current.InvoiceDate;
+        const latestDate = parseDate(dateFieldL) || new Date(0);
+        const currentDate = parseDate(dateFieldC) || new Date(0);
         return currentDate > latestDate ? current : latest;
       });
-      
-      // تحقق من تاريخ انتهاء الخدمة في آخر فاتورة
+
+      // تحقق من تاريخ انتهاء الخدمة في الفاتورة التي وجدناها
       if (latestInvoice.End) {
-        const serviceEndDate = parseServiceDate(latestInvoice.End);
-        if (customer.CustomerID === 'CUST-025') {
-          console.log(`DEBUG CUST-025: End=${latestInvoice.End}, Parsed=${serviceEndDate}, Today=${today}, Active=${serviceEndDate && serviceEndDate >= today}`);
-        }
+        const { end: serviceEndDate } = parseServicePeriod(latestInvoice.End);
+
+        // العودة للمنطق القديم: التفعيل فقط بعد انتهاء الخدمة
         if (serviceEndDate && serviceEndDate >= today) {
           return false;
         }
       }
-      
+
       return true;
     });
 
     const invoicedClients = activeCustomers.filter(customer => !availableClients.includes(customer));
-    
 
-    
     res.json({
       success: true,
       availableClients,
       invoicedClients
     });
-    
+
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -160,17 +105,17 @@ const getAvailableClients = async (req, res) => {
 const getCustomerById = async (req, res) => {
   try {
     const { customerId } = req.params;
-    
+
     // Get all customers from database
     const customers = await db.getCustomers();
     const customer = customers.find(c => c.CustomerID === customerId);
-    
+
     if (!customer) {
       return res.status(404).json({ success: false, error: 'Customer not found' });
     }
-    
+
     res.json(customer);
-    
+
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -188,7 +133,7 @@ const getAllClients = async (req, res) => {
 const getNextCustomerId = async (req, res) => {
   try {
     const customers = await db.getCustomers();
-    
+
     // Find highest customer number
     let maxNum = 0;
     customers.forEach(customer => {
@@ -198,7 +143,7 @@ const getNextCustomerId = async (req, res) => {
         if (num > maxNum) maxNum = num;
       }
     });
-    
+
     const nextId = `CUST-${String(maxNum + 1).padStart(3, '0')}`;
     res.json({ success: true, nextId });
   } catch (error) {
@@ -223,9 +168,9 @@ const createClient = async (req, res) => {
         return `${day}-${month}-${year}`;
       })()
     };
-    
+
     const result = await db.addCustomer(customerData);
-    
+
     res.json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
@@ -235,11 +180,11 @@ const createClient = async (req, res) => {
 const updateClient = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     if (!id) {
       return res.status(400).json({ success: false, error: 'Customer ID is required' });
     }
-    
+
     // Prepare update data with proper field mapping
     const updateData = {
       Name: req.body.Name || req.body.name,
@@ -262,21 +207,21 @@ const updateClient = async (req, res) => {
       })(),
       Notes: req.body.Notes || req.body.notes || ''
     };
-    
+
     // Remove undefined values
     Object.keys(updateData).forEach(key => {
       if (updateData[key] === undefined) {
         delete updateData[key];
       }
     });
-    
+
     const result = await db.updateCustomer(id, updateData);
-    
+
     res.json({ success: true, data: result, message: 'Customer updated successfully' });
-    
+
   } catch (error) {
-    res.status(500).json({ 
-      success: false, 
+    res.status(500).json({
+      success: false,
       error: error.message,
       details: 'Check server logs for more information'
     });
@@ -286,20 +231,20 @@ const updateClient = async (req, res) => {
 const deleteClient = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // First, delete customer's auto-generated appointments (preserve manual ones)
     try {
       const currentSchedule = await db.getScheduledTasks();
-      const customerAppointments = currentSchedule.filter(task => 
+      const customerAppointments = currentSchedule.filter(task =>
         task.customerId === id || task.CustomerID === id
       );
-      
+
       // Only delete auto-generated appointments (those with isLocked = 'FALSE')
       // Manual appointments have isLocked = 'TRUE' and should be preserved
-      const autoAppointments = customerAppointments.filter(task => 
+      const autoAppointments = customerAppointments.filter(task =>
         task.isLocked === 'FALSE' || task.isLocked === false || !task.isLocked
       );
-      
+
       // Delete auto-generated appointments
       for (const appointment of autoAppointments) {
         try {
@@ -307,22 +252,22 @@ const deleteClient = async (req, res) => {
           const day = appointment.day || appointment.Day;
           const time = appointment.time || appointment.Time;
           const carPlate = appointment.carPlate || appointment.CarPlate || '';
-          
+
           await db.deleteScheduledTask(customerID, day, time, carPlate);
         } catch (deleteError) {
           // Silent error handling
         }
       }
-      
+
     } catch (scheduleError) {
       // Continue with customer deletion even if appointment cleanup fails
     }
-    
+
     // Then delete the customer
     const result = await db.deleteCustomer(id);
-    
-    res.json({ 
-      success: true, 
+
+    res.json({
+      success: true,
       data: result,
       message: 'Customer and auto-generated appointments deleted successfully. Manual appointments preserved.'
     });
