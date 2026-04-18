@@ -110,9 +110,10 @@ class SupabaseService {
   }
 
   // Customers methods
-  async getCustomers() {
+  async getCustomers(status = null) {
     try {
-      const result = await this.request('GET', '/customers?Status=eq.Active&order=CustomerID');
+      const filter = status ? `?Status=eq.${status}` : '';
+      const result = await this.request('GET', `/customers${filter}${filter ? '&' : '?'}order=CustomerID`);
       return result;
     } catch (error) {
       return [];
@@ -344,7 +345,7 @@ class SupabaseService {
   // Search customers
   async searchCustomers(searchTerm) {
     try {
-      const result = await this.request('GET', `/customers?or=(Name.ilike.%${searchTerm}%,Villa.ilike.%${searchTerm}%,CarPlates.ilike.%${searchTerm}%,Phone.ilike.%${searchTerm}%)&Status=eq.Active&order=Name`);
+      const result = await this.request('GET', `/customers?or=(Name.ilike.%${searchTerm}%,Villa.ilike.%${searchTerm}%,CarPlates.ilike.%${searchTerm}%,Phone.ilike.%${searchTerm}%)&order=Name`);
       return Array.isArray(result) ? result : [];
     } catch (error) {
       return [];

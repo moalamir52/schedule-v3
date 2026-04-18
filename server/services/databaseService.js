@@ -10,8 +10,8 @@ class DatabaseService {
     }
 
   // Customers methods
-  async getCustomers() {
-    return await this.supabase.getCustomers();
+  async getCustomers(status = null) {
+    return await this.supabase.getCustomers(status);
   }
 
   async addCustomer(customerData) {

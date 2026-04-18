@@ -3,9 +3,8 @@ const { getCustomers, getInvoices } = require('../../services/googleSheetsServic
 
 const getAvailableClients = async (req, res) => {
   try {
-    const customers = await db.getCustomers();
+    const activeCustomers = await db.getCustomers('Active');
     const invoices = await db.getInvoices();
-    const activeCustomers = customers.filter(customer => customer.Status === 'Active');
     
     // Debug: Check if CUST-025 is in active customers
     const cust025 = activeCustomers.find(c => c.CustomerID === 'CUST-025');
