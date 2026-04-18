@@ -226,7 +226,7 @@ const SchedulePage = () => {
             }
           }
         } catch (e) {
-          }
+        }
       }
       if (success) {
         setAssignedSchedule([]);
@@ -243,7 +243,7 @@ const SchedulePage = () => {
             method: 'DELETE'
           });
         } catch (e) {
-          }
+        }
         alert('✅ Local schedule cleared! Syncing with database...');
         setTimeout(async () => {
           await refreshData();
@@ -353,14 +353,14 @@ const SchedulePage = () => {
     if (!confirm('Are you sure you want to delete this appointment?')) {
       return;
     }
-    
+
     // Store original schedule for potential revert
     const originalSchedule = [...assignedSchedule];
-    
+
     // Remove from UI immediately
     const updatedSchedule = assignedSchedule.filter(task => task.customerId !== customerId);
     setAssignedSchedule(updatedSchedule);
-    
+
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000);
@@ -369,7 +369,7 @@ const SchedulePage = () => {
         signal: controller.signal
       });
       clearTimeout(timeoutId);
-      
+
       if (!response.ok) {
         if (response.status === 404) {
           throw new Error('Delete endpoint not found. Please restart the server.');
@@ -377,18 +377,16 @@ const SchedulePage = () => {
         const errorText = await response.text();
         throw new Error(`Server error: ${response.status} - ${errorText}`);
       }
-      
+
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.error || 'Failed to delete appointment');
       }
-      
-      console.log('✅ Appointment deleted successfully');
-      
+
     } catch (err) {
       // Revert UI changes on error
       setAssignedSchedule(originalSchedule);
-      
+
       if (err.name === 'AbortError') {
         alert('Delete operation timed out. Please check your connection and try again.');
       } else {
@@ -413,7 +411,7 @@ const SchedulePage = () => {
     // Filter by search term
     if (searchTerm.trim()) {
       const search = searchTerm.toLowerCase().trim();
-      filtered = filtered.filter(item => 
+      filtered = filtered.filter(item =>
         (item.villa && item.villa.toString().toLowerCase().includes(search)) ||
         (item.customerName && item.customerName.toLowerCase().includes(search)) ||
         (item.carPlate && item.carPlate.toLowerCase().includes(search))
@@ -436,69 +434,66 @@ const SchedulePage = () => {
       const taskParts = taskId.split('-');
       const [customerId, day, ...rest] = taskParts;
       const carPlate = rest[rest.length - 1] === 'NOPLATE' ? '' : rest[rest.length - 1];
-      
+
       // Find the task to get worker name
-      const task = assignedSchedule.find(t => 
+      const task = assignedSchedule.find(t =>
         t.customerId === customerId &&
         t.day === day &&
         (t.carPlate || 'NOPLATE') === carPlate
       );
-      
+
       if (!task) {
         throw new Error('Task not found');
       }
-      
+
       // Update UI immediately for smooth experience
       const originalSchedule = [...assignedSchedule];
-      console.log(`🔒 Locking all cars for customer: ${customerId}`);
-      
-      setAssignedSchedule(prev => 
+
+      setAssignedSchedule(prev =>
         prev.map(t => {
           if (t.customerId === customerId) {
             // Lock ALL cars of this customer (not just same day)
-            console.log(`🔐 Locking task: ${t.customerId}-${t.day}-${t.time}-${t.carPlate} (${t.customerName})`);
+
             return { ...t, isLocked: 'TRUE' };
           }
           if (`${t.customerId}-${t.day}-${t.time}-${t.carPlate}` === taskId) {
             // Update the specific wash type
-            console.log(`🎯 Updating wash type for: ${taskId} to ${newWashType}`);
+
             return { ...t, washType: newWashType, isLocked: 'TRUE' };
           }
           return t;
         })
       );
-      
+
       // Count locked tasks
       const lockedTasks = assignedSchedule.filter(t => t.customerId === customerId);
-      console.log(`✅ Total tasks locked for customer ${customerId}: ${lockedTasks.length}`);
       lockedTasks.forEach(task => {
-        console.log(`   - ${task.carPlate} on ${task.day} at ${task.time}`);
+
       });
-      
+
       // Save to server in background
       const response = await fetch(`${import.meta.env.VITE_API_URL}/api/schedule/assign/update-task`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          taskId, 
+        body: JSON.stringify({
+          taskId,
           newWorkerName: task.workerName,
           newWashType,
           keepCustomerTogether: true
         })
       });
-      
+
       if (!response.ok) {
         const data = await response.json();
         // Revert UI changes on error
         setAssignedSchedule(originalSchedule);
         throw new Error(data.error || 'Failed to update wash type');
       }
-      
+
       // Success - no page reload needed
-      console.log('✅ Wash type updated successfully');
-      
+
     } catch (err) {
       alert(`Error updating wash type: ${err.message}`);
     }
@@ -540,162 +535,162 @@ const SchedulePage = () => {
           marginBottom: '30px',
           position: 'relative'
         }}>
-        {/* Back Button - positioned absolutely */}
-        <button
-          onClick={() => window.location.href = '/'}
-          style={{
-            position: 'absolute',
-            left: '20px',
-            top: '20px',
-            background: '#28a745',
-            color: 'white',
-            padding: '12px 15px',
-            borderRadius: '12px',
-            border: 'none',
-            fontSize: '18px',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minWidth: '50px',
-            height: '50px',
-            boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
-            transition: 'all 0.3s ease',
-            zIndex: 10
-          }}
-          onMouseEnter={(e) => {
-            e.target.style.background = '#218838';
-            e.target.style.transform = 'translateY(-2px)';
-            e.target.style.boxShadow = '0 6px 20px rgba(40, 167, 69, 0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.background = '#28a745';
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = '0 4px 15px rgba(40, 167, 69, 0.3)';
-          }}
-        >
-          ←
-        </button>
-        {/* Elegant Title Frame */}
-        <div style={{
-          background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
-          padding: '25px 50px',
-          borderRadius: '20px',
-          boxShadow: '0 10px 30px rgba(40, 167, 69, 0.2)',
-          border: '3px solid rgba(255, 255, 255, 0.2)',
-          position: 'relative',
-          overflow: 'hidden'
-        }}>
-          {/* Decorative elements */}
+          {/* Back Button - positioned absolutely */}
+          <button
+            onClick={() => window.location.href = '/'}
+            style={{
+              position: 'absolute',
+              left: '20px',
+              top: '20px',
+              background: '#28a745',
+              color: 'white',
+              padding: '12px 15px',
+              borderRadius: '12px',
+              border: 'none',
+              fontSize: '18px',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: '50px',
+              height: '50px',
+              boxShadow: '0 4px 15px rgba(40, 167, 69, 0.3)',
+              transition: 'all 0.3s ease',
+              zIndex: 10
+            }}
+            onMouseEnter={(e) => {
+              e.target.style.background = '#218838';
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 6px 20px rgba(40, 167, 69, 0.4)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.background = '#28a745';
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = '0 4px 15px rgba(40, 167, 69, 0.3)';
+            }}
+          >
+            ←
+          </button>
+          {/* Elegant Title Frame */}
           <div style={{
-            position: 'absolute',
-            top: '-50%',
-            right: '-50%',
-            width: '200%',
-            height: '200%',
-            background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
-            pointerEvents: 'none'
-          }}></div>
-          {/* Interactive Title Buttons */}
-          <div style={{
-            display: 'flex',
-            gap: '20px',
-            alignItems: 'center',
-            justifyContent: 'center',
+            background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+            padding: '25px 50px',
+            borderRadius: '20px',
+            boxShadow: '0 10px 30px rgba(40, 167, 69, 0.2)',
+            border: '3px solid rgba(255, 255, 255, 0.2)',
             position: 'relative',
-            zIndex: 1
+            overflow: 'hidden'
           }}>
-            {/* Overview Button */}
-            <button
-              onClick={() => handleViewChange('overview')}
-              style={{
-                background: currentView === 'overview' 
-                  ? 'rgba(255, 255, 255, 0.2)' 
-                  : 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
-                border: currentView === 'overview' 
-                  ? '2px solid rgba(255, 255, 255, 0.8)' 
-                  : '2px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '15px',
-                padding: '15px 30px',
-                fontSize: '1.8rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                textShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                letterSpacing: '1px',
-                transition: 'all 0.3s ease',
-                backdropFilter: 'blur(10px)'
-              }}
-              onMouseEnter={(e) => {
-                if (currentView !== 'overview') {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-                  e.target.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (currentView !== 'overview') {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                  e.target.style.transform = 'translateY(0)';
-                }
-              }}
-            >
-              📊 Overview
-            </button>
-            {/* Workers Schedule Button */}
-            <button
-              onClick={() => handleViewChange('weekly')}
-              style={{
-                background: currentView === 'weekly' 
-                  ? 'rgba(255, 255, 255, 0.2)' 
-                  : 'rgba(255, 255, 255, 0.1)',
-                color: 'white',
-                border: currentView === 'weekly' 
-                  ? '2px solid rgba(255, 255, 255, 0.8)' 
-                  : '2px solid rgba(255, 255, 255, 0.3)',
-                borderRadius: '15px',
-                padding: '15px 30px',
-                fontSize: '1.8rem',
-                fontWeight: '700',
-                cursor: 'pointer',
-                textShadow: '0 2px 10px rgba(0,0,0,0.2)',
-                letterSpacing: '1px',
-                transition: 'all 0.3s ease',
-                backdropFilter: 'blur(10px)'
-              }}
-              onMouseEnter={(e) => {
-                if (currentView !== 'weekly') {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.15)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.5)';
-                  e.target.style.transform = 'translateY(-2px)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (currentView !== 'weekly') {
-                  e.target.style.background = 'rgba(255, 255, 255, 0.1)';
-                  e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                  e.target.style.transform = 'translateY(0)';
-                }
-              }}
-            >
-              🚗 Workers Schedule
-            </button>
-          </div>
-          {viewMode === 'today' && (
+            {/* Decorative elements */}
             <div style={{
-              color: 'rgba(255, 255, 255, 0.9)',
-              fontSize: '1rem',
-              textAlign: 'center',
-              marginTop: '8px',
-              fontWeight: '500',
+              position: 'absolute',
+              top: '-50%',
+              right: '-50%',
+              width: '200%',
+              height: '200%',
+              background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
+              pointerEvents: 'none'
+            }}></div>
+            {/* Interactive Title Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: '20px',
+              alignItems: 'center',
+              justifyContent: 'center',
               position: 'relative',
               zIndex: 1
             }}>
-              Today's Tasks
+              {/* Overview Button */}
+              <button
+                onClick={() => handleViewChange('overview')}
+                style={{
+                  background: currentView === 'overview'
+                    ? 'rgba(255, 255, 255, 0.2)'
+                    : 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  border: currentView === 'overview'
+                    ? '2px solid rgba(255, 255, 255, 0.8)'
+                    : '2px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '15px',
+                  padding: '15px 30px',
+                  fontSize: '1.8rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  textShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                  letterSpacing: '1px',
+                  transition: 'all 0.3s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentView !== 'overview') {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                    e.target.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentView !== 'overview') {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    e.target.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                📊 Overview
+              </button>
+              {/* Workers Schedule Button */}
+              <button
+                onClick={() => handleViewChange('weekly')}
+                style={{
+                  background: currentView === 'weekly'
+                    ? 'rgba(255, 255, 255, 0.2)'
+                    : 'rgba(255, 255, 255, 0.1)',
+                  color: 'white',
+                  border: currentView === 'weekly'
+                    ? '2px solid rgba(255, 255, 255, 0.8)'
+                    : '2px solid rgba(255, 255, 255, 0.3)',
+                  borderRadius: '15px',
+                  padding: '15px 30px',
+                  fontSize: '1.8rem',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  textShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                  letterSpacing: '1px',
+                  transition: 'all 0.3s ease',
+                  backdropFilter: 'blur(10px)'
+                }}
+                onMouseEnter={(e) => {
+                  if (currentView !== 'weekly') {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.15)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.5)';
+                    e.target.style.transform = 'translateY(-2px)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (currentView !== 'weekly') {
+                    e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+                    e.target.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                    e.target.style.transform = 'translateY(0)';
+                  }
+                }}
+              >
+                🚗 Workers Schedule
+              </button>
             </div>
-          )}
-        </div>
+            {viewMode === 'today' && (
+              <div style={{
+                color: 'rgba(255, 255, 255, 0.9)',
+                fontSize: '1rem',
+                textAlign: 'center',
+                marginTop: '8px',
+                fontWeight: '500',
+                position: 'relative',
+                zIndex: 1
+              }}>
+                Today's Tasks
+              </div>
+            )}
+          </div>
           {/* Subtitle */}
           <p style={{
             color: '#6c757d',
@@ -704,8 +699,8 @@ const SchedulePage = () => {
             margin: '15px 0 0 0',
             fontWeight: '500'
           }}>
-            {currentView === 'overview' 
-              ? 'View booking statistics and system overview' 
+            {currentView === 'overview'
+              ? 'View booking statistics and system overview'
               : 'Manage and organize your team\'s daily assignments'
             }
           </p>
@@ -793,7 +788,7 @@ const SchedulePage = () => {
           )}
         </div>
       )}
-      <ScheduleControls 
+      <ScheduleControls
         onViewChange={handleViewChange}
         onAutoAssign={handleAutoAssign}
         onSyncNewCustomers={handleSyncNewCustomers}
@@ -878,8 +873,8 @@ const SchedulePage = () => {
         <BookingOverview overviewData={overviewData} />
       )}
       {currentView === 'weekly' && (
-        <WorkerScheduleView 
-          assignedSchedule={filteredSchedule} 
+        <WorkerScheduleView
+          assignedSchedule={filteredSchedule}
           workers={workers}
           onScheduleUpdate={setAssignedSchedule}
           onDeleteAppointment={handleDeleteAppointment}
